@@ -65,13 +65,13 @@ export function Navbar() {
           {/* Desktop Right Auth Buttons */}
           <div className="hidden md:flex items-center gap-2.5 shrink-0">
             <Link
-              to="/auth/login"
+              to="/login"
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition"
             >
               Login
             </Link>
             <Link
-              to="/auth/signup"
+              to="/signup"
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition"
             >
               Signup
@@ -148,14 +148,14 @@ export function Navbar() {
 
           <div className="pt-6 border-t border-gray-200 flex flex-col gap-3">
             <Link
-              to="/auth/login"
+              to="/login"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-3 rounded-xl border border-gray-300 bg-white font-medium text-gray-800 hover:bg-gray-50 transition"
             >
               Login
             </Link>
             <Link
-              to="/auth/signup"
+              to="/signup"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-sm transition"
             >

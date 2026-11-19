@@ -96,10 +96,10 @@ export function Home() {
           <p className="text-sm text-slate-500">Access seller dashboard, chats, notifications and admin tools.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link to="/auth/login" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">
+          <Link to="/login" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">
             <LogIn className="w-4 h-4" /> Login
           </Link>
-          <Link to="/auth/signup" className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5">
+          <Link to="/signup" className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5">
             <UserPlus className="w-4 h-4" /> Signup
           </Link>
           <Link to="/messages" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">

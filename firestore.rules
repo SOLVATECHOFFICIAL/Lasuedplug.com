@@ -1,0 +1,117 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Users collection: public profiles readable by anyone; users can only create/update their own profile
+    // and cannot modify protected fields (isVerified, status, roles.admin).
+    match /users/{userId} {
+      allow read: if true;
+
+      allow create: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.isVerified == false &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.get(['roles', 'admin'], false) == false
+      );
+
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'isVerified', 'status']) &&
+        request.resource.data.get(['roles', 'admin'], false) == resource.data.get(['roles', 'admin'], false)
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Products: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved); admin full access.
+    match /products/{productId} {
+      allow read: if isAdmin()
+        || (resource.data.isApproved == true && resource.data.isActive == true)
+        || (isSignedIn() && resource.data.sellerId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.sellerId == request.auth.uid &&
+        request.resource.data.isApproved == false
+      );
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.sellerId == request.auth.uid &&
+        request.resource.data.sellerId == resource.data.sellerId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
+    }
+
+    // Services: public read when approved & active; provider can read/create/update/delete own (cannot set isApproved); admin full access.
+    match /services/{serviceId} {
+      allow read: if isAdmin()
+        || (resource.data.isApproved == true && resource.data.isActive == true)
+        || (isSignedIn() && resource.data.providerId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.providerId == request.auth.uid &&
+        request.resource.data.isApproved == false
+      );
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.providerId == request.auth.uid &&
+        request.resource.data.providerId == resource.data.providerId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.providerId == request.auth.uid);
+    }
+
+    // Accommodations: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved); admin full access.
+    match /accommodations/{accommodationId} {
+      allow read: if isAdmin()
+        || (resource.data.isApproved == true && resource.data.isActive == true)
+        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.isApproved == false
+      );
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+    }
+
+    // Reports: any authenticated user can submit a report; only admins can read, update, or delete reports.
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Deny all other collections by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

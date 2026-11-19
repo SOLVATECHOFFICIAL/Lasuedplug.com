@@ -1,4 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+
 import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
 
@@ -40,45 +42,146 @@ export function AppRouter() {
       <Route path="/" element={<Home />} />
 
       {/* Auth */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/signup" element={<SignupPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
 
       {/* Marketplace */}
       <Route path="/marketplace" element={<MarketplaceIndex />} />
-      <Route path="/marketplace/create" element={<MarketplaceCreate />} />
+      <Route
+        path="/marketplace/create"
+        element={
+          <ProtectedRoute>
+            <MarketplaceCreate />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/marketplace/:id" element={<MarketplaceDetail />} />
 
       {/* Services */}
       <Route path="/services" element={<ServicesIndex />} />
-      <Route path="/services/create" element={<ServicesCreate />} />
+      <Route
+        path="/services/create"
+        element={
+          <ProtectedRoute>
+            <ServicesCreate />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/services/:id" element={<ServicesDetail />} />
 
       {/* Accommodation & Roommates */}
       <Route path="/accommodation" element={<AccommodationIndex />} />
-      <Route path="/accommodation/create" element={<AccommodationCreate />} />
+      <Route
+        path="/accommodation/create"
+        element={
+          <ProtectedRoute>
+            <AccommodationCreate />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/accommodation/roommates" element={<Roommates />} />
       <Route path="/accommodation/:id" element={<AccommodationDetail />} />
       <Route path="/roommates" element={<Roommates />} />
 
-      {/* Dashboard & Profile */}
-      <Route path="/dashboard/seller" element={<SellerDashboard />} />
-      <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
-      <Route path="/dashboard/profile" element={<ProfilePage />} />
-      <Route path="/dashboard/settings" element={<SettingsPage />} />
+      {/* Dashboard & Profile (Protected) */}
+      <Route
+        path="/dashboard/seller"
+        element={
+          <ProtectedRoute>
+            <SellerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/buyer"
+        element={
+          <ProtectedRoute>
+            <BuyerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
 
-      {/* Messages */}
-      <Route path="/messages" element={<MessagesIndex />} />
-      <Route path="/messages/:id" element={<MessageDetail />} />
+      {/* Messages (Protected) */}
+      <Route
+        path="/messages"
+        element={
+          <ProtectedRoute>
+            <MessagesIndex />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/messages/:id"
+        element={
+          <ProtectedRoute>
+            <MessageDetail />
+          </ProtectedRoute>
+        }
+      />
 
-      {/* Notifications */}
-      <Route path="/notifications" element={<NotificationsIndex />} />
+      {/* Notifications (Protected) */}
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsIndex />
+          </ProtectedRoute>
+        }
+      />
 
-      {/* Admin */}
-      <Route path="/admin" element={<AdminIndex />} />
-      <Route path="/admin/users" element={<AdminUsers />} />
-      <Route path="/admin/reports" element={<AdminReports />} />
-      <Route path="/admin/verifications" element={<AdminVerifications />} />
+      {/* Admin (Protected) */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminIndex />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <AdminUsers />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <ProtectedRoute>
+            <AdminReports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/verifications"
+        element={
+          <ProtectedRoute>
+            <AdminVerifications />
+          </ProtectedRoute>
+        }
+      />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
