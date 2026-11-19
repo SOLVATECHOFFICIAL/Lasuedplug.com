@@ -6,10 +6,14 @@ import { Loading } from '../feedback/Loading';
 
 interface ProtectedRouteProps {
   children: ReactNode;
+  requireCompleteProfile?: boolean;
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+export function ProtectedRoute({
+  children,
+  requireCompleteProfile = false,
+}: ProtectedRouteProps) {
+  const { user, loading, isProfileComplete } = useAuth();
   const location = useLocation();
 
   const decision = getProtectedRouteDecision({
@@ -23,6 +27,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (decision === 'redirect') {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (
+    requireCompleteProfile &&
+    !isProfileComplete &&
+    location.pathname !== '/dashboard/profile'
+  ) {
+    return (
+      <Navigate to="/dashboard/profile" state={{ from: location }} replace />
+    );
   }
 
   return <>{children}</>;

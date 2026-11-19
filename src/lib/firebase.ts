@@ -1,6 +1,10 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  Firestore,
+} from 'firebase/firestore';
 import {
   buildFirebaseConfig,
   FirebaseEnvValues,
@@ -41,9 +45,19 @@ let db: Firestore | null = null;
 try {
   if (isFirebaseConfigured()) {
     const firebaseConfig = buildFirebaseConfig(rawEnv);
-    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    const isNewApp = getApps().length === 0;
+    app = isNewApp ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
-    db = getFirestore(app);
+    try {
+      db = isNewApp
+        ? initializeFirestore(app, {
+            experimentalForceLongPolling: true,
+            ignoreUndefinedProperties: true,
+          })
+        : getFirestore(app);
+    } catch {
+      db = getFirestore(app);
+    }
   }
 } catch (err) {
   console.warn('Firebase initialization error:', err);

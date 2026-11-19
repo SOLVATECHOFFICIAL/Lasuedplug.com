@@ -17,6 +17,7 @@ export interface UserProfile {
   department?: string;
   level?: string;
   campus?: string;
+  lastPhoneUpdate?: any;
   roles: UserRoles;
   isVerified: boolean;
   status: 'active' | 'suspended';
@@ -24,18 +25,41 @@ export interface UserProfile {
   updatedAt: any;
 }
 
+export type PriceType = 'fixed' | 'negotiable' | 'contact';
+export type PriceUnit = 'total' | 'per_day' | 'per_hour' | 'per_item';
+
 export interface Product {
   id?: string;
   sellerId: string;
   title: string;
   description: string;
-  price: number;
   categoryId: string;
+  subcategory: string;
+  categoryName?: string;
   images: string[];
+
+  // Pricing Logic
+  priceType: PriceType;
+  price?: number;
+  priceUnit?: PriceUnit;
+
+  // Location & Contact Logic
+  whatsappNumber: string;
+  locationName?: string;
+  location?: string;
+  shopName?: string;
+  googleMapLink?: string;
+  hasDelivery: boolean;
+
+  // Engagement Metrics
+  viewCount: number;
+  contactCount: number;
+
   status: 'active' | 'sold' | 'unavailable';
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
+  sellerSnapshot?: { fullName: string; isVerified: boolean };
 }
 
 export interface Service {
@@ -43,12 +67,32 @@ export interface Service {
   providerId: string;
   title: string;
   description: string;
-  priceRange: string;
   categoryId: string;
+  subcategory: string;
   images: string[];
+
+  // Pricing Logic
+  priceType: PriceType;
+  price?: number;
+  priceUnit?: PriceUnit;
+  priceRange?: string;
+
+  // Location & Contact Logic
+  whatsappNumber: string;
+  locationName?: string;
+  shopName?: string;
+  googleMapLink?: string;
+  hasDelivery: boolean;
+
+  // Engagement Metrics
+  viewCount: number;
+  contactCount: number;
+
+  status: 'active' | 'sold' | 'unavailable';
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
+  sellerSnapshot?: { fullName: string; isVerified: boolean };
 }
 
 export interface Accommodation {

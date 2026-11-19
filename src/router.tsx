@@ -54,7 +54,7 @@ export function AppRouter() {
       <Route
         path="/marketplace/create"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <MarketplaceCreate />
           </ProtectedRoute>
         }
@@ -66,7 +66,7 @@ export function AppRouter() {
       <Route
         path="/services/create"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <ServicesCreate />
           </ProtectedRoute>
         }
@@ -78,7 +78,7 @@ export function AppRouter() {
       <Route
         path="/accommodation/create"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <AccommodationCreate />
           </ProtectedRoute>
         }
@@ -91,7 +91,7 @@ export function AppRouter() {
       <Route
         path="/dashboard/seller"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <SellerDashboard />
           </ProtectedRoute>
         }
@@ -99,7 +99,7 @@ export function AppRouter() {
       <Route
         path="/dashboard/buyer"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <BuyerDashboard />
           </ProtectedRoute>
         }
@@ -125,7 +125,7 @@ export function AppRouter() {
       <Route
         path="/messages"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <MessagesIndex />
           </ProtectedRoute>
         }
@@ -133,7 +133,7 @@ export function AppRouter() {
       <Route
         path="/messages/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCompleteProfile>
             <MessageDetail />
           </ProtectedRoute>
         }

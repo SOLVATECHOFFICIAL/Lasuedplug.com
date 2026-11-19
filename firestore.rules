@@ -15,8 +15,27 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Users collection: public profiles readable by anyone; users can only create/update their own profile
-    // and cannot modify protected fields (isVerified, status, roles.admin).
+    function immutableOnceSet(field) {
+      return resource.data.get(field, null) == null ||
+        resource.data.get(field, '') == '' ||
+        request.resource.data.get(field, '') == resource.data.get(field, '');
+    }
+
+    function canUpdatePhone() {
+      let phoneChanged =
+        request.resource.data.get('phone', '') != resource.data.get('phone', '');
+      return !phoneChanged
+        ? request.resource.data.get('lastPhoneUpdate', null) ==
+            resource.data.get('lastPhoneUpdate', null)
+        : (
+            (resource.data.get('lastPhoneUpdate', null) == null ||
+              request.time >= resource.data.lastPhoneUpdate + duration.value(7, 'd')) &&
+            request.resource.data.get('lastPhoneUpdate', null) == request.time
+          );
+    }
+
+    // Users collection: public profiles readable by anyone; users can create/update their own profile
+    // with permanent fullName/campus/department/level locks once set, 7-day phone cooldown, and immutable protected fields.
     match /users/{userId} {
       allow read: if true;
 
@@ -30,8 +49,17 @@ service cloud.firestore {
 
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'isVerified', 'status']) &&
-        request.resource.data.get(['roles', 'admin'], false) == resource.data.get(['roles', 'admin'], false)
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'uid',
+          'isVerified',
+          'status',
+          'roles'
+        ]) &&
+        immutableOnceSet('fullName') &&
+        immutableOnceSet('campus') &&
+        immutableOnceSet('department') &&
+        immutableOnceSet('level') &&
+        canUpdatePhone()
       );
 
       allow delete: if isAdmin();
@@ -54,6 +82,16 @@ service cloud.firestore {
         resource.data.sellerId == request.auth.uid &&
         request.resource.data.sellerId == resource.data.sellerId &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+      ) || (
+        resource.data.isApproved == true &&
+        resource.data.isActive == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']) &&
+        request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
+      ) || (
+        resource.data.isApproved == true &&
+        resource.data.isActive == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount']) &&
+        request.resource.data.contactCount == resource.data.get('contactCount', 0) + 1
       );
 
       allow delete: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
@@ -76,6 +114,16 @@ service cloud.firestore {
         resource.data.providerId == request.auth.uid &&
         request.resource.data.providerId == resource.data.providerId &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+      ) || (
+        resource.data.isApproved == true &&
+        resource.data.isActive == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']) &&
+        request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
+      ) || (
+        resource.data.isApproved == true &&
+        resource.data.isActive == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount']) &&
+        request.resource.data.contactCount == resource.data.get('contactCount', 0) + 1
       );
 
       allow delete: if isAdmin() || (isSignedIn() && resource.data.providerId == request.auth.uid);
