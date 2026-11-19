@@ -1,115 +1,195 @@
+import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LOGO_URL, SITE_NAME, SITE_TAGLINE } from '../lib/constants';
-import { ShoppingBag, Wrench, Home as HomeIcon, Users, MessageSquare, ShieldAlert, LogIn, UserPlus } from 'lucide-react';
+import {
+  ShoppingBag,
+  Wrench,
+  Building2,
+  Users,
+  Search,
+  ShieldCheck,
+  Handshake,
+  MapPin,
+  ArrowRight,
+} from 'lucide-react';
+import { SITE_TAGLINE } from '../lib/constants';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+
+const CATEGORIES = [
+  {
+    title: 'Marketplace',
+    description: 'Textbooks, electronics, dorm essentials, and everyday items from students near you.',
+    path: '/marketplace',
+    icon: ShoppingBag,
+    iconBg: 'bg-primary-50 text-primary-500',
+  },
+  {
+    title: 'Services',
+    description: 'Tutoring, graphic design, laundry, catering, hairstyling, and device repairs on campus.',
+    path: '/services',
+    icon: Wrench,
+    iconBg: 'bg-orange-50 text-accent-500',
+  },
+  {
+    title: 'Accommodation',
+    description: 'Browse verified off-campus lodges, self-contained rooms, and hostels around Epe.',
+    path: '/accommodation',
+    icon: Building2,
+    iconBg: 'bg-emerald-50 text-emerald-600',
+  },
+  {
+    title: 'Roommates',
+    description: 'Connect with compatible LASUED and LASU students looking to share accommodation.',
+    path: '/roommates',
+    icon: Users,
+    iconBg: 'bg-indigo-50 text-indigo-600',
+  },
+];
+
+const TRUST_PILLARS = [
+  {
+    title: 'Verified Profiles',
+    description:
+      'Student and seller verification badges help you identify trusted members of the campus community before you connect.',
+    icon: ShieldCheck,
+  },
+  {
+    title: 'Safe Transactions',
+    description:
+      'Moderation review on listings and transparent direct discovery keep meetups clear, local, and straightforward.',
+    icon: Handshake,
+  },
+  {
+    title: 'Campus Focused',
+    description:
+      'Purpose-built for LASUED students, LASU students, and the surrounding Epe community — no distant clutter.',
+    icon: MapPin,
+  },
+];
 
 export function Home() {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearchSubmit = (e: FormEvent) => {
+    e.preventDefault();
+  };
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-12">
+    <div className="flex flex-col">
       {/* Hero Section */}
-      <div className="text-center space-y-6 bg-white rounded-2xl p-8 sm:p-12 shadow-sm border border-slate-100">
-        <div className="flex justify-center">
-          <img src={LOGO_URL} alt={SITE_NAME} className="h-20 w-auto object-contain" />
-        </div>
-        <div className="space-y-2">
-          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 tracking-wide uppercase">
-            Foundation is live — Prompt 1A of 22
-          </span>
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
-            {SITE_NAME}
+      <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 border-b border-slate-200/80">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center space-y-6">
+          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            Discover Your Campus Marketplace
           </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            {SITE_TAGLINE}
+          <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+            {SITE_TAGLINE} — built for LASUED students, LASU students, and the Epe community.
           </p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <Link
-            to="/marketplace"
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition shadow-sm"
-          >
-            <ShoppingBag className="w-5 h-5" /> Browse Marketplace
-          </Link>
-          <Link
-            to="/accommodation"
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 transition"
-          >
-            <HomeIcon className="w-5 h-5" /> Find Accommodation
-          </Link>
-        </div>
-      </div>
 
-      {/* Navigation Directory Grid */}
-      <div className="space-y-6">
-        <h2 className="text-xl font-bold text-slate-900 border-b pb-2">
-          Explore App Sections (Foundation Routes)
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link
-            to="/marketplace"
-            className="p-5 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition space-y-3 group"
+          {/* Visual Search Bar */}
+          <form
+            onSubmit={handleSearchSubmit}
+            role="search"
+            aria-label="Search campus marketplace"
+            className="max-w-2xl mx-auto pt-2"
           >
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition">
-              <ShoppingBag className="w-5 h-5" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
+              <div className="flex items-center gap-2.5 flex-1 px-2.5">
+                <Search className="w-5 h-5 text-slate-400 shrink-0" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search textbooks, phones, services, or lodges..."
+                  aria-label="Search products, services, or accommodation"
+                  className="w-full py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
+                />
+              </div>
+              <Button type="submit" variant="primary" size="md" className="sm:px-6">
+                Search
+              </Button>
             </div>
-            <h3 className="font-semibold text-slate-900">Marketplace</h3>
-            <p className="text-sm text-slate-500">Campus products, gadgets, books & food items.</p>
-          </Link>
-
-          <Link
-            to="/services"
-            className="p-5 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition space-y-3 group"
-          >
-            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center group-hover:bg-orange-600 group-hover:text-white transition">
-              <Wrench className="w-5 h-5" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Services</h3>
-            <p className="text-sm text-slate-500">Student tutorials, laundry, tech repairs & catering.</p>
-          </Link>
-
-          <Link
-            to="/accommodation"
-            className="p-5 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition space-y-3 group"
-          >
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition">
-              <HomeIcon className="w-5 h-5" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Lodges & Rooms</h3>
-            <p className="text-sm text-slate-500">Off-campus lodges around Epe and roommate matching.</p>
-          </Link>
-
-          <Link
-            to="/roommates"
-            className="p-5 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition space-y-3 group"
-          >
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition">
-              <Users className="w-5 h-5" />
-            </div>
-            <h3 className="font-semibold text-slate-900">Roommate Finder</h3>
-            <p className="text-sm text-slate-500">Connect with compatible students to share rent.</p>
-          </Link>
+          </form>
         </div>
-      </div>
+      </section>
 
-      {/* Additional Quick Links */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="font-semibold text-slate-900">Account & Community Hub</h3>
-          <p className="text-sm text-slate-500">Access seller dashboard, chats, notifications and admin tools.</p>
+      {/* Category Grid */}
+      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Browse by Category
+            </h2>
+            <p className="text-sm text-slate-600 mt-1">
+              Everything students need across campus life in one place.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Link to="/login" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">
-            <LogIn className="w-4 h-4" /> Login
-          </Link>
-          <Link to="/signup" className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5">
-            <UserPlus className="w-4 h-4" /> Signup
-          </Link>
-          <Link to="/messages" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4" /> Messages
-          </Link>
-          <Link to="/admin" className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5">
-            <ShieldAlert className="w-4 h-4" /> Admin
-          </Link>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {CATEGORIES.map((category) => {
+            const Icon = category.icon;
+            return (
+              <Link key={category.path} to={category.path} className="group block h-full">
+                <Card className="h-full flex flex-col justify-between space-y-4 group-hover:border-primary-100">
+                  <div className="space-y-4">
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center ${category.iconBg}`}
+                    >
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between">
+                        <span>{category.title}</span>
+                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200" />
+                      </h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">
+                        {category.description}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
-      </div>
+      </section>
+
+      {/* Why Trust Us Section */}
+      <section className="bg-white border-t border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-8">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Why Trust LASUEDPLUG
+            </h2>
+            <p className="text-sm text-slate-600">
+              Designed around accountability, clarity, and real campus proximity.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {TRUST_PILLARS.map((pillar) => {
+              const Icon = pillar.icon;
+              return (
+                <div
+                  key={pillar.title}
+                  className="flex flex-col items-center text-center space-y-3 p-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-primary-50 text-primary-500 flex items-center justify-center">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    {pillar.title}
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed max-w-sm">
+                    {pillar.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

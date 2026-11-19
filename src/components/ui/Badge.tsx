@@ -1,16 +1,17 @@
 import React from 'react';
 
-export type BadgeVariant = 'verified' | 'pending' | 'rejected' | 'neutral';
+export type BadgeVariant = 'verified' | 'pending' | 'rejected' | 'role' | 'neutral';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
 }
 
 const BADGE_CLASSES: Record<BadgeVariant, string> = {
-  verified: 'bg-green-100 text-green-800 border-green-200',
-  pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  rejected: 'bg-red-100 text-red-800 border-red-200',
-  neutral: 'bg-gray-100 text-gray-700 border-gray-200',
+  verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  rejected: 'bg-red-50 text-red-700 border-red-200',
+  role: 'bg-primary-50 text-primary-700 border-primary-100',
+  neutral: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
 export function Badge({
