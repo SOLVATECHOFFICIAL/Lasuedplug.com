@@ -39,6 +39,12 @@ import { AdminListings } from './pages/admin/Listings';
 import { AdminUsers } from './pages/admin/Users';
 import { AdminReports } from './pages/admin/Reports';
 import { AdminVerifications } from './pages/admin/Verifications';
+import { AdminSettings } from './pages/admin/Settings';
+
+import { AboutPage } from './pages/static/About';
+import { SafetyPage } from './pages/static/Safety';
+import { TermsPage } from './pages/static/Terms';
+import { PrivacyPage } from './pages/static/Privacy';
 
 export function AppRouter() {
   return (
@@ -220,6 +226,20 @@ export function AppRouter() {
           </AdminRoute>
         }
       />
+      <Route
+        path="/admin/settings"
+        element={
+          <AdminRoute>
+            <AdminSettings />
+          </AdminRoute>
+        }
+      />
+
+      {/* Legal & Trust */}
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/safety" element={<SafetyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />

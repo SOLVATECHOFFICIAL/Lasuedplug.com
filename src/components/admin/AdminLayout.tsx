@@ -2,9 +2,11 @@ import { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import {
   ArrowLeft,
+  BadgeCheck,
   CheckSquare,
   Flag,
   LayoutDashboard,
+  Settings,
   ShieldCheck,
   Users,
 } from 'lucide-react';
@@ -24,8 +26,15 @@ const ADMIN_NAV_ITEMS = [
     icon: CheckSquare,
     end: false,
   },
+  {
+    label: 'Verifications',
+    to: '/admin/verifications',
+    icon: BadgeCheck,
+    end: false,
+  },
   { label: 'Reports', to: '/admin/reports', icon: Flag, end: false },
   { label: 'Users', to: '/admin/users', icon: Users, end: false },
+  { label: 'Settings', to: '/admin/settings', icon: Settings, end: false },
 ];
 
 export function AdminLayout({

@@ -1,5 +1,5 @@
 node_modules
 dist
 .env
-# .env.local (kept unignored for AI Studio preview; uncomment before committing secrets)
+.env.local
 .playwright-cli

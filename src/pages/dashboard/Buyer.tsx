@@ -27,9 +27,11 @@ import {
 } from '../../lib/marketplaceHelpers';
 import { Enquiry } from '../../types';
 import { ProductImage } from '../../components/marketplace/ProductImage';
+import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { Card } from '../../components/ui/Card';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 
 type BuyerTab = 'saved' | 'enquiries';
 
@@ -126,7 +128,7 @@ export function BuyerDashboard() {
 
         <Link
           to="/dashboard/seller"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-colors shadow-sm whitespace-nowrap shrink-0 self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap shrink-0 self-start sm:self-auto"
         >
           <Store className="w-4 h-4 text-primary-600" aria-hidden="true" />
           <span>Switch to Seller Dashboard</span>
@@ -138,14 +140,14 @@ export function BuyerDashboard() {
         <div
           role="tablist"
           aria-label="Buyer dashboard sections"
-          className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl max-w-full"
+          className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl max-w-full w-full sm:w-auto"
         >
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'saved'}
             onClick={() => setActiveTab('saved')}
-            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 flex items-center gap-2 min-h-[38px] ${
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 flex items-center justify-center gap-2 min-h-[48px] md:min-h-[38px] ${
               activeTab === 'saved'
                 ? 'bg-white text-slate-900 shadow-sm font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
@@ -167,7 +169,7 @@ export function BuyerDashboard() {
             role="tab"
             aria-selected={activeTab === 'enquiries'}
             onClick={() => setActiveTab('enquiries')}
-            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 flex items-center gap-2 min-h-[38px] ${
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 flex items-center justify-center gap-2 min-h-[48px] md:min-h-[38px] ${
               activeTab === 'enquiries'
                 ? 'bg-white text-slate-900 shadow-sm font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
@@ -189,24 +191,11 @@ export function BuyerDashboard() {
       {/* Body */}
       {loading ? (
         activeTab === 'saved' ? (
-          <div
-            aria-label="Loading saved items"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5"
-          >
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl border border-slate-200 overflow-hidden animate-pulse"
-              >
-                <div className="aspect-[4/3] bg-slate-200" />
-                <div className="p-4 space-y-2.5">
-                  <div className="h-3.5 w-1/3 bg-slate-200 rounded" />
-                  <div className="h-5 w-3/4 bg-slate-200 rounded" />
-                  <div className="h-4 w-1/2 bg-slate-200 rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <CardSkeletonGrid
+            count={4}
+            columns={4}
+            label="Loading saved items"
+          />
         ) : (
           <div aria-label="Loading enquiries" className="space-y-3">
             {Array.from({ length: 3 }).map((_, index) => (
@@ -229,13 +218,14 @@ export function BuyerDashboard() {
       ) : activeTab === 'saved' ? (
         savedItems.length === 0 ? (
           <EmptyState
-            title="No saved items yet"
+            icon={Heart}
+            title="Nothing here yet"
             description="Tap the heart icon on any marketplace listing to save items you want to revisit later."
             actionLabel="Browse Marketplace"
             actionTo="/marketplace"
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5">
             {savedItems.map((entry) => {
               const { favorite, listing } = entry;
               const isRemoving = Boolean(removingIds[favorite.listingId]);
@@ -327,6 +317,17 @@ export function BuyerDashboard() {
                       <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                         {listing.title}
                       </h3>
+                      {(listing.sellerSnapshot?.fullName ||
+                        listing.sellerSnapshot?.isVerified) && (
+                        <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+                          <span className="truncate">
+                            {listing.sellerSnapshot?.fullName || 'Campus Seller'}
+                          </span>
+                          {listing.sellerSnapshot?.isVerified && (
+                            <VerifiedBadge size="xs" />
+                          )}
+                        </p>
+                      )}
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">
                         {isOnlineListing ? (
                           <span className="truncate font-medium text-emerald-700 inline-flex items-center gap-1">
@@ -361,6 +362,7 @@ export function BuyerDashboard() {
         )
       ) : enquiries.length === 0 ? (
         <EmptyState
+          icon={MessageCircle}
           title="No enquiries yet"
           description="When you message a seller on WhatsApp from a listing page, your enquiry history will appear here."
           actionLabel="Explore Marketplace"
@@ -407,7 +409,7 @@ export function BuyerDashboard() {
 
               <Link
                 to={`/marketplace/${enquiry.listingId}`}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors whitespace-nowrap shrink-0 self-start sm:self-auto"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[48px] md:min-h-[38px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 self-start sm:self-auto"
               >
                 <span>View Listing</span>
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />

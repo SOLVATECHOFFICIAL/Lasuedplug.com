@@ -560,6 +560,10 @@ Return ONLY valid JSON:
     }
   });
 
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'API route not found.' });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer } = await import('vite');
     const vite = await createServer({

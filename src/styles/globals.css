@@ -6,10 +6,12 @@
   html {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
 
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+    overflow-x: clip;
   }
 }
 

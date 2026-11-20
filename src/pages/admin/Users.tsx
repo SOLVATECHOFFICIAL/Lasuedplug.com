@@ -18,6 +18,7 @@ import { getAllUsers, updateUserAccountStatus } from '../../lib/adminService';
 import { UserProfile } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { ErrorState } from '../../components/feedback/ErrorState';
 
 export function AdminUsers() {
@@ -157,8 +158,9 @@ export function AdminUsers() {
                       return (
                         <tr key={account.uid} className="hover:bg-slate-50/70">
                           <td className="py-3.5 px-4">
-                            <div className="font-semibold text-slate-900">
-                              {account.fullName || 'Unnamed Student'}
+                            <div className="font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                              <span>{account.fullName || 'Unnamed Student'}</span>
+                              {account.isVerified && <VerifiedBadge size="xs" />}
                             </div>
                             {account.department && (
                               <div className="text-xs text-slate-500">

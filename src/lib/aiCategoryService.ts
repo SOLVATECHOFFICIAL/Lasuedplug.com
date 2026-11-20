@@ -1,3 +1,4 @@
+import { parseSafeJsonResponse } from './aiSearchService';
 import {
   ALL_MARKETPLACE_CATEGORIES,
   getCategoriesForAdType,
@@ -102,14 +103,7 @@ export async function suggestCategory(
       }),
     });
 
-    if (!response.ok) {
-      return {
-        suggestion: fallbackSuggestion,
-        isFallback: true,
-      };
-    }
-
-    const data = (await response.json()) as CategorySuggestionResult;
+    const data = await parseSafeJsonResponse<CategorySuggestionResult>(response);
     if (!data?.suggestion || data.isFallback) {
       return {
         suggestion: fallbackSuggestion,
@@ -122,7 +116,7 @@ export async function suggestCategory(
       isFallback: false,
     };
   } catch (error) {
-    console.error('AI Category Suggestion Error:', error);
+    console.warn('AI Category Suggestion unavailable, using default category:', error);
     return {
       suggestion: fallbackSuggestion,
       isFallback: true,

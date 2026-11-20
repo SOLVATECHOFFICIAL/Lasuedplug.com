@@ -43,6 +43,19 @@ export interface AdminDashboardStats {
   openReports: number;
 }
 
+export const PRIMARY_ADMIN_EMAIL = 'awoyinfasolomon1@gmail.com';
+
+export function isAuthorizedAdminEmail(email?: string | null): boolean {
+  return (email || '').trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+}
+
+export function isAuthorizedAdminSession(
+  user?: { email?: string | null; emailVerified?: boolean | null } | null
+): boolean {
+  if (!user) return false;
+  return isAuthorizedAdminEmail(user.email) && user.emailVerified === true;
+}
+
 export function isUserAdmin(
   profile?: Partial<Pick<UserProfile, 'roles'>> | null,
   hasAdminClaim = false

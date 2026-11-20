@@ -15,7 +15,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile Navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex justify-around items-center py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-[0_-4px_12px_-2px_rgba(15,23,42,0.06)] flex items-stretch px-1 pt-1.5 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {TABS.map((tab) => {
         const Icon = tab.icon;
@@ -33,14 +33,16 @@ export function MobileNav() {
           <Link
             key={tab.path}
             to={tab.path}
-            className={`flex flex-col items-center justify-center px-2.5 py-1 rounded-lg transition-colors duration-200 ${
+            className={`flex-1 min-w-0 min-h-[48px] flex flex-col items-center justify-center px-1 py-1 rounded-xl transition-all duration-200 active:scale-95 ${
               isActive
-                ? 'text-blue-600 font-semibold'
+                ? 'text-blue-600 font-semibold bg-blue-50/60'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
-            <span className="text-[11px] leading-none">{tab.name}</span>
+            <Icon className={`w-5 h-5 mb-0.5 shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
+            <span className="text-[10px] sm:text-[11px] leading-tight truncate max-w-full">
+              {tab.name === 'Accommodation' ? 'Hostels' : tab.name}
+            </span>
           </Link>
         );
       })}

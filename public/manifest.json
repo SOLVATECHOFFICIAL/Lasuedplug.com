@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "LASUEDPLUG",
+  "short_name": "LASUEDPLUG",
+  "description": "Your campus marketplace for products, services & accommodation for LASUED, LASU, and the Epe community.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/lasued.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/lasued.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

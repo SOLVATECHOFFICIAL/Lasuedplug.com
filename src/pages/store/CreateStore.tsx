@@ -352,6 +352,7 @@ export function CreateStore() {
                 <img
                   src={logoPreviewUrl}
                   alt="Store logo preview"
+                  loading="lazy"
                   className="w-full h-full object-cover"
                 />
                 <button

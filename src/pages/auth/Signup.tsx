@@ -18,6 +18,7 @@ export function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<SignupFormErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +43,13 @@ export function SignupPage() {
       return;
     }
 
+    if (!agreedToTerms) {
+      setFormError(
+        'Please agree to the Terms of Service, Privacy Policy, and Safety Rules before creating an account.'
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await signUp(email, password, fullName);
@@ -61,6 +69,7 @@ export function SignupPage() {
           <img
             src={LOGO_URL}
             alt={SITE_NAME}
+            loading="lazy"
             className="h-12 w-auto mx-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -153,12 +162,68 @@ export function SignupPage() {
             required
           />
 
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+            <label
+              htmlFor="signup-legal-agreement"
+              className="flex items-start gap-3 cursor-pointer select-none"
+            >
+              <input
+                id="signup-legal-agreement"
+                name="agreedToTerms"
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => {
+                  setAgreedToTerms(e.target.checked);
+                  if (e.target.checked && formError) {
+                    setFormError(null);
+                  }
+                }}
+                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 shrink-0 cursor-pointer"
+                required
+              />
+              <span className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                I agree to the{' '}
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                >
+                  Terms of Service
+                </Link>
+                ,{' '}
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                >
+                  Privacy Policy
+                </Link>
+                , and{' '}
+                <Link
+                  to="/safety"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                >
+                  Safety Rules
+                </Link>
+                . I understand that LASUEDPLUG is not responsible for offline
+                transactions or scams.
+              </span>
+            </label>
+          </div>
+
           <Button
             type="submit"
             variant="primary"
             size="lg"
             fullWidth
-            disabled={submitting}
+            disabled={submitting || !agreedToTerms}
           >
             <UserPlus className="w-4 h-4" />
             {submitting ? 'Creating account...' : 'Create Account'}

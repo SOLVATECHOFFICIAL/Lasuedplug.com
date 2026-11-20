@@ -6,11 +6,14 @@ import {
   getAdminModuleLabel,
   getAdminReportTargetCollection,
   getPrimaryUserRoleBadge,
+  isAuthorizedAdminEmail,
+  isAuthorizedAdminSession,
   isUserAdmin,
   mapAccommodationToPendingAdminItem,
   mapProductToPendingAdminItem,
   mapRoommateToPendingAdminItem,
   mapStoreToPendingAdminItem,
+  PRIMARY_ADMIN_EMAIL,
   sortPendingAdminItems,
 } from './adminHelpers';
 import {
@@ -28,6 +31,34 @@ test('isUserAdmin recognizes roles.admin or admin custom claim and rejects norma
   assert.equal(isUserAdmin(null, false), false);
   assert.equal(isUserAdmin({ roles: { admin: true } }, false), true);
   assert.equal(isUserAdmin({ roles: { buyer: true } }, true), true);
+});
+
+test('isAuthorizedAdminSession allows only verified primary admin email', () => {
+  assert.equal(isAuthorizedAdminEmail(PRIMARY_ADMIN_EMAIL), true);
+  assert.equal(isAuthorizedAdminEmail('  AWOYINFASOLOMON1@gmail.com '), true);
+  assert.equal(isAuthorizedAdminEmail('hacker@gmail.com'), false);
+  assert.equal(
+    isAuthorizedAdminSession({
+      email: PRIMARY_ADMIN_EMAIL,
+      emailVerified: true,
+    }),
+    true
+  );
+  assert.equal(
+    isAuthorizedAdminSession({
+      email: PRIMARY_ADMIN_EMAIL,
+      emailVerified: false,
+    }),
+    false
+  );
+  assert.equal(
+    isAuthorizedAdminSession({
+      email: 'other@lasued.edu.ng',
+      emailVerified: true,
+    }),
+    false
+  );
+  assert.equal(isAuthorizedAdminSession(null), false);
 });
 
 test('admin pending queue mappers normalize all 4 modules cleanly', () => {

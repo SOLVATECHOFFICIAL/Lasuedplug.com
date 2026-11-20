@@ -521,6 +521,7 @@ export function MarketplaceEdit() {
                   <img
                     src={imgUrl}
                     alt={`Listing photo ${idx + 1}`}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                   <button

@@ -59,6 +59,7 @@ export function LoginPage() {
           <img
             src={LOGO_URL}
             alt={SITE_NAME}
+            loading="lazy"
             className="h-12 w-auto mx-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">

@@ -6,11 +6,14 @@ import {
   ChevronRight,
   Info,
   Loader2,
+  MapPin,
   PackageOpen,
   Plus,
   Search,
   SearchX,
+  ShoppingBag,
   Sparkles,
+  Store as StoreIcon,
   TrendingUp,
   X,
 } from 'lucide-react';
@@ -20,6 +23,7 @@ import {
   fetchTrendingProducts,
   MARKETPLACE_PAGE_SIZE,
 } from '../../lib/marketplaceService';
+import { getApprovedStores } from '../../lib/storeService';
 import {
   buildCatalogSummaryForAi,
   expandSearchQuery,
@@ -36,12 +40,14 @@ import {
   hasActiveMarketplaceFilters,
   MarketplaceSortOption,
 } from '../../lib/marketplaceHelpers';
-import { Product } from '../../types';
+import { Product, Store } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Loading } from '../../components/feedback/Loading';
+import { CardSkeletonGrid } from '../../components/feedback/Loading';
+import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
+import { ProductImage } from '../../components/marketplace/ProductImage';
 
 const SEARCH_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest to Oldest' },
@@ -113,6 +119,13 @@ export function MarketplaceIndex() {
   const [usedRelatedFallback, setUsedRelatedFallback] = useState(false);
   const [aiSearching, setAiSearching] = useState(false);
 
+  const [activeBrowseTab, setActiveBrowseTab] = useState<'items' | 'stores'>(() =>
+    searchParams.get('tab') === 'stores' ? 'stores' : 'items'
+  );
+  const [stores, setStores] = useState<Store[]>([]);
+  const [storesLoading, setStoresLoading] = useState(false);
+  const [storesError, setStoresError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +151,9 @@ export function MarketplaceIndex() {
   // Sync URL params cleanly
   useEffect(() => {
     const nextParams: Record<string, string> = {};
+    if (activeBrowseTab === 'stores') {
+      nextParams.tab = 'stores';
+    }
     if (selectedCategory) {
       nextParams.category = selectedCategory;
     }
@@ -148,7 +164,28 @@ export function MarketplaceIndex() {
       nextParams.sort = sortBy;
     }
     setSearchParams(nextParams, { replace: true });
-  }, [debouncedSearch, searchPhoto, selectedCategory, sortBy, setSearchParams]);
+  }, [activeBrowseTab, debouncedSearch, searchPhoto, selectedCategory, sortBy, setSearchParams]);
+
+  const loadStores = useCallback(async () => {
+    setStoresLoading(true);
+    setStoresError(null);
+    try {
+      const list = await getApprovedStores();
+      setStores(list);
+    } catch (err) {
+      setStoresError(
+        err instanceof Error ? err.message : 'Unable to load campus stores.'
+      );
+    } finally {
+      setStoresLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeBrowseTab === 'stores' && stores.length === 0 && !storesLoading && !storesError) {
+      void loadStores();
+    }
+  }, [activeBrowseTab, stores.length, storesLoading, storesError, loadStores]);
 
   const filtersActive = useMemo(
     () =>
@@ -329,6 +366,18 @@ export function MarketplaceIndex() {
     return sortSearchResults(categoryFiltered, sortBy);
   }, [isSearchActive, browseProducts, rawSearchProducts, selectedCategory, sortBy]);
 
+  const filteredStores = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return stores;
+    return stores.filter((s) =>
+      [s.name, s.description, s.category, s.locationName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [stores, searchQuery]);
+
   // Load next 12 items for infinite scroll (browse mode)
   const loadMoreProducts = useCallback(async () => {
     if (isSearchActive || loading || loadingMore || !hasMore || !lastVisibleDoc) {
@@ -426,10 +475,10 @@ export function MarketplaceIndex() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-12 space-y-8">
+    <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-6">
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
             Campus Marketplace
           </h1>
@@ -438,30 +487,36 @@ export function MarketplaceIndex() {
           </p>
         </div>
 
-        <div className="hidden md:flex shrink-0">
-          <Link to="/marketplace/create">
-            <Button variant="primary" size="md">
+        <div className="grid grid-cols-2 sm:flex items-center gap-2.5 shrink-0">
+          <Link to="/store/create" className="w-full sm:w-auto">
+            <Button variant="outline" size="md" fullWidth className="sm:w-auto">
+              <StoreIcon className="w-4 h-4" />
+              <span>Open Store</span>
+            </Button>
+          </Link>
+          <Link to="/marketplace/create" className="w-full sm:w-auto">
+            <Button variant="primary" size="md" fullWidth className="sm:w-auto">
               <Plus className="w-4 h-4" />
-              Sell Something
+              <span>Sell Something</span>
             </Button>
           </Link>
         </div>
       </div>
 
       {/* Top Section: Trending Carousel (Top 8 by viewCount) */}
-      {!trendingLoading && trendingProducts.length > 0 && (
-        <section aria-labelledby="trending-heading" className="space-y-3.5">
+      {activeBrowseTab === 'items' && !trendingLoading && trendingProducts.length > 0 && (
+        <section aria-labelledby="trending-heading" className="space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <TrendingUp className="w-5 h-5 text-accent-500 shrink-0" />
               <h2
                 id="trending-heading"
-                className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight"
+                className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate"
               >
                 Trending on Campus
               </h2>
             </div>
-            <span className="text-xs font-medium text-slate-500 inline-flex items-center gap-1">
+            <span className="text-xs font-medium text-slate-500 inline-flex items-center gap-1 shrink-0">
               <span>Swipe</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </span>
@@ -469,12 +524,12 @@ export function MarketplaceIndex() {
 
           <div
             data-testid="trending-carousel"
-            className="flex overflow-x-auto snap-x snap-mandatory gap-4 hide-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+            className="flex w-full max-w-full overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 hide-scrollbar pb-2"
           >
             {trendingProducts.map((product) => (
               <div
                 key={`trending-${product.id || product.title}`}
-                className="w-64 shrink-0 snap-start"
+                className="w-56 sm:w-64 shrink-0 snap-start"
               >
                 <ProductCard product={product} />
               </div>
@@ -483,20 +538,71 @@ export function MarketplaceIndex() {
         </section>
       )}
 
-      {/* Search Bar & PRODUCT_CATEGORIES Filter */}
-      <section aria-label="Search marketplace" className="space-y-3">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-3 sm:p-4 space-y-3">
-          <div className="flex flex-col md:flex-row md:items-end gap-3">
+      {/* Sticky Search Bar & Filter Tabs */}
+      <section
+        aria-label="Search marketplace"
+        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-1.5 bg-slate-50/95 backdrop-blur-sm"
+      >
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2 sm:p-3.5 space-y-2">
+          {/* Top Mode Tabs + Category Quick Row */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div
+              role="tablist"
+              aria-label="Marketplace browse mode"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg max-w-full"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeBrowseTab === 'items'}
+                onClick={() => setActiveBrowseTab('items')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 ${
+                  activeBrowseTab === 'items'
+                    ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                <span>Items</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeBrowseTab === 'stores'}
+                onClick={() => setActiveBrowseTab('stores')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 ${
+                  activeBrowseTab === 'stores'
+                    ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <StoreIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>Campus Stores</span>
+              </button>
+            </div>
+
+            {activeBrowseTab === 'items' && filtersActive && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-all duration-200"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col md:flex-row md:items-end gap-2 sm:gap-3">
             {/* Search Input + Visual Photo Scan Button */}
-            <div className="flex-1 space-y-1.5">
+            <div className="flex-1 min-w-0 space-y-1">
               <label
                 htmlFor="marketplace-search"
-                className="block text-sm font-medium text-slate-700"
+                className="hidden sm:block text-xs font-medium text-slate-600"
               >
-                Search Marketplace
+                {activeBrowseTab === 'stores' ? 'Search Campus Stores' : 'Search Marketplace'}
               </label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="relative flex-1 min-w-0">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     id="marketplace-search"
@@ -504,30 +610,36 @@ export function MarketplaceIndex() {
                     role="searchbox"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Ask AI, type keywords, or scan a photo (e.g. 'eat bread', 'niky snikers')..."
+                    placeholder={
+                      activeBrowseTab === 'stores'
+                        ? 'Search stores by name or category...'
+                        : 'Search items, ask AI, or scan a photo...'
+                    }
                     aria-label="Search marketplace products"
-                    className="w-full pl-9 pr-20 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full min-w-0 pl-9 pr-20 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                     {(searchQuery || searchPhoto || selectedCategory) && (
                       <button
                         type="button"
                         onClick={handleClearFilters}
                         aria-label="Clear search and filters"
-                        className="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        className="p-2 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all duration-200"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => photoInputRef.current?.click()}
-                      aria-label="Search by photo"
-                      title="Scan a picture to search"
-                      className="p-1.5 rounded-md text-primary-600 hover:bg-primary-50 transition-colors"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </button>
+                    {activeBrowseTab === 'items' && (
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        aria-label="Search by photo"
+                        title="Scan a picture to search"
+                        className="p-2 rounded-md text-primary-600 hover:bg-primary-50 transition-all duration-200"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                   <input
                     ref={photoInputRef}
@@ -542,35 +654,37 @@ export function MarketplaceIndex() {
             </div>
 
             {/* Category Filter (Strictly PRODUCT_CATEGORIES only) */}
-            <div className="w-full md:w-60 space-y-1.5 shrink-0">
-              <label
-                htmlFor="marketplace-category-filter"
-                className="block text-sm font-medium text-slate-700"
-              >
-                Product Category
-              </label>
-              <select
-                id="marketplace-category-filter"
-                aria-label="Filter by product category"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="">All Product Categories</option>
-                {PRODUCT_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {activeBrowseTab === 'items' && (
+              <div className="w-full md:w-56 space-y-1 shrink-0">
+                <label
+                  htmlFor="marketplace-category-filter"
+                  className="hidden sm:block text-xs font-medium text-slate-600"
+                >
+                  Product Category
+                </label>
+                <select
+                  id="marketplace-category-filter"
+                  aria-label="Filter by product category"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                >
+                  <option value="">All Categories</option>
+                  {PRODUCT_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Sort Results (Search mode) */}
-            {isTypingSearch && (
-              <div className="w-full md:w-48 space-y-1.5 shrink-0">
+            {activeBrowseTab === 'items' && isTypingSearch && (
+              <div className="w-full md:w-44 space-y-1 shrink-0">
                 <label
                   htmlFor="marketplace-search-sort"
-                  className="block text-sm font-medium text-slate-700"
+                  className="hidden sm:block text-xs font-medium text-slate-600"
                 >
                   Sort Results
                 </label>
@@ -579,7 +693,7 @@ export function MarketplaceIndex() {
                   aria-label="Sort search results"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SearchSortValue)}
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
+                  className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
                 >
                   {SEARCH_SORT_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -592,12 +706,13 @@ export function MarketplaceIndex() {
           </div>
 
           {/* Selected Search Photo Chip */}
-          {searchPhoto && (
+          {activeBrowseTab === 'items' && searchPhoto && (
             <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
                   src={searchPhoto.previewUrl}
                   alt="Search photo preview"
+                  loading="lazy"
                   className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
                 />
                 <div className="min-w-0">
@@ -610,7 +725,7 @@ export function MarketplaceIndex() {
               <button
                 type="button"
                 onClick={() => setSearchPhoto(null)}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-200/70"
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded hover:bg-slate-200/70 transition-all duration-200 shrink-0"
               >
                 Remove
               </button>
@@ -618,7 +733,7 @@ export function MarketplaceIndex() {
           )}
 
           {/* AI Search Status & Expanded Terms */}
-          {isTypingSearch && aiSearching && (
+          {activeBrowseTab === 'items' && isTypingSearch && aiSearching && (
             <div
               role="status"
               className="flex items-center gap-2 text-sm font-medium text-primary-600 pt-1"
@@ -632,38 +747,41 @@ export function MarketplaceIndex() {
             </div>
           )}
 
-          {isSearchActive && !aiSearching && (aiAnswer || aiCorrectedQuery || aiKeywords.length > 0) && (
-            <div className="space-y-1.5 pt-1">
-              {aiAnswer && (
-                <div className="flex items-start gap-2 rounded-lg bg-blue-50/70 border border-blue-100 px-3 py-2 text-xs text-slate-800">
-                  <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0 mt-0.5" />
-                  <span>{aiAnswer}</span>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-                {aiCorrectedQuery &&
-                  aiCorrectedQuery.toLowerCase() !== debouncedSearch.trim().toLowerCase() && (
-                    <span>
-                      <strong className="font-semibold text-slate-700">
-                        {searchPhoto ? 'Detected in photo:' : 'Interpreted as:'}
-                      </strong>{' '}
-                      {aiCorrectedQuery}
+          {activeBrowseTab === 'items' &&
+            isSearchActive &&
+            !aiSearching &&
+            (aiAnswer || aiCorrectedQuery || aiKeywords.length > 0) && (
+              <div className="space-y-1.5 pt-1">
+                {aiAnswer && (
+                  <div className="flex items-start gap-2 rounded-lg bg-blue-50/70 border border-blue-100 px-3 py-2 text-xs text-slate-800">
+                    <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0 mt-0.5" />
+                    <span>{aiAnswer}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                  {aiCorrectedQuery &&
+                    aiCorrectedQuery.toLowerCase() !== debouncedSearch.trim().toLowerCase() && (
+                      <span>
+                        <strong className="font-semibold text-slate-700">
+                          {searchPhoto ? 'Detected in photo:' : 'Interpreted as:'}
+                        </strong>{' '}
+                        {aiCorrectedQuery}
+                      </span>
+                    )}
+                  {aiKeywords.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                      <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0" />
+                      <span className="font-medium text-slate-700">
+                        AI related terms:
+                      </span>
+                      <span>{aiKeywords.join(', ')}</span>
                     </span>
                   )}
-                {aiKeywords.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 flex-wrap">
-                    <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0" />
-                    <span className="font-medium text-slate-700">
-                      AI related terms:
-                    </span>
-                    <span>{aiKeywords.join(', ')}</span>
-                  </span>
-                )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {isSearchActive && !aiSearching && usedRelatedFallback && (
+          {activeBrowseTab === 'items' && isSearchActive && !aiSearching && usedRelatedFallback && (
             <div
               role="status"
               className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700"
@@ -678,11 +796,90 @@ export function MarketplaceIndex() {
         </div>
       </section>
 
-      {/* Main Content Grid */}
-      {loading ? (
-        <Loading
-          variant="skeleton"
-          message={
+      {/* Main Content Grid: Campus Stores OR Marketplace Products */}
+      {activeBrowseTab === 'stores' ? (
+        storesLoading ? (
+          <CardSkeletonGrid
+            count={6}
+            columns={3}
+            label="Loading campus stores..."
+          />
+        ) : storesError ? (
+          <ErrorState message={storesError} onRetry={() => void loadStores()} />
+        ) : filteredStores.length === 0 ? (
+          <EmptyState
+            icon={searchQuery.trim() ? SearchX : StoreIcon}
+            title={searchQuery.trim() ? 'No stores found' : 'Nothing here yet'}
+            description={
+              searchQuery.trim()
+                ? `No approved campus store matched "${searchQuery.trim()}".`
+                : 'Be the first student entrepreneur to open a storefront on LASUEDPLUG.'
+            }
+            actionLabel={searchQuery.trim() ? 'Clear Search' : 'Open a Store'}
+            actionTo={searchQuery.trim() ? undefined : '/store/create'}
+            onAction={searchQuery.trim() ? () => setSearchQuery('') : undefined}
+          />
+        ) : (
+          <div className="space-y-4">
+            <p className="text-xs font-medium text-slate-500 tabular-nums">
+              Showing {filteredStores.length}{' '}
+              {filteredStores.length === 1 ? 'campus store' : 'campus stores'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {filteredStores.map((store) => (
+                <Card
+                  key={store.id || store.name}
+                  padded={false}
+                  className="overflow-hidden flex flex-col justify-between"
+                >
+                  <div className="aspect-[16/9] w-full bg-slate-100 overflow-hidden">
+                    <ProductImage
+                      src={store.logoUrl}
+                      alt={store.name}
+                      className="w-full h-full object-cover"
+                      iconClassName="w-10 h-10 text-slate-400"
+                    />
+                  </div>
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div className="space-y-1.5 min-w-0">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary-50 text-primary-700 border border-primary-100">
+                        {store.category || 'Campus Store'}
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900 truncate">
+                        {store.name}
+                      </h3>
+                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                        {store.description}
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1 min-w-0 truncate">
+                        <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">{store.locationName || 'Campus'}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveBrowseTab('items');
+                          setSearchQuery(store.name);
+                          setDebouncedSearch(store.name);
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 transition-all duration-200"
+                      >
+                        Browse items →
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )
+      ) : loading ? (
+        <CardSkeletonGrid
+          count={8}
+          columns={4}
+          label={
             aiSearching
               ? 'AI is finding the best matches...'
               : 'Loading campus products...'
@@ -691,57 +888,27 @@ export function MarketplaceIndex() {
       ) : error ? (
         <ErrorState message={error} onRetry={() => void loadInitialProducts()} />
       ) : products.length === 0 ? (
-        <Card
-          hoverable={false}
-          className="max-w-md mx-auto my-8 border-dashed text-center py-10 space-y-4"
-        >
-          {filtersActive ? (
-            <>
-              <div className="w-12 h-12 mx-auto rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
-                <SearchX className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-bold text-slate-900">
-                  No results found
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Try adjusting your search, category filter, or photo to find
-                  what you&apos;re looking for.
-                </p>
-              </div>
-              <div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearFilters}
-                >
-                  Reset Filters
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="w-12 h-12 mx-auto rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
-                <PackageOpen className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-bold text-slate-900">
-                  No products listed yet
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Be the first student to list an item for sale on LASUEDPLUG.
-                </p>
-              </div>
-              <div>
-                <Link to="/marketplace/create">
-                  <Button variant="primary" size="sm">
-                    Sell Something
-                  </Button>
-                </Link>
-              </div>
-            </>
-          )}
-        </Card>
+        filtersActive ? (
+          <EmptyState
+            icon={SearchX}
+            title="Nothing here yet"
+            description="No listings matched your filters. Try adjusting your search, category filter, or photo."
+            actionLabel="Reset Filters"
+            onAction={handleClearFilters}
+            secondaryActionLabel="Post a Listing"
+            onSecondaryAction={() => {
+              window.location.assign('/marketplace/create');
+            }}
+          />
+        ) : (
+          <EmptyState
+            icon={PackageOpen}
+            title="Nothing here yet"
+            description="Be the first to post in this category on LASUEDPLUG."
+            actionLabel="Post a Listing"
+            actionTo="/marketplace/create"
+          />
+        )
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -756,7 +923,7 @@ export function MarketplaceIndex() {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200"
               >
                 Clear Filters
               </button>
@@ -765,7 +932,7 @@ export function MarketplaceIndex() {
 
           <div
             data-testid="marketplace-grid"
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6"
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6"
           >
             {products.map((product) => (
               <ProductCard
@@ -802,15 +969,6 @@ export function MarketplaceIndex() {
         </div>
       )}
 
-      {/* Mobile Floating Action Button (FAB) */}
-      <Link
-        to="/marketplace/create"
-        aria-label="Sell Something"
-        className="md:hidden fixed bottom-20 right-4 z-40 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold shadow-lg transition-transform duration-200 active:scale-95"
-      >
-        <Plus className="w-4 h-4" />
-        <span>Sell Something</span>
-      </Link>
     </div>
   );
 }

@@ -459,6 +459,61 @@ export function findBestAndRelatedProducts(
   };
 }
 
+export async function parseSafeJsonResponse<T>(
+  response: Response
+): Promise<T | null> {
+  if (!response.ok) {
+    return null;
+  }
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+  if (contentType && !contentType.includes('application/json') && !contentType.includes('+json')) {
+    return null;
+  }
+
+  const rawText = await response.text();
+  const trimmed = rawText.trim();
+  if (!trimmed || trimmed.startsWith('<')) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    return null;
+  }
+}
+
+function createLinkedTimeoutSignal(
+  timeoutMs: number,
+  externalSignal?: AbortSignal
+): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  const onExternalAbort = () => {
+    controller.abort();
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      globalThis.clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
+    },
+  };
+}
+
 export async function expandSearchQuery(
   query: string,
   catalog: CatalogSummaryItem[] = [],
@@ -482,6 +537,8 @@ export async function expandSearchQuery(
     throw new DOMException('Aborted', 'AbortError');
   }
 
+  const linked = createLinkedTimeoutSignal(12_000, signal);
+
   try {
     const response = await fetch('/api/ai/expand-search', {
       method: 'POST',
@@ -490,28 +547,27 @@ export async function expandSearchQuery(
         query: trimmed,
         catalog: filteredCatalog,
       }),
-      signal,
+      signal: linked.signal,
     });
 
-    if (!response.ok) {
+    const payload = await parseSafeJsonResponse<ExpandSearchResult>(response);
+    if (!payload) {
       return { keywords: [] };
     }
 
-    const payload = (await response.json()) as ExpandSearchResult;
     clientSearchCache.set(cacheKey, {
       expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
       payload,
     });
     return payload;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw error;
-    }
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    console.error('AI Search Error:', error);
+    console.warn('AI Search unavailable, using local matching:', error);
     return { keywords: [] };
+  } finally {
+    linked.cleanup();
   }
 }
 
@@ -529,6 +585,8 @@ export async function searchByImage(
     throw new DOMException('Aborted', 'AbortError');
   }
 
+  const linked = createLinkedTimeoutSignal(15_000, signal);
+
   try {
     const response = await fetch('/api/ai/search-by-image', {
       method: 'POST',
@@ -538,22 +596,18 @@ export async function searchByImage(
         catalog: filteredCatalog,
         query,
       }),
-      signal,
+      signal: linked.signal,
     });
 
-    if (!response.ok) {
-      return { keywords: [] };
-    }
-
-    return (await response.json()) as VisualSearchResult;
+    const payload = await parseSafeJsonResponse<VisualSearchResult>(response);
+    return payload || { keywords: [] };
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw error;
-    }
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    console.error('AI Visual Search Error:', error);
+    console.warn('AI Visual Search unavailable, using local matching:', error);
     return { keywords: [] };
+  } finally {
+    linked.cleanup();
   }
 }

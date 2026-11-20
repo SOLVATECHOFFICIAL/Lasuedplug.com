@@ -13,16 +13,69 @@
       property="og:description"
       content="Your campus marketplace for products, services & accommodation."
     />
+    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LASUEDPLUG" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/lasued.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/lasued.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background-color: #ffffff;
+        color: #0f172a;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        z-index: 9999;
+      }
+      #app-splash img {
+        width: 72px;
+        height: 72px;
+        border-radius: 16px;
+        object-fit: contain;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      }
+      #app-splash .splash-title {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      #app-splash .splash-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #e2e8f0;
+        border-top-color: #1d4ed8;
+        border-radius: 9999px;
+        animation: lasuedplug-spin 0.75s linear infinite;
+      }
+      @keyframes lasuedplug-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body class="bg-slate-50 font-sans text-slate-900 antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-splash" aria-label="Loading LASUEDPLUG">
+        <img src="/lasued.png" alt="LASUEDPLUG logo" />
+        <span class="splash-title">LASUEDPLUG</span>
+        <span class="splash-spinner" aria-hidden="true"></span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

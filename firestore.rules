@@ -1,355 +1,241 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- HELPER FUNCTIONS ---
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.admin == true ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get(['roles', 'admin'], false) == true
-        )
-      );
+      return isSignedIn()
+        && request.auth.token.get('email', '') == 'awoyinfasolomon1@gmail.com'
+        && request.auth.token.get('email_verified', false) == true;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function immutableOnceSet(field) {
-      return resource.data.get(field, null) == null ||
-        resource.data.get(field, '') == '' ||
-        request.resource.data.get(field, '') == resource.data.get(field, '');
-    }
-
-    function canUpdatePhone() {
-      let phoneChanged =
-        request.resource.data.get('phone', '') != resource.data.get('phone', '');
-      return !phoneChanged
-        ? request.resource.data.get('lastPhoneUpdate', null) ==
-            resource.data.get('lastPhoneUpdate', null)
-        : (
-            (resource.data.get('lastPhoneUpdate', null) == null ||
-              request.time >= resource.data.lastPhoneUpdate + duration.value(7, 'd')) &&
-            request.resource.data.get('lastPhoneUpdate', null) == request.time
-          );
-    }
-
-    // Users collection: public profiles readable by anyone; users can create/update their own profile
-    // with permanent fullName/campus/department/level locks once set, 7-day phone cooldown, and immutable protected fields.
+    // --- USERS ---
+    // Public read so usernames/fullNames/profiles and seller info load without permission errors.
+    // Writes stay locked down so users can only edit their own safe profile fields (never isVerified/roles/status/email).
     match /users/{userId} {
       allow read: if true;
-
       allow create: if isAdmin() || (
-        isOwner(userId) &&
-        request.resource.data.uid == userId &&
-        request.resource.data.isVerified == false &&
-        request.resource.data.status == 'active' &&
-        request.resource.data.get(['roles', 'admin'], false) == false
+        isOwner(userId)
+        && request.resource.data.get('isVerified', false) == false
+        && request.resource.data.get('status', 'active') == 'active'
+        && request.resource.data.get('roles', {}) is map
+        && request.resource.data.get('roles', {}).get('admin', false) == false
+        && request.resource.data.get('uid', userId) == userId
+        && request.resource.data.get('email', '') == request.auth.token.get('email', '')
       );
-
       allow update: if isAdmin() || (
-        isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'uid',
-          'isVerified',
-          'status',
-          'roles'
-        ]) &&
-        immutableOnceSet('fullName') &&
-        immutableOnceSet('campus') &&
-        immutableOnceSet('department') &&
-        immutableOnceSet('level') &&
-        canUpdatePhone()
+        isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified', 'roles', 'status', 'uid', 'email'])
       );
-
       allow delete: if isAdmin();
+
+      // Legacy user-scoped subcollections
+      match /favorites/{favId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      match /notifications/{notifId} {
+        allow read, update, delete: if isOwner(userId) || isAdmin();
+        allow create: if isSignedIn();
+      }
     }
 
-    // Products: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved or sellerId); admin full access.
-    match /products/{productId} {
-      allow read: if isAdmin()
-        || (resource.data.isApproved == true && resource.data.isActive == true)
-        || (isSignedIn() && resource.data.sellerId == request.auth.uid);
-
-      allow create: if isAdmin() || (
-        isSignedIn() &&
-        request.resource.data.sellerId == request.auth.uid &&
-        request.resource.data.isApproved == false
-      );
-
-      allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.sellerId == request.auth.uid &&
-        request.resource.data.sellerId == resource.data.sellerId &&
-        request.resource.data.isActive is bool &&
-        request.resource.data.status in ['active', 'sold', 'unavailable'] &&
-        (!('quantity' in request.resource.data) || (
-          request.resource.data.quantity is number &&
-          request.resource.data.quantity >= 0
-        )) && (
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'quantity',
-              'status',
-              'isActive'
-            ]) &&
-            request.resource.data.isApproved == resource.data.isApproved
-          ) || (
-            request.resource.data.isApproved == false
-          )
-        )
-      ) || (
-        resource.data.isApproved == true &&
-        resource.data.isActive == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']) &&
-        request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
-      ) || (
-        resource.data.isApproved == true &&
-        resource.data.isActive == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount']) &&
-        request.resource.data.contactCount == resource.data.get('contactCount', 0) + 1
-      );
-
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
-    }
-
-    // Services: public read when approved & active; provider can read/create/update/delete own (cannot set isApproved); admin full access.
-    match /services/{serviceId} {
-      allow read: if isAdmin()
-        || (resource.data.isApproved == true && resource.data.isActive == true)
-        || (isSignedIn() && resource.data.providerId == request.auth.uid);
-
-      allow create: if isAdmin() || (
-        isSignedIn() &&
-        request.resource.data.providerId == request.auth.uid &&
-        request.resource.data.isApproved == false
-      );
-
-      allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.providerId == request.auth.uid &&
-        request.resource.data.providerId == resource.data.providerId &&
-        (
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'status',
-              'isActive'
-            ]) &&
-            request.resource.data.isApproved == resource.data.isApproved
-          ) || (
-            request.resource.data.isApproved == false
-          )
-        )
-      ) || (
-        resource.data.isApproved == true &&
-        resource.data.isActive == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']) &&
-        request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
-      ) || (
-        resource.data.isApproved == true &&
-        resource.data.isActive == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount']) &&
-        request.resource.data.contactCount == resource.data.get('contactCount', 0) + 1
-      );
-
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.providerId == request.auth.uid);
-    }
-
-    // Accommodations: public read when approved; owner can read/create/update/delete own (cannot set isApproved or ownerId); admin full access.
-    match /accommodations/{accommodationId} {
-      allow read: if isAdmin()
-        || resource.data.isApproved == true
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-
-      allow create: if isAdmin() || (
-        isSignedIn() &&
-        request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.type in ['single_room', 'self_contain', 'shared_apartment', 'short_let'] &&
-        request.resource.data.title is string &&
-        request.resource.data.title.size() > 0 &&
-        request.resource.data.title.size() <= 200 &&
-        request.resource.data.rentPrice is number &&
-        request.resource.data.rentPrice > 0 &&
-        request.resource.data.generalLocation is string &&
-        request.resource.data.generalLocation.size() > 0 &&
-        request.resource.data.isApproved == false &&
-        request.resource.data.isActive is bool
-      );
-
-      allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.ownerId == request.auth.uid &&
-        request.resource.data.ownerId == resource.data.ownerId &&
-        (
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'isActive'
-            ]) &&
-            request.resource.data.isApproved == resource.data.isApproved
-          ) || (
-            request.resource.data.isApproved == false
-          )
-        )
-      );
-
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-    }
-
-    // Roommate Requests: public read when approved; owner can read/create/update/delete own (cannot set isApproved or userId); admin full access.
-    match /roommate_requests/{requestId} {
-      allow read: if isAdmin()
-        || resource.data.isApproved == true
-        || (isSignedIn() && resource.data.userId == request.auth.uid);
-
-      allow create: if isAdmin() || (
-        isSignedIn() &&
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.type in ['need_roommate', 'room_available'] &&
-        request.resource.data.title is string &&
-        request.resource.data.title.size() > 0 &&
-        request.resource.data.title.size() <= 200 &&
-        request.resource.data.generalLocation is string &&
-        request.resource.data.generalLocation.size() > 0 &&
-        request.resource.data.preferences is string &&
-        request.resource.data.preferences.size() > 0 &&
-        request.resource.data.isApproved == false &&
-        request.resource.data.isActive is bool
-      );
-
-      allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == resource.data.userId &&
-        (
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'isActive'
-            ]) &&
-            request.resource.data.isApproved == resource.data.isApproved
-          ) || (
-            request.resource.data.isApproved == false
-          )
-        )
-      );
-
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-    }
-
-    // Favorites: users can read, create, and delete only their own favorite documents.
-    match /favorites/{favoriteId} {
-      allow get: if isAdmin() || (
-        isSignedIn() &&
-        (resource == null || resource.data.userId == request.auth.uid)
-      );
-      allow list: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid
-      );
+    // --- VERIFICATION REQUESTS ---
+    match /verification_requests/{requestId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.listingId is string
-        && request.resource.data.listingId.size() > 0
-        && request.resource.data.listingType in ['item', 'product', 'service'];
-      allow delete: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid
-      );
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
     }
 
-    // Enquiries: buyers can log enquiries; buyers and sellers involved can read them.
-    match /enquiries/{enquiryId} {
-      allow create: if isSignedIn()
-        && request.resource.data.buyerId == request.auth.uid
-        && request.resource.data.sellerId is string
-        && request.resource.data.listingId is string
-        && request.resource.data.listingTitle is string;
-      allow read: if isAdmin() || (
-        isSignedIn() &&
-        (
-          resource.data.buyerId == request.auth.uid ||
-          resource.data.sellerId == request.auth.uid
+    // --- PRODUCTS (Marketplace Items & Services) ---
+    match /products/{id} {
+      allow get: if resource == null || resource.data.isApproved == true || isOwner(resource.data.sellerId) || isAdmin();
+      allow list: if resource.data.isApproved == true || isOwner(resource.data.sellerId) || isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.isApproved == false
+      );
+      allow update: if isAdmin()
+        || (
+          isOwner(resource.data.sellerId)
+          && request.resource.data.sellerId == resource.data.sellerId
+          && (
+            request.resource.data.isApproved == false
+            || (
+              request.resource.data.isApproved == resource.data.isApproved
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'status', 'isActive'])
+            )
+          )
+        )
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+          && request.resource.data.viewCount is number
+          && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
+        )
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
+          && request.resource.data.contactCount is number
+          && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
+        );
+      allow delete: if isOwner(resource.data.sellerId) || isAdmin();
+    }
+
+    // --- SERVICES (Dedicated Services Collection) ---
+    match /services/{id} {
+      allow get: if resource == null || resource.data.isApproved == true || isOwner(resource.data.providerId) || isAdmin();
+      allow list: if resource.data.isApproved == true || isOwner(resource.data.providerId) || isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.providerId == request.auth.uid
+        && request.resource.data.isApproved == false
+      );
+      allow update: if isAdmin()
+        || (
+          isOwner(resource.data.providerId)
+          && request.resource.data.providerId == resource.data.providerId
+          && (
+            request.resource.data.isApproved == false
+            || (
+              request.resource.data.isApproved == resource.data.isApproved
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'isActive'])
+            )
+          )
+        )
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+          && request.resource.data.viewCount is number
+          && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
+        )
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
+          && request.resource.data.contactCount is number
+          && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
+        );
+      allow delete: if isOwner(resource.data.providerId) || isAdmin();
+    }
+
+    // --- ACCOMMODATIONS ---
+    match /accommodations/{id} {
+      allow get: if resource == null || resource.data.isApproved == true || isOwner(resource.data.ownerId) || isAdmin();
+      allow list: if resource.data.isApproved == true || isOwner(resource.data.ownerId) || isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.isApproved == false
+      );
+      allow update: if isAdmin() || (
+        isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && (
+          request.resource.data.isApproved == false
+          || (
+            request.resource.data.isApproved == resource.data.isApproved
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+          )
         )
       );
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
     }
 
-    // Stores: public read ONLY when approved & active; owner can read/create/update/delete own (cannot set isApproved = true); admin full access.
-    match /stores/{storeId} {
-      allow read: if isAdmin()
-        || (resource.data.isApproved == true && resource.data.isActive == true)
-        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
-
+    // --- ROOMMATE REQUESTS ---
+    match /roommate_requests/{id} {
+      allow get: if resource == null || resource.data.isApproved == true || isOwner(resource.data.userId) || isAdmin();
+      allow list: if resource.data.isApproved == true || isOwner(resource.data.userId) || isAdmin();
       allow create: if isAdmin() || (
-        isSignedIn() &&
-        request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.name is string &&
-        request.resource.data.name.size() > 0 &&
-        request.resource.data.isApproved == false &&
-        request.resource.data.isActive is bool
+        isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.isApproved == false
       );
-
       allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.ownerId == request.auth.uid &&
-        request.resource.data.ownerId == resource.data.ownerId &&
-        request.resource.data.isApproved == false
+        isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && (
+          request.resource.data.isApproved == false
+          || (
+            request.resource.data.isApproved == resource.data.isApproved
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+          )
+        )
       );
-
-      allow delete: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.ownerId == request.auth.uid
-      );
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
-    // Reports: any authenticated user can submit a report; only admins can read, update, or delete reports.
-    match /reports/{reportId} {
-      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+    // --- STORES ---
+    match /stores/{id} {
+      allow get: if resource == null || resource.data.isApproved == true || isOwner(resource.data.ownerId) || isAdmin();
+      allow list: if resource.data.isApproved == true || isOwner(resource.data.ownerId) || isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.isApproved == false
+      );
+      allow update: if isAdmin() || (
+        isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && (
+          request.resource.data.isApproved == false
+          || (
+            request.resource.data.isApproved == resource.data.isApproved
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive'])
+          )
+        )
+      );
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // --- FAVORITES (Top-level collection used by BuyerService) ---
+    match /favorites/{favId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // --- NOTIFICATIONS (Top-level collection used by NotificationService & Navbar) ---
+    match /notifications/{notifId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.get('isRead', false) == false;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // --- ENQUIRIES ---
+    match /enquiries/{id} {
+      allow get: if isSignedIn() && (resource == null || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // --- REPORTS ---
+    match /reports/{id} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.get('status', 'open') == 'open';
       allow read, update, delete: if isAdmin();
     }
 
-    // Notifications: users can read, mark read, and delete their own notifications; any signed-in user can create a notification.
-    match /notifications/{notificationId} {
-      allow get: if isAdmin() || (
-        isSignedIn() &&
-        (resource == null || resource.data.userId == request.auth.uid)
-      );
-      allow list: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid
-      );
-
-      allow create: if isSignedIn()
-        && request.resource.data.userId is string
-        && request.resource.data.userId.size() > 0
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
-        && request.resource.data.message is string
-        && request.resource.data.message.size() > 0
-        && request.resource.data.type in ['listing_approved', 'listing_rejected', 'enquiry_received', 'system']
-        && request.resource.data.isRead == false;
-
-      allow update: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == resource.data.userId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) &&
-        request.resource.data.isRead is bool
-      );
-
-      allow delete: if isAdmin() || (
-        isSignedIn() &&
-        resource.data.userId == request.auth.uid
-      );
+    // --- CATEGORIES ---
+    match /productCategories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Deny all other collections by default.
-    match /{document=**} {
-      allow read, write: if false;
+    // --- PLATFORM SETTINGS ---
+    match /platform_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

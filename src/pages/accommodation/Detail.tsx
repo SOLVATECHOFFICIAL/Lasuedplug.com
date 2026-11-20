@@ -22,6 +22,7 @@ import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductImage } from '../../components/marketplace/ProductImage';
@@ -249,8 +250,9 @@ export function AccommodationDetail() {
                     {ownerInitials}
                   </div>
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-semibold text-slate-900 truncate">
-                      {ownerName}
+                    <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{ownerName}</span>
+                      {ownerVerified && <VerifiedBadge size="sm" />}
                     </p>
                     <p className="text-xs text-slate-500">
                       LASUEDPLUG Host
@@ -283,12 +285,12 @@ export function AccommodationDetail() {
       </div>
 
       {/* Mobile Fixed WhatsApp CTA */}
-      <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-2.5 shadow-sm">
+      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-2.5 shadow-sm">
         <a
           href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors duration-200"
+          className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
         >
           <MessageCircle className="w-5 h-5" />
           <span>Message Landlord/Agent</span>

@@ -411,17 +411,17 @@ export function SellerDashboard() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0 w-full sm:w-auto">
           <Link
             to="/store/create"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-colors shadow-sm whitespace-nowrap"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap"
           >
             <StoreIcon className="w-4 h-4 text-primary-600" aria-hidden="true" />
             <span>Open Store</span>
           </Link>
           <Link
             to="/marketplace/create"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors shadow-sm whitespace-nowrap"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
             <span>Sell New Item</span>
@@ -536,9 +536,10 @@ export function SellerDashboard() {
         />
       ) : listings.length === 0 ? (
         <EmptyState
-          title="No listings posted yet"
-          description="Post an item, campus service, room listing, roommate request, or open a Campus Store on LASUEDPLUG."
-          actionLabel="Post Your First Item"
+          icon={StoreIcon}
+          title="Nothing here yet"
+          description="Be the first to post an item, campus service, room listing, roommate request, or open a Campus Store on LASUEDPLUG."
+          actionLabel="Post a Listing"
           actionTo="/marketplace/create"
         />
       ) : (
@@ -548,7 +549,7 @@ export function SellerDashboard() {
             <div
               role="tablist"
               aria-label="Filter listings by status"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto max-w-full"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto hide-scrollbar max-w-full"
             >
               {TAB_CONFIG.map((tab) => {
                 const isSelected = activeTab === tab.id;
@@ -560,7 +561,7 @@ export function SellerDashboard() {
                     role="tab"
                     aria-selected={isSelected}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 min-h-[38px] ${
+                    className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 flex items-center gap-1.5 min-h-[48px] md:min-h-[38px] ${
                       isSelected
                         ? 'bg-white text-slate-900 shadow-sm font-semibold'
                         : 'text-slate-600 hover:text-slate-900'
@@ -768,7 +769,7 @@ export function SellerDashboard() {
                           {item.editPath && (
                             <Link
                               to={item.editPath}
-                              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[40px] text-xs font-medium rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
+                              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[48px] md:min-h-[40px] text-xs font-medium rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 active:scale-95 whitespace-nowrap"
                             >
                               <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Edit</span>
@@ -781,7 +782,7 @@ export function SellerDashboard() {
                             disabled={isBusy}
                             aria-label={`Delete ${item.title}`}
                             onClick={() => setDeleteTarget(item)}
-                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] min-w-[40px] text-xs font-medium rounded-lg bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[48px] md:min-h-[40px] min-w-[48px] md:min-w-[40px] text-xs font-medium rounded-lg bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-all duration-200 active:scale-95 disabled:opacity-50 whitespace-nowrap"
                           >
                             <Trash2 className="w-4 h-4" aria-hidden="true" />
                             <span className="sm:hidden">Delete</span>

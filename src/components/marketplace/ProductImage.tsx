@@ -37,6 +37,7 @@ export function ProductImage({
     <img
       src={resolvedSrc}
       alt={alt}
+      loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}

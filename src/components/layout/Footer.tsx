@@ -8,17 +8,25 @@ const FOOTER_LINKS = [
   { name: 'Roommates', path: '/roommates' },
 ];
 
+const LEGAL_LINKS = [
+  { name: 'About', path: '/about' },
+  { name: 'Safety Rules', path: '/safety' },
+  { name: 'Terms of Service', path: '/terms' },
+  { name: 'Privacy Policy', path: '/privacy' },
+];
+
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="bg-slate-50 border-t border-slate-200 py-10 pb-24 md:pb-10 text-sm text-slate-600 mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-2.5">
             <img
               src={LOGO_URL}
               alt={SITE_NAME}
+              loading="lazy"
               className="h-8 w-auto object-contain"
             />
             <span className="font-bold text-base text-slate-900 tracking-tight">
@@ -26,17 +34,31 @@ export function Footer() {
             </span>
           </Link>
 
-          <nav aria-label="Footer Navigation" className="flex flex-wrap items-center justify-center gap-6">
-            {FOOTER_LINKS.map((link) => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors duration-200"
-              >
-                {link.name}
-              </Link>
-            ))}
-          </nav>
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-4 sm:gap-8">
+            <nav aria-label="Marketplace Navigation" className="flex flex-wrap items-center justify-center gap-5">
+              {FOOTER_LINKS.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors duration-200"
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </nav>
+
+            <nav aria-label="Legal and Trust Navigation" className="flex flex-wrap items-center justify-center gap-5">
+              {LEGAL_LINKS.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors duration-200"
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </nav>
+          </div>
         </div>
 
         <div className="border-t border-slate-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 text-center md:text-left">

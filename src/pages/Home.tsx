@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShoppingBag,
@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   MapPin,
   ArrowRight,
-  Database,
   X,
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
@@ -27,13 +26,14 @@ import {
 } from '../lib/accommodationHelpers';
 import { getProductPriceDisplay } from '../lib/marketplaceHelpers';
 import { getCategoryName } from '../lib/categories';
-import { seedDatabase } from '../lib/seedData';
 import { formatNaira } from '../lib/utils';
 import { Accommodation, Product, Service } from '../types';
-import { useToast } from '../contexts/ToastContext';
+import { SearchX } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Loading } from '../components/feedback/Loading';
+import { VerifiedBadge } from '../components/ui/VerifiedBadge';
+import { CardSkeletonGrid } from '../components/feedback/Loading';
+import { EmptyState } from '../components/feedback/EmptyState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { ProductImage } from '../components/marketplace/ProductImage';
 
@@ -110,13 +110,6 @@ export function Home() {
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
-  const [seedMessage, setSeedMessage] = useState<string | null>(null);
-
-  const { showToast } = useToast();
-  const autoSeededRef = useRef(false);
-
-  const isSeedMode = searchParams.get('seed') === 'true';
 
   const loadListings = useCallback(async (fetchFullCatalog: boolean) => {
     setLoading(true);
@@ -143,27 +136,9 @@ export function Home() {
     }
   }, []);
 
-  const handleSeed = useCallback(async () => {
-    setSeeding(true);
-    const result = await seedDatabase();
-    setSeedMessage(result.message);
-    showToast(result.message, result.ok ? 'success' : 'error');
-    setSeeding(false);
-    if (result.ok) {
-      await loadListings(Boolean(activeSearch));
-    }
-  }, [loadListings, showToast, activeSearch]);
-
   useEffect(() => {
     void loadListings(Boolean(activeSearch));
   }, [loadListings, activeSearch]);
-
-  useEffect(() => {
-    if (isSeedMode && !autoSeededRef.current) {
-      autoSeededRef.current = true;
-      void handleSeed();
-    }
-  }, [isSeedMode, handleSeed]);
 
   const handleSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -247,28 +222,6 @@ export function Home() {
 
   return (
     <div className="flex flex-col">
-      {isSeedMode && (
-        <div className="bg-slate-900 text-white border-b border-slate-800 px-4 py-3">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-primary-100 shrink-0" />
-              <span>
-                {seedMessage ||
-                  'Seed mode active (?seed=true). Populate sample Firestore data below.'}
-              </span>
-            </div>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={seeding}
-              onClick={() => void handleSeed()}
-            >
-              {seeding ? 'Seeding...' : 'Seed Sample Data'}
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Hero Section */}
       <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 border-b border-slate-200/80">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center space-y-6">
@@ -382,10 +335,10 @@ export function Home() {
       )}
 
       {/* Featured Products Section (Marketplace — Houses Excluded) */}
-      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               {activeSearch ? 'Matching Marketplace Items' : 'Fresh in the Marketplace'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
@@ -394,51 +347,41 @@ export function Home() {
           </div>
           <Link
             to={marketplaceSectionLink}
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0"
+            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
           >
-            View in Marketplace <ArrowRight className="w-4 h-4" />
+            View all <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         {loading ? (
-          <Loading variant="skeleton" message="Loading latest products..." />
+          <CardSkeletonGrid count={4} columns={4} label="Loading latest products..." />
         ) : error ? (
           <ErrorState
             message={error}
             onRetry={() => void loadListings(Boolean(activeSearch))}
           />
         ) : visibleProducts.length === 0 ? (
-          <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
-            <p className="text-sm font-medium text-slate-600">
-              {activeSearch
+          <EmptyState
+            icon={activeSearch ? SearchX : ShoppingBag}
+            title={activeSearch ? 'No matches found' : 'Nothing here yet'}
+            description={
+              activeSearch
                 ? `No marketplace products matched "${activeSearch}".`
-                : 'No products listed yet. Be the first to sell!'}
-            </p>
-            <div>
-              {activeSearch ? (
-                <Link to={marketplaceSectionLink}>
-                  <Button variant="outline" size="sm">
-                    Try Smart AI Search in Marketplace
-                  </Button>
-                </Link>
-              ) : (
-                <Link to="/marketplace/create">
-                  <Button variant="outline" size="sm">
-                    List a Product
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </Card>
+                : 'Be the first to post in this category and reach students across campus.'
+            }
+            actionLabel={activeSearch ? 'Try Smart AI Search' : 'Post a Listing'}
+            actionTo={activeSearch ? marketplaceSectionLink : '/marketplace/create'}
+            className="my-4"
+          />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
             {visibleProducts.map((product) => {
               const priceInfo = getProductPriceDisplay(product);
               return (
                 <Link
                   key={product.id || product.title}
                   to={`/marketplace/${product.id}`}
-                  className="group block h-full"
+                  className="group block h-full transition-all duration-200"
                 >
                   <Card padded={false} className="h-full overflow-hidden flex flex-col">
                     <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
@@ -449,12 +392,25 @@ export function Home() {
                         iconClassName="w-8 h-8 text-slate-400"
                       />
                     </div>
-                    <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {product.title}
-                      </h3>
+                    <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                          {product.title}
+                        </h3>
+                        {(product.sellerSnapshot?.fullName ||
+                          product.sellerSnapshot?.isVerified) && (
+                          <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
+                            <span className="truncate">
+                              {product.sellerSnapshot?.fullName || 'Campus Seller'}
+                            </span>
+                            {product.sellerSnapshot?.isVerified && (
+                              <VerifiedBadge size="xs" />
+                            )}
+                          </p>
+                        )}
+                      </div>
                       <p
-                        className={`text-base tabular-nums ${
+                        className={`text-sm sm:text-base tabular-nums ${
                           priceInfo.isContact
                             ? 'font-semibold text-blue-600'
                             : 'font-bold text-primary-600'
@@ -472,10 +428,10 @@ export function Home() {
       </section>
 
       {/* Featured Services Section */}
-      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               {activeSearch ? 'Matching Campus Services' : 'Top Services Around Campus'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
@@ -484,43 +440,39 @@ export function Home() {
           </div>
           <Link
             to="/services"
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0"
+            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
           >
             View all <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         {loading ? (
-          <Loading variant="skeleton" message="Loading campus services..." />
+          <CardSkeletonGrid count={4} columns={4} label="Loading campus services..." />
         ) : error ? (
           <ErrorState
             message={error}
             onRetry={() => void loadListings(Boolean(activeSearch))}
           />
         ) : visibleServices.length === 0 ? (
-          <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
-            <p className="text-sm font-medium text-slate-600">
-              {activeSearch
+          <EmptyState
+            icon={activeSearch ? SearchX : Wrench}
+            title={activeSearch ? 'No matching services' : 'Nothing here yet'}
+            description={
+              activeSearch
                 ? `No campus services matched "${activeSearch}".`
-                : 'No services listed yet. Offer your skill to the campus community!'}
-            </p>
-            {!activeSearch && (
-              <div>
-                <Link to="/services/create">
-                  <Button variant="outline" size="sm">
-                    Post a Service
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </Card>
+                : 'Be the first to post in this category and offer your skill to the campus community.'
+            }
+            actionLabel={activeSearch ? 'Browse Services' : 'Post a Service'}
+            actionTo={activeSearch ? '/services' : '/marketplace/create?type=service'}
+            className="my-4"
+          />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
             {visibleServices.map((service) => (
               <Link
                 key={service.id || service.title}
                 to={`/services/${service.id}`}
-                className="group block h-full"
+                className="group block h-full transition-all duration-200"
               >
                 <Card padded={false} className="h-full overflow-hidden flex flex-col">
                   <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
@@ -531,10 +483,23 @@ export function Home() {
                       iconClassName="w-8 h-8 text-slate-400"
                     />
                   </div>
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-                    <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                      {service.title}
-                    </h3>
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                        {service.title}
+                      </h3>
+                      {(service.sellerSnapshot?.fullName ||
+                        service.sellerSnapshot?.isVerified) && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
+                          <span className="truncate">
+                            {service.sellerSnapshot?.fullName || 'Service Provider'}
+                          </span>
+                          {service.sellerSnapshot?.isVerified && (
+                            <VerifiedBadge size="xs" />
+                          )}
+                        </p>
+                      )}
+                    </div>
                     <p className="text-sm font-semibold text-accent-600">
                       {service.priceRange || getProductPriceDisplay(service).text}
                     </p>
@@ -547,10 +512,10 @@ export function Home() {
       </section>
 
       {/* Featured Accommodations Section (Houses stay strictly in Accommodation) */}
-      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               {activeSearch
                 ? 'Matching Off-Campus Accommodation'
                 : 'Off-Campus Accommodation'}
@@ -561,43 +526,39 @@ export function Home() {
           </div>
           <Link
             to="/accommodation"
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0"
+            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
           >
             View all <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         {loading ? (
-          <Loading variant="skeleton" message="Loading accommodations..." />
+          <CardSkeletonGrid count={4} columns={4} label="Loading accommodations..." />
         ) : error ? (
           <ErrorState
             message={error}
             onRetry={() => void loadListings(Boolean(activeSearch))}
           />
         ) : visibleAccommodations.length === 0 ? (
-          <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
-            <p className="text-sm font-medium text-slate-600">
-              {activeSearch
+          <EmptyState
+            icon={activeSearch ? SearchX : Building2}
+            title={activeSearch ? 'No matching accommodation' : 'Nothing here yet'}
+            description={
+              activeSearch
                 ? `No lodges or accommodation matched "${activeSearch}".`
-                : 'No accommodation listed yet. List an available lodge or room!'}
-            </p>
-            {!activeSearch && (
-              <div>
-                <Link to="/accommodation/create">
-                  <Button variant="outline" size="sm">
-                    List Accommodation
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </Card>
+                : 'Be the first to post in this category and list an available lodge or room!'
+            }
+            actionLabel={activeSearch ? 'Browse Accommodation' : 'List Accommodation'}
+            actionTo={activeSearch ? '/accommodation' : '/accommodation/create'}
+            className="my-4"
+          />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
             {visibleAccommodations.map((item) => (
               <Link
                 key={item.id || item.title}
                 to={`/accommodation/${item.id}`}
-                className="group block h-full"
+                className="group block h-full transition-all duration-200"
               >
                 <Card padded={false} className="h-full overflow-hidden flex flex-col">
                   <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
@@ -608,7 +569,7 @@ export function Home() {
                       iconClassName="w-8 h-8 text-slate-400"
                     />
                   </div>
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
                     <div className="space-y-1">
                       <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
                         {item.title}
@@ -619,8 +580,19 @@ export function Home() {
                           {getAccommodationPublicLocation(item)}
                         </span>
                       </p>
+                      {(item.ownerSnapshot?.fullName ||
+                        item.ownerSnapshot?.isVerified) && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
+                          <span className="truncate">
+                            {item.ownerSnapshot?.fullName || 'Campus Host'}
+                          </span>
+                          {item.ownerSnapshot?.isVerified && (
+                            <VerifiedBadge size="xs" />
+                          )}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-base font-bold text-primary-600">
+                    <p className="text-sm sm:text-base font-bold text-primary-600">
                       {formatNaira(getAccommodationRent(item))}
                       <span className="text-xs font-normal text-slate-500"> / year</span>
                     </p>

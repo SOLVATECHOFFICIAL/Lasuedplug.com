@@ -5,6 +5,7 @@ import {
   findBestAndRelatedProducts,
   matchProductsBySearchKeywords,
   parseExpandedKeywords,
+  parseSafeJsonResponse,
 } from './aiSearchService';
 import { Product } from '../types';
 
@@ -210,4 +211,35 @@ test('findBestAndRelatedProducts never returns empty when catalog has listings',
   assert.equal(fallback.usedRelatedFallback, true);
   assert.ok(fallback.products.length > 0);
   assert.equal(fallback.products[0].id, 'p2');
+});
+
+test('parseSafeJsonResponse returns null on HTML SPA fallback responses and parses valid JSON cleanly', async () => {
+  const htmlResponse = new Response('<!doctype html><html><body>SPA</body></html>', {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+  assert.equal(await parseSafeJsonResponse(htmlResponse), null);
+
+  const mislabeledHtmlResponse = new Response('<!doctype html><html></html>', {
+    status: 200,
+  });
+  assert.equal(await parseSafeJsonResponse(mislabeledHtmlResponse), null);
+
+  const errorJsonResponse = new Response(JSON.stringify({ error: 'Upstream failure' }), {
+    status: 502,
+    headers: { 'content-type': 'application/json' },
+  });
+  assert.equal(await parseSafeJsonResponse(errorJsonResponse), null);
+
+  const validJsonResponse = new Response(
+    JSON.stringify({ keywords: ['butter', 'bread'], correctedQuery: 'butter' }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    }
+  );
+  assert.deepEqual(await parseSafeJsonResponse(validJsonResponse), {
+    keywords: ['butter', 'bread'],
+    correctedQuery: 'butter',
+  });
 });

@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Plus,
   Search,
+  SearchX,
   ShieldCheck,
   Users,
   X,
@@ -39,7 +40,9 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Loading } from '../../components/feedback/Loading';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { CardSkeletonGrid } from '../../components/feedback/Loading';
+import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
 
@@ -298,10 +301,16 @@ export function Roommates() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-12 space-y-6">
+    <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-5 sm:space-y-6">
       <AccommodationSubNav
         actionSlot={
-          <Button variant="primary" size="sm" onClick={handleOpenCreateModal}>
+          <Button
+            variant="primary"
+            size="sm"
+            fullWidth
+            className="sm:w-auto"
+            onClick={handleOpenCreateModal}
+          >
             <Plus className="w-4 h-4" />
             <span>Post Roommate Request</span>
           </Button>
@@ -309,7 +318,7 @@ export function Roommates() {
       />
 
       {/* Page Heading */}
-      <div className="space-y-1">
+      <div className="space-y-1 min-w-0">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           Roommate Matching
         </h1>
@@ -318,100 +327,100 @@ export function Roommates() {
         </p>
       </div>
 
-      {/* Filter Bar */}
-      <Card hoverable={false} className="p-4 sm:p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label
-              htmlFor="roommate-type-filter"
-              className="block text-xs font-medium text-slate-600"
-            >
-              Request Type
-            </label>
-            <select
-              id="roommate-type-filter"
-              value={typeFilter}
-              onChange={(e) =>
-                setTypeFilter(e.target.value as 'all' | RoommateRequestType)
-              }
-              className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Requests</option>
-              {ROOMMATE_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Sticky Filter Bar */}
+      <section
+        aria-label="Filter roommate requests"
+        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-2 bg-slate-50/95 backdrop-blur-sm"
+      >
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2.5 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+            <div className="space-y-1 min-w-0">
+              <label
+                htmlFor="roommate-type-filter"
+                className="hidden sm:block text-xs font-medium text-slate-600"
+              >
+                Request Type
+              </label>
+              <select
+                id="roommate-type-filter"
+                aria-label="Request Type"
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value as 'all' | RoommateRequestType)
+                }
+                className="block w-full min-w-0 px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+              >
+                <option value="all">All Requests</option>
+                {ROOMMATE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="space-y-1">
-            <label
-              htmlFor="roommate-search"
-              className="block text-xs font-medium text-slate-600"
-            >
-              Location or Preferences
-            </label>
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                id="roommate-search"
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="e.g. Igbogbo, female, quiet..."
-                className="block w-full pl-9 pr-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+            <div className="space-y-1 min-w-0">
+              <label
+                htmlFor="roommate-search"
+                className="hidden sm:block text-xs font-medium text-slate-600"
+              >
+                Location or Preferences
+              </label>
+              <div className="relative min-w-0">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="roommate-search"
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Location or preference (Igbogbo, female, quiet)..."
+                  aria-label="Location or Preferences"
+                  className="block w-full min-w-0 pl-9 pr-3 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </Card>
+      </section>
 
       {/* Requests Grid */}
       {loading ? (
-        <Loading variant="skeleton" message="Loading roommate requests..." />
+        <CardSkeletonGrid
+          count={6}
+          columns={3}
+          label="Loading roommate requests..."
+        />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void loadRequests()} />
       ) : filteredRequests.length === 0 ? (
-        <Card hoverable={false} className="border-dashed text-center py-12 space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">
-            <Users className="w-6 h-6" />
-          </div>
-          <div className="space-y-1 max-w-md mx-auto">
-            <h2 className="text-lg font-semibold text-slate-900">
-              No roommate requests found
-            </h2>
-            <p className="text-sm text-slate-500">
-              {typeFilter !== 'all' || searchQuery.trim()
-                ? 'Try adjusting your search or filter to see more student requests.'
-                : 'Be the first to post a roommate request or available room share.'}
-            </p>
-          </div>
-          <div className="flex justify-center gap-2.5">
-            {typeFilter !== 'all' || searchQuery.trim() ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
+        <EmptyState
+          icon={typeFilter !== 'all' || searchQuery.trim() ? SearchX : Users}
+          title={
+            typeFilter !== 'all' || searchQuery.trim()
+              ? 'No roommate requests found'
+              : 'Nothing here yet'
+          }
+          description={
+            typeFilter !== 'all' || searchQuery.trim()
+              ? 'Try adjusting your search or filter to see more student requests.'
+              : 'Be the first to post a roommate request or available room share.'
+          }
+          actionLabel={
+            typeFilter !== 'all' || searchQuery.trim()
+              ? 'Reset Filters'
+              : 'Post Roommate Request'
+          }
+          onAction={
+            typeFilter !== 'all' || searchQuery.trim()
+              ? () => {
                   setTypeFilter('all');
                   setSearchQuery('');
-                }}
-              >
-                Reset Filters
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleOpenCreateModal}
-              >
-                Post Roommate Request
-              </Button>
-            )}
-          </div>
-        </Card>
+                }
+              : handleOpenCreateModal
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {filteredRequests.map((req) => {
             const typeLabel = getRoommateTypeLabel(req.type);
             const posterName =
@@ -457,6 +466,7 @@ export function Roommates() {
                       <img
                         src={req.images[0]}
                         alt={req.title}
+                        loading="lazy"
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -481,9 +491,10 @@ export function Roommates() {
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500 truncate">
-                      By {posterName}
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
+                      <span className="truncate">By {posterName}</span>
+                      {isVerified && <VerifiedBadge size="xs" />}
                     </p>
                     <p className="text-sm font-bold text-slate-900 tabular-nums">
                       {typeof req.budget === 'number' && req.budget > 0
@@ -552,6 +563,7 @@ export function Roommates() {
                     <img
                       src={imgSrc}
                       alt={`${selectedRequest.title} photo ${idx + 1}`}
+                      loading="lazy"
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -607,9 +619,14 @@ export function Roommates() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">
-                    {selectedRequest.userSnapshot?.fullName ||
-                      'LASUEDPLUG Student'}
+                  <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">
+                      {selectedRequest.userSnapshot?.fullName ||
+                        'LASUEDPLUG Student'}
+                    </span>
+                    {selectedRequest.userSnapshot?.isVerified && (
+                      <VerifiedBadge size="sm" />
+                    )}
                   </p>
                   <p className="text-xs text-slate-500">Posted by student</p>
                 </div>
@@ -630,7 +647,7 @@ export function Roommates() {
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors"
+                className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
               >
                 <MessageCircle className="w-5 h-5" />
                 <span>Message on WhatsApp</span>
@@ -804,6 +821,7 @@ export function Roommates() {
                       <img
                         src={img.previewUrl}
                         alt={`Roommate photo ${idx + 1}`}
+                        loading="lazy"
                         className="w-full h-full object-cover"
                       />
                       <button

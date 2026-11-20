@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle,
   Bell,
   CheckCheck,
   ChevronDown,
@@ -14,7 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import { LOGO_URL, SITE_NAME } from '../../lib/constants';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { getInitials } from '../../lib/authHelpers';
 import {
   countUnreadNotifications,
@@ -25,10 +23,12 @@ import {
   markAsRead,
   subscribeToUserNotifications,
 } from '../../lib/notificationService';
+import { isAuthorizedAdminEmail } from '../../lib/adminHelpers';
 import { AppNotification } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../ui/Button';
+import { OfflineBanner } from './OfflineBanner';
 
 const NAV_LINKS = [
   { name: 'Marketplace', path: '/marketplace' },
@@ -49,7 +49,6 @@ export function Navbar() {
   const navigate = useNavigate();
   const { user, profile, loading, signOut } = useAuth();
   const { showToast } = useToast();
-  const configOk = isFirebaseConfigured();
 
   const displayName = profile?.fullName || user?.displayName || 'Campus User';
   const initials = getInitials(
@@ -156,26 +155,17 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-white">
-      {!configOk && (
-        <div
-          role="status"
-          className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-xs sm:text-sm font-medium text-amber-900 flex items-center justify-center gap-2"
-        >
-          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-          <span>Firebase not configured — check .env.local</span>
-        </div>
-      )}
-
+      <OfflineBanner />
       <div className="border-b border-slate-200 bg-white/95 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center px-4 sm:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-3.5 sm:px-6 h-14 md:h-16 gap-2">
           {/* Left: Logo + Wordmark */}
-          <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
+          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 shrink-0 min-w-0 group transition-all duration-200">
             <img
               src={LOGO_URL}
               alt={SITE_NAME}
-              className="h-10 w-auto object-contain"
+              className="h-8 md:h-10 w-auto object-contain shrink-0"
             />
-            <span className="font-extrabold text-lg text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors duration-200">
+            <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors duration-200 truncate">
               {SITE_NAME}
             </span>
           </Link>
@@ -195,7 +185,7 @@ export function Navbar() {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`text-sm font-medium transition-colors duration-200 py-1 border-b-2 ${
+                  className={`text-sm font-medium transition-all duration-200 py-1 border-b-2 ${
                     isActive
                       ? 'text-blue-600 border-blue-600'
                       : 'text-slate-600 border-transparent hover:text-blue-600'
@@ -331,6 +321,7 @@ export function Navbar() {
                     <img
                       src={profile.avatarUrl}
                       alt={displayName}
+                      loading="lazy"
                       className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : (
@@ -389,7 +380,7 @@ export function Navbar() {
                       <span>My Dashboard</span>
                     </Link>
 
-                    {profile?.roles?.admin === true && (
+                    {isAuthorizedAdminEmail(user?.email) && (
                       <Link
                         to="/admin"
                         role="menuitem"
@@ -437,7 +428,7 @@ export function Navbar() {
           </div>
 
           {/* Mobile Right Controls */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex md:hidden items-center gap-1.5 shrink-0">
             {!loading && user && (
               <>
                 <Link
@@ -447,11 +438,11 @@ export function Navbar() {
                       ? `Notifications (${unreadCount} unread)`
                       : 'Notifications'
                   }
-                  className="relative w-9 h-9 rounded-full border border-slate-200 bg-white text-slate-600 flex items-center justify-center hover:bg-slate-50"
+                  className="relative w-11 h-11 rounded-full border border-slate-200 bg-white text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-all duration-200 active:scale-95"
                 >
                   <Bell className="w-4 h-4" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}
@@ -459,12 +450,13 @@ export function Navbar() {
                 <Link
                   to="/dashboard/profile"
                   aria-label="Go to profile"
-                  className="w-9 h-9 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden"
+                  className="w-10 h-10 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden transition-all duration-200 active:scale-95"
                 >
                   {profile?.avatarUrl ? (
                     <img
                       src={profile.avatarUrl}
                       alt={displayName}
+                      loading="lazy"
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -476,7 +468,7 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors duration-200"
+              className="min-h-[48px] min-w-[48px] -mr-2 flex items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition-all duration-200 active:scale-95"
               aria-label="Open menu"
               aria-expanded={mobileMenuOpen}
             >
@@ -588,7 +580,7 @@ export function Navbar() {
                   <LayoutDashboard className="w-4 h-4" />
                   My Dashboard
                 </Button>
-                {profile?.roles?.admin === true && (
+                {isAuthorizedAdminEmail(user?.email) && (
                   <Button
                     variant="primary"
                     size="lg"

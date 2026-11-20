@@ -388,6 +388,7 @@ export function AccommodationCreate() {
                   <img
                     src={imgUrl}
                     alt={`Room preview ${idx + 1}`}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                   <button

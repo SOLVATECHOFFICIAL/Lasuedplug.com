@@ -9,6 +9,7 @@ import {
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
 import { Card } from '../ui/Card';
+import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
@@ -35,6 +36,8 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
       ? Math.max(0, Math.floor(product.quantity))
       : 1;
   const storeTitle = product.storeName || product.shopName;
+  const sellerName = product.sellerSnapshot?.fullName;
+  const isSellerVerified = Boolean(product.sellerSnapshot?.isVerified);
 
   return (
     <Link
@@ -81,6 +84,12 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
               <p className="text-[11px] font-medium text-slate-500 truncate flex items-center gap-1">
                 <Store className="w-3 h-3 shrink-0 text-slate-400" aria-hidden="true" />
                 <span className="truncate">{storeTitle}</span>
+              </p>
+            )}
+            {(sellerName || isSellerVerified) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+                <span className="truncate">{sellerName || 'Campus Seller'}</span>
+                {isSellerVerified && <VerifiedBadge size="xs" />}
               </p>
             )}
             <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">

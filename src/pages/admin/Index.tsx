@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  BadgeCheck,
   CheckSquare,
   Clock,
   Flag,
@@ -148,7 +149,7 @@ export function AdminIndex() {
           </section>
 
           {/* Quick Actions */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Link
               to="/admin/listings"
               className="group bg-white rounded-xl border border-slate-200 hover:border-primary-300 p-5 flex flex-col justify-between gap-4 transition-all hover:shadow-sm"
@@ -166,6 +167,27 @@ export function AdminIndex() {
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 group-hover:translate-x-0.5 transition-transform">
                 <span>Open Queue ({stats.pendingApprovals})</span>
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </span>
+            </Link>
+
+            <Link
+              to="/admin/verifications"
+              className="group bg-white rounded-xl border border-slate-200 hover:border-primary-300 p-5 flex flex-col justify-between gap-4 transition-all hover:shadow-sm"
+            >
+              <div className="space-y-2">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                  <BadgeCheck className="w-5 h-5" aria-hidden="true" />
+                </div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Student Verifications
+                </h2>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Review uploaded Student ID cards and School Fee receipts to grant the Verified Student badge.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 group-hover:translate-x-0.5 transition-transform">
+                <span>Review Requests</span>
                 <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
               </span>
             </Link>

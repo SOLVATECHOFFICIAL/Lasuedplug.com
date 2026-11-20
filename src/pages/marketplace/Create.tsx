@@ -958,6 +958,7 @@ export function MarketplaceCreate() {
                   <img
                     src={item.previewUrl}
                     alt={`Selected preview ${idx + 1}`}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                   <button

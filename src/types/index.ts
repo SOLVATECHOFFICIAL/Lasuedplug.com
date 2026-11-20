@@ -227,3 +227,15 @@ export interface AppNotification {
   link?: string;
   createdAt: any;
 }
+
+export type VerificationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface VerificationRequest {
+  id?: string;
+  userId: string;
+  fullName: string;
+  idCardImage: string;
+  status: VerificationStatus;
+  createdAt: any;
+  reviewedAt?: any;
+}
