@@ -4,6 +4,7 @@ import {
   SEED_ACCOMMODATIONS,
   SEED_CATEGORIES,
   SEED_PRODUCTS,
+  SEED_ROOMMATE_REQUESTS,
   SEED_SERVICES,
 } from './homeHelpers';
 
@@ -39,13 +40,19 @@ export async function seedDatabase(): Promise<SeedResult> {
 
     SEED_PRODUCTS.forEach((product, index) => {
       const { id, ...data } = product;
-      writes.push(
-        setDoc(doc(firestore, 'products', id), {
-          ...data,
-          // Stagger timestamps by 1 minute per item so Trending (8) and Infinite Scroll (12+3) paginate deterministically
-          createdAt: Timestamp.fromMillis(baseMillis - index * 60_000),
-        })
-      );
+      const cleanProduct: Record<string, unknown> = {
+        ...data,
+        categoryName: data.categoryName || data.categoryId,
+        status: data.status || 'active',
+        isApproved: Boolean(data.isApproved),
+        isActive: Boolean(data.isActive),
+        // Stagger timestamps by 1 minute per item so Trending (8) and Infinite Scroll (12+3) paginate deterministically
+        createdAt: Timestamp.fromMillis(baseMillis - index * 60_000),
+      };
+      if (data.priceType === 'contact') {
+        delete cleanProduct.price;
+      }
+      writes.push(setDoc(doc(firestore, 'products', id), cleanProduct));
     });
 
     SEED_SERVICES.forEach((service, index) => {
@@ -68,11 +75,21 @@ export async function seedDatabase(): Promise<SeedResult> {
       );
     });
 
+    SEED_ROOMMATE_REQUESTS.forEach((request, index) => {
+      const { id, ...data } = request;
+      writes.push(
+        setDoc(doc(firestore, 'roommate_requests', id), {
+          ...data,
+          createdAt: Timestamp.fromMillis(baseMillis - index * 60_000),
+        })
+      );
+    });
+
     await Promise.all(writes);
 
     return {
       ok: true,
-      message: `Database seeded with ${SEED_CATEGORIES.length} categories, ${SEED_PRODUCTS.length} products, ${SEED_SERVICES.length} services, and ${SEED_ACCOMMODATIONS.length} accommodations.`,
+      message: `Database seeded with ${SEED_CATEGORIES.length} categories, ${SEED_PRODUCTS.length} products, ${SEED_SERVICES.length} services, ${SEED_ACCOMMODATIONS.length} accommodations, and ${SEED_ROOMMATE_REQUESTS.length} roommate requests.`,
     };
   } catch (err) {
     const message =

@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -63,6 +64,8 @@ function ensureOptionPresent(
 export function ProfilePage() {
   const { user, profile, isProfileComplete, updateUserProfile } = useAuth();
   const { showToast } = useToast();
+  const location = useLocation();
+  const shownRedirectToastRef = useRef<string | null>(null);
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -74,6 +77,15 @@ export function ProfilePage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const state = location.state as { toastMessage?: string } | null;
+    const msg = state?.toastMessage;
+    if (msg && shownRedirectToastRef.current !== msg) {
+      shownRedirectToastRef.current = msg;
+      showToast(msg, 'info');
+    }
+  }, [location.state, showToast]);
 
   useEffect(() => {
     setFullName(profile?.fullName || user?.displayName || '');

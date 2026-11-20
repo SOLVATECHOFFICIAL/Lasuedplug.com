@@ -4,7 +4,7 @@ export interface MasterCategory {
   subs: readonly string[];
 }
 
-export const MASTER_CATEGORIES: readonly MasterCategory[] = [
+export const PRODUCT_CATEGORIES: readonly MasterCategory[] = [
   {
     id: 'electronics',
     name: 'Electronics & Gadgets',
@@ -49,6 +49,24 @@ export const MASTER_CATEGORIES: readonly MasterCategory[] = [
       'Water Delivery',
     ],
   },
+];
+
+export const SERVICE_CATEGORIES: readonly MasterCategory[] = [
+  {
+    id: 'tech_repairs',
+    name: 'Tech & Repairs',
+    subs: [
+      'Phone Repairs',
+      'Phone Flashing & Unlocking',
+      'Laptop Repairs',
+      'Appliance Repairs',
+    ],
+  },
+  {
+    id: 'beauty',
+    name: 'Beauty & Grooming',
+    subs: ['Hair Styling', 'Barbing', 'Makeup & Gele', 'Nails & Pedicure'],
+  },
   {
     id: 'cyber',
     name: 'Cyber & Printing',
@@ -58,22 +76,6 @@ export const MASTER_CATEGORIES: readonly MasterCategory[] = [
       'Printing & Binding',
       'Project Formatting',
     ],
-  },
-  {
-    id: 'tech_repairs',
-    name: 'Tech & Repairs',
-    subs: [
-      'Phone Repairs',
-      'Phone Flashing & Unlocking',
-      'Laptop Repairs',
-      'Appliance Repairs',
-      'Phone Charging Services',
-    ],
-  },
-  {
-    id: 'beauty',
-    name: 'Beauty & Grooming',
-    subs: ['Hair Styling', 'Barbing', 'Makeup & Gele', 'Nails & Pedicure'],
   },
   {
     id: 'creative',
@@ -96,7 +98,6 @@ export const MASTER_CATEGORIES: readonly MasterCategory[] = [
       'Delivery & Errands',
       'Bike/Keke/Car Hire',
       'VTU (Data/Airtime)',
-      'Borrow/Lend',
     ],
   },
   {
@@ -104,16 +105,22 @@ export const MASTER_CATEGORIES: readonly MasterCategory[] = [
     name: 'Academic & Skills',
     subs: ['Private Tutoring', 'Project Help', 'Skill Acquisition'],
   },
-  {
-    id: 'accommodation',
-    name: 'Accommodation',
-    subs: ['Single Rooms', 'Self-Contain', 'Shared Apartments', 'Roommate Finder'],
-  },
 ];
+
+export const ALL_MARKETPLACE_CATEGORIES: readonly MasterCategory[] = [
+  ...PRODUCT_CATEGORIES,
+  ...SERVICE_CATEGORIES,
+];
+
+export function getCategoriesForAdType(
+  adType: 'item' | 'service'
+): readonly MasterCategory[] {
+  return adType === 'service' ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES;
+}
 
 export function getCategoryById(categoryId?: string): MasterCategory | undefined {
   if (!categoryId) return undefined;
-  return MASTER_CATEGORIES.find((cat) => cat.id === categoryId);
+  return ALL_MARKETPLACE_CATEGORIES.find((cat) => cat.id === categoryId);
 }
 
 export function getCategoryName(categoryId?: string): string {

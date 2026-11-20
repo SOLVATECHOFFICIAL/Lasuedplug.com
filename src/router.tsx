@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AdminRoute } from './components/auth/AdminRoute';
 
 import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
@@ -11,6 +12,7 @@ import { ForgotPasswordPage } from './pages/auth/ForgotPassword';
 import { MarketplaceIndex } from './pages/marketplace/Index';
 import { MarketplaceDetail } from './pages/marketplace/Detail';
 import { MarketplaceCreate } from './pages/marketplace/Create';
+import { MarketplaceEdit } from './pages/marketplace/Edit';
 
 import { ServicesIndex } from './pages/services/Index';
 import { ServicesDetail } from './pages/services/Detail';
@@ -25,6 +27,7 @@ import { SellerDashboard } from './pages/dashboard/Seller';
 import { BuyerDashboard } from './pages/dashboard/Buyer';
 import { ProfilePage } from './pages/dashboard/Profile';
 import { SettingsPage } from './pages/dashboard/Settings';
+import { CreateStore } from './pages/store/CreateStore';
 
 import { MessagesIndex } from './pages/messages/Index';
 import { MessageDetail } from './pages/messages/Detail';
@@ -32,6 +35,7 @@ import { MessageDetail } from './pages/messages/Detail';
 import { NotificationsIndex } from './pages/notifications/Index';
 
 import { AdminIndex } from './pages/admin/Index';
+import { AdminListings } from './pages/admin/Listings';
 import { AdminUsers } from './pages/admin/Users';
 import { AdminReports } from './pages/admin/Reports';
 import { AdminVerifications } from './pages/admin/Verifications';
@@ -56,6 +60,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute requireCompleteProfile>
             <MarketplaceCreate />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketplace/edit/:id"
+        element={
+          <ProtectedRoute requireCompleteProfile>
+            <MarketplaceEdit />
           </ProtectedRoute>
         }
       />
@@ -99,7 +111,7 @@ export function AppRouter() {
       <Route
         path="/dashboard/buyer"
         element={
-          <ProtectedRoute requireCompleteProfile>
+          <ProtectedRoute>
             <BuyerDashboard />
           </ProtectedRoute>
         }
@@ -117,6 +129,24 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Stores (Protected) */}
+      <Route
+        path="/store/create"
+        element={
+          <ProtectedRoute requireCompleteProfile>
+            <CreateStore />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stores/create"
+        element={
+          <ProtectedRoute requireCompleteProfile>
+            <CreateStore />
           </ProtectedRoute>
         }
       />
@@ -149,37 +179,45 @@ export function AppRouter() {
         }
       />
 
-      {/* Admin (Protected) */}
+      {/* Admin (Protected by AdminRoute) */}
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AdminIndex />
-          </ProtectedRoute>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/listings"
+        element={
+          <AdminRoute>
+            <AdminListings />
+          </AdminRoute>
         }
       />
       <Route
         path="/admin/users"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AdminUsers />
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/admin/reports"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AdminReports />
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
       <Route
         path="/admin/verifications"
         element={
-          <ProtectedRoute>
+          <AdminRoute>
             <AdminVerifications />
-          </ProtectedRoute>
+          </AdminRoute>
         }
       />
 

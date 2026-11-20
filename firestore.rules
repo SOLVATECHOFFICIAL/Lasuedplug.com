@@ -8,7 +8,13 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get(['roles', 'admin'], false) == true
+        )
+      );
     }
 
     function isOwner(userId) {
@@ -65,7 +71,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Products: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved); admin full access.
+    // Products: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved or sellerId); admin full access.
     match /products/{productId} {
       allow read: if isAdmin()
         || (resource.data.isApproved == true && resource.data.isActive == true)
@@ -81,7 +87,23 @@ service cloud.firestore {
         isSignedIn() &&
         resource.data.sellerId == request.auth.uid &&
         request.resource.data.sellerId == resource.data.sellerId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+        request.resource.data.isActive is bool &&
+        request.resource.data.status in ['active', 'sold', 'unavailable'] &&
+        (!('quantity' in request.resource.data) || (
+          request.resource.data.quantity is number &&
+          request.resource.data.quantity >= 0
+        )) && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'quantity',
+              'status',
+              'isActive'
+            ]) &&
+            request.resource.data.isApproved == resource.data.isApproved
+          ) || (
+            request.resource.data.isApproved == false
+          )
+        )
       ) || (
         resource.data.isApproved == true &&
         resource.data.isActive == true &&
@@ -113,7 +135,17 @@ service cloud.firestore {
         isSignedIn() &&
         resource.data.providerId == request.auth.uid &&
         request.resource.data.providerId == resource.data.providerId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+        (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status',
+              'isActive'
+            ]) &&
+            request.resource.data.isApproved == resource.data.isApproved
+          ) || (
+            request.resource.data.isApproved == false
+          )
+        )
       ) || (
         resource.data.isApproved == true &&
         resource.data.isActive == true &&
@@ -129,8 +161,125 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isSignedIn() && resource.data.providerId == request.auth.uid);
     }
 
-    // Accommodations: public read when approved & active; owner can read/create/update/delete own (cannot set isApproved); admin full access.
+    // Accommodations: public read when approved; owner can read/create/update/delete own (cannot set isApproved or ownerId); admin full access.
     match /accommodations/{accommodationId} {
+      allow read: if isAdmin()
+        || resource.data.isApproved == true
+        || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.type in ['single_room', 'self_contain', 'shared_apartment', 'short_let'] &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.rentPrice is number &&
+        request.resource.data.rentPrice > 0 &&
+        request.resource.data.generalLocation is string &&
+        request.resource.data.generalLocation.size() > 0 &&
+        request.resource.data.isApproved == false &&
+        request.resource.data.isActive is bool
+      );
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'isActive'
+            ]) &&
+            request.resource.data.isApproved == resource.data.isApproved
+          ) || (
+            request.resource.data.isApproved == false
+          )
+        )
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+    }
+
+    // Roommate Requests: public read when approved; owner can read/create/update/delete own (cannot set isApproved or userId); admin full access.
+    match /roommate_requests/{requestId} {
+      allow read: if isAdmin()
+        || resource.data.isApproved == true
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.type in ['need_roommate', 'room_available'] &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.generalLocation is string &&
+        request.resource.data.generalLocation.size() > 0 &&
+        request.resource.data.preferences is string &&
+        request.resource.data.preferences.size() > 0 &&
+        request.resource.data.isApproved == false &&
+        request.resource.data.isActive is bool
+      );
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'isActive'
+            ]) &&
+            request.resource.data.isApproved == resource.data.isApproved
+          ) || (
+            request.resource.data.isApproved == false
+          )
+        )
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // Favorites: users can read, create, and delete only their own favorite documents.
+    match /favorites/{favoriteId} {
+      allow get: if isAdmin() || (
+        isSignedIn() &&
+        (resource == null || resource.data.userId == request.auth.uid)
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.listingType in ['item', 'product', 'service'];
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // Enquiries: buyers can log enquiries; buyers and sellers involved can read them.
+    match /enquiries/{enquiryId} {
+      allow create: if isSignedIn()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.sellerId is string
+        && request.resource.data.listingId is string
+        && request.resource.data.listingTitle is string;
+      allow read: if isAdmin() || (
+        isSignedIn() &&
+        (
+          resource.data.buyerId == request.auth.uid ||
+          resource.data.sellerId == request.auth.uid
+        )
+      );
+    }
+
+    // Stores: public read ONLY when approved & active; owner can read/create/update/delete own (cannot set isApproved = true); admin full access.
+    match /stores/{storeId} {
       allow read: if isAdmin()
         || (resource.data.isApproved == true && resource.data.isActive == true)
         || (isSignedIn() && resource.data.ownerId == request.auth.uid);
@@ -138,23 +287,64 @@ service cloud.firestore {
       allow create: if isAdmin() || (
         isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.isApproved == false
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.isApproved == false &&
+        request.resource.data.isActive is bool
       );
 
       allow update: if isAdmin() || (
         isSignedIn() &&
         resource.data.ownerId == request.auth.uid &&
         request.resource.data.ownerId == resource.data.ownerId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved'])
+        request.resource.data.isApproved == false
       );
 
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.ownerId == request.auth.uid
+      );
     }
 
     // Reports: any authenticated user can submit a report; only admins can read, update, or delete reports.
     match /reports/{reportId} {
       allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
       allow read, update, delete: if isAdmin();
+    }
+
+    // Notifications: users can read, mark read, and delete their own notifications; any signed-in user can create a notification.
+    match /notifications/{notificationId} {
+      allow get: if isAdmin() || (
+        isSignedIn() &&
+        (resource == null || resource.data.userId == request.auth.uid)
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId is string
+        && request.resource.data.userId.size() > 0
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.type in ['listing_approved', 'listing_rejected', 'enquiry_received', 'system']
+        && request.resource.data.isRead == false;
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) &&
+        request.resource.data.isRead is bool
+      );
+
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid
+      );
     }
 
     // Deny all other collections by default.

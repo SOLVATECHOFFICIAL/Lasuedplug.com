@@ -27,10 +27,18 @@ export interface UserProfile {
 
 export type PriceType = 'fixed' | 'negotiable' | 'contact';
 export type PriceUnit = 'total' | 'per_day' | 'per_hour' | 'per_item';
+export type AdType = 'item' | 'service';
+export type ServiceLocation = 'shop' | 'mobile' | 'online';
 
 export interface Product {
   id?: string;
   sellerId: string;
+  adType: AdType;
+
+  // Store link (Optional)
+  storeId?: string;
+  storeName?: string;
+
   title: string;
   description: string;
   categoryId: string;
@@ -43,23 +51,50 @@ export interface Product {
   price?: number;
   priceUnit?: PriceUnit;
 
-  // Location & Contact Logic
+  // Item specific
+  quantity?: number;
+
+  // Service specific
+  serviceLocation?: ServiceLocation;
+
+  // Location & Contact
   whatsappNumber: string;
   locationName?: string;
+  latitude?: number;
+  longitude?: number;
+
+  // Legacy compatibility fields for existing Firestore documents
+  listingType?: 'product' | 'service';
+  locationType?: 'physical' | 'online';
+  landmark?: string;
   location?: string;
   shopName?: string;
-  googleMapLink?: string;
-  hasDelivery: boolean;
-
-  // Engagement Metrics
-  viewCount: number;
-  contactCount: number;
+  hasDelivery?: boolean;
 
   status: 'active' | 'sold' | 'unavailable';
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
+  viewCount?: number;
+  contactCount?: number;
   sellerSnapshot?: { fullName: string; isVerified: boolean };
+}
+
+export interface Store {
+  id?: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  category: string;
+  logoUrl?: string;
+  whatsappNumber: string;
+  locationName: string;
+  latitude?: number;
+  longitude?: number;
+  isApproved: boolean;
+  isActive: boolean;
+  createdAt: any;
+  ownerSnapshot?: { fullName: string; isVerified: boolean };
 }
 
 export interface Service {
@@ -79,9 +114,11 @@ export interface Service {
 
   // Location & Contact Logic
   whatsappNumber: string;
+  landmark?: string;
+  latitude?: number;
+  longitude?: number;
   locationName?: string;
   shopName?: string;
-  googleMapLink?: string;
   hasDelivery: boolean;
 
   // Engagement Metrics
@@ -95,27 +132,98 @@ export interface Service {
   sellerSnapshot?: { fullName: string; isVerified: boolean };
 }
 
+export type AccommodationType =
+  | 'single_room'
+  | 'self_contain'
+  | 'shared_apartment'
+  | 'short_let';
+
 export interface Accommodation {
   id?: string;
   ownerId: string;
-  type: string;
+  type: AccommodationType | string;
   title: string;
   description: string;
-  price: number;
-  location: string;
+  rentPrice: number;
+  generalLocation: string;
+  exactAddress?: string;
   amenities: string[];
   images: string[];
+  whatsappNumber: string;
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
+  ownerSnapshot?: { fullName: string; isVerified: boolean };
+  // Optional legacy compatibility fields
+  price?: number;
+  location?: string;
+}
+
+export type RoommateRequestType = 'need_roommate' | 'room_available';
+
+export interface RoommateRequest {
+  id?: string;
+  userId: string;
+  type: RoommateRequestType;
+  title: string;
+  description: string;
+  budget?: number;
+  generalLocation: string;
+  preferences: string;
+  images: string[];
+  whatsappNumber: string;
+  isApproved: boolean;
+  isActive: boolean;
+  createdAt: any;
+  userSnapshot?: { fullName: string; isVerified: boolean };
 }
 
 export interface Report {
   id?: string;
   reporterId: string;
   targetId: string;
-  targetType: 'product' | 'service' | 'accommodation' | 'user';
+  targetType:
+    | 'product'
+    | 'service'
+    | 'accommodation'
+    | 'roommate_request'
+    | 'store'
+    | 'user';
   reason: string;
   status: 'open' | 'resolved';
+  createdAt: any;
+}
+
+export interface Favorite {
+  id?: string;
+  userId: string;
+  listingId: string;
+  listingType: 'item' | 'service' | 'product';
+  createdAt: any;
+}
+
+export interface Enquiry {
+  id?: string;
+  buyerId: string;
+  sellerId: string;
+  listingId: string;
+  listingTitle: string;
+  createdAt: any;
+}
+
+export type NotificationType =
+  | 'listing_approved'
+  | 'listing_rejected'
+  | 'enquiry_received'
+  | 'system';
+
+export interface AppNotification {
+  id?: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  isRead: boolean;
+  link?: string;
   createdAt: any;
 }

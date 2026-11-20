@@ -35,7 +35,14 @@ export function ProtectedRoute({
     location.pathname !== '/dashboard/profile'
   ) {
     return (
-      <Navigate to="/dashboard/profile" state={{ from: location }} replace />
+      <Navigate
+        to="/dashboard/profile"
+        state={{
+          from: location,
+          toastMessage: 'Please complete your profile to post a listing.',
+        }}
+        replace
+      />
     );
   }
 

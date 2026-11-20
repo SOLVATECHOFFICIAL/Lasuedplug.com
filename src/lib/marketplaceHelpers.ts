@@ -1,4 +1,4 @@
-import { PriceUnit, Product } from '../types';
+import { AdType, PriceUnit, Product, ServiceLocation } from '../types';
 import { getTimestampMillis } from './homeHelpers';
 import { formatNaira } from './utils';
 
@@ -13,6 +13,30 @@ export interface MarketplaceFilters {
   subcategory?: string;
   searchQuery?: string;
   sortBy?: MarketplaceSortOption;
+}
+
+export function getListingAdType(
+  product: Partial<Pick<Product, 'adType' | 'listingType'>>
+): AdType {
+  if (product.adType === 'service' || product.listingType === 'service') {
+    return 'service';
+  }
+  return 'item';
+}
+
+export function getServiceLocationLabel(
+  serviceLocation?: ServiceLocation
+): string {
+  switch (serviceLocation) {
+    case 'shop':
+      return 'Come to Shop';
+    case 'mobile':
+      return 'We come to you';
+    case 'online':
+      return 'Online / Delivery';
+    default:
+      return 'Come to Shop';
+  }
 }
 
 export function formatNigerianWhatsAppDigits(rawPhone: string): string {
@@ -87,11 +111,12 @@ export interface ProductPriceDisplay {
 }
 
 export function getProductPriceDisplay(
-  product: Pick<Product, 'priceType' | 'price' | 'priceUnit'>
+  product: Partial<Pick<Product, 'adType' | 'listingType' | 'price' | 'priceUnit'>> &
+    Pick<Product, 'priceType'>
 ): ProductPriceDisplay {
   const unitSuffix = getPriceUnitSuffix(product.priceUnit);
 
-  if (product.priceType === 'contact') {
+  if (getListingAdType(product) === 'service' || product.priceType === 'contact') {
     return {
       text: 'Contact for Price',
       unitSuffix,
@@ -130,9 +155,40 @@ export function getProductPriceDisplay(
 }
 
 export function getProductLocationLabel(
-  product: Pick<Product, 'locationName' | 'location'>
+  product: Partial<
+    Pick<
+      Product,
+      | 'adType'
+      | 'listingType'
+      | 'serviceLocation'
+      | 'locationType'
+      | 'landmark'
+      | 'locationName'
+      | 'location'
+    >
+  >
 ): string {
-  return product.locationName?.trim() || product.location?.trim() || 'Online/Delivery';
+  if (product.locationType === 'online' || product.serviceLocation === 'online') {
+    return 'Online / Delivery';
+  }
+
+  const adType = getListingAdType(product);
+  const landmarkText =
+    product.locationName?.trim() ||
+    product.landmark?.trim() ||
+    product.location?.trim() ||
+    '';
+
+  if (adType === 'service' && product.serviceLocation) {
+    if (product.serviceLocation === 'mobile') {
+      return 'We come to you';
+    }
+    if (product.serviceLocation === 'shop') {
+      return landmarkText ? `Come to Shop · ${landmarkText}` : 'Come to Shop';
+    }
+  }
+
+  return landmarkText || 'LASUED Campus';
 }
 
 export function filterProductsByQuery(
@@ -162,7 +218,10 @@ export function applyLocalMarketplaceFiltersAndSort(
   filters: MarketplaceFilters = {}
 ): Product[] {
   let result = products.filter(
-    (item) => item.isApproved === true && item.isActive === true
+    (item) =>
+      item.isApproved === true &&
+      item.isActive === true &&
+      item.categoryId !== 'accommodation'
   );
 
   if (filters.categoryId?.trim()) {

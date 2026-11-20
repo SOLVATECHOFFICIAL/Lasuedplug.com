@@ -1,12 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingBag, Wrench, Building2, User } from 'lucide-react';
+import { Home, ShoppingBag, Wrench, Building2, LayoutDashboard } from 'lucide-react';
 
 const TABS = [
   { name: 'Home', path: '/', icon: Home },
   { name: 'Marketplace', path: '/marketplace', icon: ShoppingBag },
   { name: 'Services', path: '/services', icon: Wrench },
   { name: 'Accommodation', path: '/accommodation', icon: Building2 },
-  { name: 'Profile', path: '/dashboard/profile', icon: User },
+  { name: 'Dashboard', path: '/dashboard/buyer', icon: LayoutDashboard },
 ];
 
 export function MobileNav() {
@@ -22,7 +22,13 @@ export function MobileNav() {
         const isActive =
           tab.path === '/'
             ? location.pathname === '/'
-            : location.pathname.startsWith(tab.path);
+            : tab.path === '/dashboard/buyer'
+              ? location.pathname === '/dashboard/buyer' ||
+                location.pathname === '/dashboard/seller'
+              : tab.path === '/accommodation'
+                ? location.pathname.startsWith('/accommodation') ||
+                  location.pathname.startsWith('/roommates')
+                : location.pathname.startsWith(tab.path);
         return (
           <Link
             key={tab.path}

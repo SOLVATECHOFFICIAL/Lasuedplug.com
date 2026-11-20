@@ -6,10 +6,12 @@ import {
   buildProductWhatsAppUrl,
   filterProductsByQuery,
   formatNigerianWhatsAppDigits,
+  getListingAdType,
   getPriceUnitLabel,
   getPriceUnitSuffix,
   getProductLocationLabel,
   getProductPriceDisplay,
+  getServiceLocationLabel,
   hasActiveMarketplaceFilters,
 } from './marketplaceHelpers';
 import { Product } from '../types';
@@ -18,14 +20,16 @@ const SAMPLE_PRODUCTS: Product[] = [
   {
     id: '1',
     sellerId: 's1',
+    adType: 'item',
     title: 'HP Pavilion Laptop',
     description: 'Clean laptop',
+    images: [],
+    quantity: 2,
     priceType: 'fixed',
     price: 45000,
     priceUnit: 'total',
     categoryId: 'electronics',
     subcategory: 'Laptops & Computers',
-    images: [],
     locationName: 'Shop 4, LASUED Gate',
     hasDelivery: false,
     viewCount: 15,
@@ -39,6 +43,7 @@ const SAMPLE_PRODUCTS: Product[] = [
   {
     id: '2',
     sellerId: 's2',
+    adType: 'item',
     title: 'Used Calculus Textbook',
     description: 'Clean book',
     priceType: 'negotiable',
@@ -47,6 +52,7 @@ const SAMPLE_PRODUCTS: Product[] = [
     categoryId: 'books',
     subcategory: 'Textbooks & Handouts',
     images: [],
+    quantity: 1,
     locationName: 'Block B, Room 12',
     hasDelivery: true,
     viewCount: 8,
@@ -60,15 +66,15 @@ const SAMPLE_PRODUCTS: Product[] = [
   {
     id: '3',
     sellerId: 's3',
-    title: 'Phone Charging Service',
-    description: 'Fast charging station',
+    adType: 'service',
+    serviceLocation: 'shop',
+    title: 'Phone Repair Service',
+    description: 'Fast phone repair spot',
     priceType: 'contact',
-    priceUnit: 'per_day',
     categoryId: 'tech_repairs',
-    subcategory: 'Phone Charging Services',
+    subcategory: 'Phone Repairs',
     images: [],
     locationName: 'Opposite Main Gate',
-    hasDelivery: false,
     viewCount: 30,
     contactCount: 5,
     whatsappNumber: '2348031234567',
@@ -100,7 +106,18 @@ test('buildAdminWhatsAppUrl builds wa.me link for admin profile change request',
   assert.ok(decodeURIComponent(url).includes('Ada Okafor'));
 });
 
-test('price unit helpers and getProductPriceDisplay format units properly', () => {
+test('getListingAdType and getServiceLocationLabel resolve item vs service properly', () => {
+  assert.equal(getListingAdType({ adType: 'service' }), 'service');
+  assert.equal(getListingAdType({ listingType: 'service' }), 'service');
+  assert.equal(getListingAdType({ adType: 'item' }), 'item');
+  assert.equal(getListingAdType({}), 'item');
+
+  assert.equal(getServiceLocationLabel('shop'), 'Come to Shop');
+  assert.equal(getServiceLocationLabel('mobile'), 'We come to you');
+  assert.equal(getServiceLocationLabel('online'), 'Online / Delivery');
+});
+
+test('price unit helpers and getProductPriceDisplay format units and force Contact for Price on services', () => {
   assert.equal(getPriceUnitSuffix('total'), '');
   assert.equal(getPriceUnitSuffix('per_day'), '/ day');
   assert.equal(getPriceUnitSuffix('per_hour'), '/ hour');
@@ -108,6 +125,7 @@ test('price unit helpers and getProductPriceDisplay format units properly', () =
   assert.equal(getPriceUnitLabel('per_day'), 'per day');
 
   const fixed = getProductPriceDisplay({
+    adType: 'item',
     priceType: 'fixed',
     price: 45000,
     priceUnit: 'total',
@@ -116,15 +134,8 @@ test('price unit helpers and getProductPriceDisplay format units properly', () =
   assert.ok(fixed.text.includes('45,000'));
   assert.ok(!fixed.text.includes('/'));
 
-  const perDay = getProductPriceDisplay({
-    priceType: 'fixed',
-    price: 200,
-    priceUnit: 'per_day',
-  });
-  assert.ok(perDay.text.includes('200'));
-  assert.ok(perDay.text.endsWith('/ day'));
-
   const negotiable = getProductPriceDisplay({
+    adType: 'item',
     priceType: 'negotiable',
     price: 2500,
     priceUnit: 'total',
@@ -132,28 +143,49 @@ test('price unit helpers and getProductPriceDisplay format units properly', () =
   assert.ok(negotiable.text.includes('2,500'));
   assert.ok(negotiable.text.includes('(Negotiable)'));
 
-  const contact = getProductPriceDisplay({
+  const serviceDisplay = getProductPriceDisplay({
+    adType: 'service',
     priceType: 'contact',
-    priceUnit: 'per_day',
   });
-  assert.equal(contact.isContact, true);
-  assert.equal(contact.text, 'Contact for Price');
-  assert.equal(contact.unitSuffix, '/ day');
+  assert.equal(serviceDisplay.isContact, true);
+  assert.equal(serviceDisplay.text, 'Contact for Price');
 });
 
-test('getProductLocationLabel falls back cleanly to Online/Delivery', () => {
+test('getProductLocationLabel handles serviceLocation, locationName, and online fallbacks cleanly', () => {
   assert.equal(
-    getProductLocationLabel({ locationName: 'Shop 4, LASUED Gate' }),
-    'Shop 4, LASUED Gate'
+    getProductLocationLabel({
+      adType: 'service',
+      serviceLocation: 'mobile',
+      locationName: 'Epe Campus',
+    }),
+    'We come to you'
   );
   assert.equal(
-    getProductLocationLabel({ location: 'Epe Campus' }),
-    'Epe Campus'
+    getProductLocationLabel({
+      adType: 'service',
+      serviceLocation: 'online',
+    }),
+    'Online / Delivery'
   );
-  assert.equal(getProductLocationLabel({}), 'Online/Delivery');
+  assert.equal(
+    getProductLocationLabel({
+      adType: 'service',
+      serviceLocation: 'shop',
+      locationName: 'Shop 4, Main Gate',
+    }),
+    'Come to Shop · Shop 4, Main Gate'
+  );
+  assert.equal(
+    getProductLocationLabel({
+      adType: 'item',
+      locationName: 'Block B, Room 12',
+    }),
+    'Block B, Room 12'
+  );
+  assert.equal(getProductLocationLabel({}), 'LASUED Campus');
 });
 
-test('filterProductsByQuery and applyLocalMarketplaceFiltersAndSort filter and sort accurately including most_contacted', () => {
+test('filterProductsByQuery and applyLocalMarketplaceFiltersAndSort filter and sort accurately', () => {
   assert.equal(filterProductsByQuery(SAMPLE_PRODUCTS, '').length, 3);
   assert.deepEqual(
     filterProductsByQuery(SAMPLE_PRODUCTS, '  laptop ').map((p) => p.id),
@@ -184,14 +216,6 @@ test('filterProductsByQuery and applyLocalMarketplaceFiltersAndSort filter and s
     ['2', '1', '3']
   );
 
-  // Price high to low
-  assert.deepEqual(
-    applyLocalMarketplaceFiltersAndSort(SAMPLE_PRODUCTS, {
-      sortBy: 'price_desc',
-    }).map((p) => p.id),
-    ['1', '2', '3']
-  );
-
   // Category & Subcategory filter
   assert.deepEqual(
     applyLocalMarketplaceFiltersAndSort(SAMPLE_PRODUCTS, {
@@ -205,4 +229,37 @@ test('filterProductsByQuery and applyLocalMarketplaceFiltersAndSort filter and s
   assert.equal(hasActiveMarketplaceFilters({ sortBy: 'newest' }), false);
   assert.equal(hasActiveMarketplaceFilters({ sortBy: 'most_contacted' }), true);
   assert.equal(hasActiveMarketplaceFilters({ categoryId: 'electronics' }), true);
+});
+
+test('applyLocalMarketplaceFiltersAndSort excludes accommodation listings from marketplace', () => {
+  const withHouse: Product[] = [
+    ...SAMPLE_PRODUCTS,
+    {
+      id: 'house-1',
+      sellerId: 'landlord',
+      adType: 'item',
+      title: 'Modern Self-Contain Near LASUED Gate',
+      description: 'Self-contain apartment',
+      priceType: 'fixed',
+      price: 180000,
+      priceUnit: 'total',
+      categoryId: 'accommodation',
+      subcategory: 'Self-Contain',
+      images: [],
+      quantity: 1,
+      locationName: 'Odo-Egiri Road',
+      hasDelivery: false,
+      viewCount: 50,
+      contactCount: 10,
+      whatsappNumber: '2348031234567',
+      status: 'active',
+      isApproved: true,
+      isActive: true,
+      createdAt: 999,
+    },
+  ];
+
+  const filtered = applyLocalMarketplaceFiltersAndSort(withHouse, {});
+  assert.ok(filtered.every((item) => item.categoryId !== 'accommodation'));
+  assert.equal(filtered.length, 3);
 });

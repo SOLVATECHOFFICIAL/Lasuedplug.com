@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import {
+  Camera,
   ChevronRight,
   Info,
   Loader2,
@@ -9,7 +10,6 @@ import {
   Plus,
   Search,
   SearchX,
-  SlidersHorizontal,
   Sparkles,
   TrendingUp,
   X,
@@ -24,43 +24,79 @@ import {
   buildCatalogSummaryForAi,
   expandSearchQuery,
   findBestAndRelatedProducts,
+  searchByImage,
 } from '../../lib/aiSearchService';
 import {
-  getSubcategoriesForCategory,
-  MASTER_CATEGORIES,
-} from '../../lib/categories';
+  compressImageToBase64,
+  dataUrlToInlinePart,
+} from '../../lib/imageUtils';
+import { PRODUCT_CATEGORIES } from '../../lib/categories';
+import { getTimestampMillis } from '../../lib/homeHelpers';
 import {
   hasActiveMarketplaceFilters,
-  MarketplaceFilters,
   MarketplaceSortOption,
 } from '../../lib/marketplaceHelpers';
 import { Product } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
 
-const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest First' },
+const SEARCH_SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest to Oldest' },
   { value: 'price_asc', label: 'Price: Low to High' },
-  { value: 'price_desc', label: 'Price: High to Low' },
-  { value: 'most_contacted', label: 'Most Contacted' },
 ] as const;
+
+type SearchSortValue = (typeof SEARCH_SORT_OPTIONS)[number]['value'];
+
+interface SearchPhotoState {
+  previewUrl: string;
+  mimeType: string;
+  data: string;
+  name: string;
+}
+
+function sortSearchResults(
+  items: Product[],
+  sortBy: SearchSortValue
+): Product[] {
+  const sorted = [...items];
+  if (sortBy === 'price_asc') {
+    sorted.sort((a, b) => {
+      const aHasPrice = typeof a.price === 'number' && Number.isFinite(a.price);
+      const bHasPrice = typeof b.price === 'number' && Number.isFinite(b.price);
+      if (aHasPrice && bHasPrice) return (a.price as number) - (b.price as number);
+      if (aHasPrice) return -1;
+      if (bHasPrice) return 1;
+      return getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt);
+    });
+  } else {
+    sorted.sort(
+      (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+    );
+  }
+  return sorted;
+}
 
 export function MarketplaceIndex() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
-  const initialCategory = searchParams.get('category') || '';
-  const initialSub = searchParams.get('sub') || '';
-  const initialSort =
-    (searchParams.get('sort') as MarketplaceSortOption) || 'newest';
+  const initialCategoryParam = searchParams.get('category') || '';
+  const initialCategory = PRODUCT_CATEGORIES.some(
+    (c) => c.id === initialCategoryParam
+  )
+    ? initialCategoryParam
+    : '';
+  const initialSortParam = searchParams.get('sort');
+  const initialSort: SearchSortValue =
+    initialSortParam === 'price_asc' ? 'price_asc' : 'newest';
 
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [rawSearchProducts, setRawSearchProducts] = useState<Product[]>([]);
+  const [browseProducts, setBrowseProducts] = useState<Product[]>([]);
   const [lastVisibleDoc, setLastVisibleDoc] =
     useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -68,33 +104,28 @@ export function MarketplaceIndex() {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [debouncedSearch, setDebouncedSearch] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [selectedSubcategory, setSelectedSubcategory] = useState(initialSub);
-  const [sortBy, setSortBy] = useState<MarketplaceSortOption>(
-    initialSort === 'price_asc' ||
-      initialSort === 'price_desc' ||
-      initialSort === 'most_contacted'
-      ? initialSort
-      : 'newest'
-  );
+  const [searchPhoto, setSearchPhoto] = useState<SearchPhotoState | null>(null);
+  const [sortBy, setSortBy] = useState<SearchSortValue>(initialSort);
 
   const [aiKeywords, setAiKeywords] = useState<string[]>([]);
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
   const [aiCorrectedQuery, setAiCorrectedQuery] = useState<string | null>(null);
   const [usedRelatedFallback, setUsedRelatedFallback] = useState(false);
-  const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [aiSearching, setAiSearching] = useState(false);
 
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const requestIdRef = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
 
-  const isTypingSearch = searchQuery.trim().length > 0;
-  const isSearchActive = debouncedSearch.trim().length > 0;
+  const isTypingSearch =
+    searchQuery.trim().length > 0 || Boolean(searchPhoto);
+  const isSearchActive =
+    debouncedSearch.trim().length > 0 || Boolean(searchPhoto);
 
   // Debounce search input so AI search waits briefly after user pauses typing
   useEffect(() => {
@@ -104,71 +135,33 @@ export function MarketplaceIndex() {
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  // Close mobile filter drawer automatically when searching starts
-  useEffect(() => {
-    if (isTypingSearch && mobileFilterOpen) {
-      setMobileFilterOpen(false);
-    }
-  }, [isTypingSearch, mobileFilterOpen]);
-
   // Sync URL params cleanly
   useEffect(() => {
     const nextParams: Record<string, string> = {};
-    if (debouncedSearch.trim()) nextParams.q = debouncedSearch.trim();
-    if (!debouncedSearch.trim()) {
-      if (selectedCategory) nextParams.category = selectedCategory;
-      if (selectedSubcategory) nextParams.sub = selectedSubcategory;
+    if (selectedCategory) {
+      nextParams.category = selectedCategory;
+    }
+    if (debouncedSearch.trim()) {
+      nextParams.q = debouncedSearch.trim();
       if (sortBy !== 'newest') nextParams.sort = sortBy;
+    } else if (searchPhoto && sortBy !== 'newest') {
+      nextParams.sort = sortBy;
     }
     setSearchParams(nextParams, { replace: true });
-  }, [
-    debouncedSearch,
-    selectedCategory,
-    selectedSubcategory,
-    sortBy,
-    setSearchParams,
-  ]);
-
-  const activeFilters: MarketplaceFilters = useMemo(
-    () => ({
-      categoryId: selectedCategory || undefined,
-      subcategory: selectedSubcategory || undefined,
-      searchQuery: debouncedSearch || undefined,
-      sortBy,
-    }),
-    [selectedCategory, selectedSubcategory, debouncedSearch, sortBy]
-  );
+  }, [debouncedSearch, searchPhoto, selectedCategory, sortBy, setSearchParams]);
 
   const filtersActive = useMemo(
     () =>
+      Boolean(searchPhoto) ||
       hasActiveMarketplaceFilters({
         categoryId: selectedCategory,
-        subcategory: selectedSubcategory,
         searchQuery,
-        sortBy,
+        sortBy: sortBy as MarketplaceSortOption,
       }),
-    [selectedCategory, selectedSubcategory, searchQuery, sortBy]
+    [searchPhoto, selectedCategory, searchQuery, sortBy]
   );
 
-  const activeFilterBadgeCount = useMemo(() => {
-    let count = 0;
-    if (selectedCategory) count += 1;
-    if (selectedSubcategory) count += 1;
-    if (sortBy !== 'newest') count += 1;
-    return count;
-  }, [selectedCategory, selectedSubcategory, sortBy]);
-
-  const categoryOptions = useMemo(
-    () => MASTER_CATEGORIES.map((c) => ({ value: c.id, label: c.name })),
-    []
-  );
-
-  const subcategoryOptions = useMemo(
-    () => getSubcategoriesForCategory(selectedCategory),
-    [selectedCategory]
-  );
-
-  // Fetch Trending Carousel (Top 8 sorted by viewCount) once on mount
+  // Fetch Trending Carousel (Top 8 sorted by viewCount, excluding houses) once on mount
   useEffect(() => {
     let cancelled = false;
     async function loadTrending() {
@@ -176,7 +169,9 @@ export function MarketplaceIndex() {
       try {
         const rows = await fetchTrendingProducts(8);
         if (!cancelled) {
-          setTrendingProducts(rows);
+          setTrendingProducts(
+            rows.filter((item) => item.categoryId !== 'accommodation')
+          );
         }
       } catch {
         if (!cancelled) {
@@ -194,7 +189,7 @@ export function MarketplaceIndex() {
     };
   }, []);
 
-  // Load main grid: AI Search mode when query is non-empty, otherwise paginated browse mode
+  // Load main grid: AI Search mode when searching, otherwise paginated browse mode (with PRODUCT_CATEGORIES filter)
   const loadInitialProducts = useCallback(async () => {
     const reqId = ++requestIdRef.current;
     setLoading(true);
@@ -209,7 +204,7 @@ export function MarketplaceIndex() {
       searchAbortRef.current = null;
     }
 
-    if (trimmedQuery) {
+    if (trimmedQuery || searchPhoto) {
       const controller = new AbortController();
       searchAbortRef.current = controller;
 
@@ -218,43 +213,55 @@ export function MarketplaceIndex() {
       setAiAnswer(null);
       setAiCorrectedQuery(null);
       setUsedRelatedFallback(false);
-      setAiNotice(null);
 
       try {
-        const allProducts = await fetchAllApprovedActiveProducts();
+        const allProducts = (await fetchAllApprovedActiveProducts()).filter(
+          (item) => item.categoryId !== 'accommodation'
+        );
         if (reqId !== requestIdRef.current) return;
 
-        // Phase 1: Instant client-side typo-tolerant, compound-word & related results (<50ms)
-        const instantResult = findBestAndRelatedProducts(allProducts, trimmedQuery);
-        setProducts(instantResult.products);
-        setUsedRelatedFallback(instantResult.usedRelatedFallback);
-        setHasMore(false);
-        setLastVisibleDoc(null);
-        setLoading(false);
+        // Phase 1: Instant client-side typo-tolerant & compound-word results
+        if (trimmedQuery) {
+          const instantResult = findBestAndRelatedProducts(allProducts, trimmedQuery);
+          setRawSearchProducts(instantResult.products);
+          setUsedRelatedFallback(instantResult.usedRelatedFallback);
+          setLoading(false);
+        } else {
+          setRawSearchProducts(allProducts);
+          setLoading(false);
+        }
 
-        // Phase 2: Full-catalog Gemini AI scan for deeper semantic intent, typo interpretation, and answer
+        // Phase 2: Real Gemini AI scan (Visual Vision scan if photo attached, or text semantic scan)
         const catalogSummary = buildCatalogSummaryForAi(allProducts);
-        const aiResult = await expandSearchQuery(
-          trimmedQuery,
-          catalogSummary,
-          controller.signal
-        );
+        const aiResult = searchPhoto
+          ? await searchByImage(
+              { mimeType: searchPhoto.mimeType, data: searchPhoto.data },
+              catalogSummary,
+              trimmedQuery,
+              controller.signal
+            )
+          : await expandSearchQuery(
+              trimmedQuery,
+              catalogSummary,
+              controller.signal
+            );
+
         if (reqId !== requestIdRef.current) return;
 
         setAiKeywords(aiResult.keywords);
         setAiAnswer(aiResult.answer || null);
         setAiCorrectedQuery(aiResult.correctedQuery || null);
-        if (aiResult.error) {
-          setAiNotice(aiResult.error);
-        }
+
+        const effectiveQuery =
+          trimmedQuery || aiResult.correctedQuery || aiResult.keywords.join(' ');
 
         const smartResult = findBestAndRelatedProducts(
           allProducts,
-          trimmedQuery,
+          effectiveQuery,
           aiResult
         );
 
-        setProducts(smartResult.products);
+        setRawSearchProducts(smartResult.products);
         setUsedRelatedFallback(smartResult.usedRelatedFallback);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
@@ -280,20 +287,17 @@ export function MarketplaceIndex() {
     setAiAnswer(null);
     setAiCorrectedQuery(null);
     setUsedRelatedFallback(false);
-    setAiNotice(null);
+    setRawSearchProducts([]);
 
     try {
-      const result = await fetchMarketplaceProducts(
-        MARKETPLACE_PAGE_SIZE,
-        null,
-        {
-          categoryId: activeFilters.categoryId,
-          subcategory: activeFilters.subcategory,
-          sortBy: activeFilters.sortBy,
-        }
-      );
+      const result = await fetchMarketplaceProducts(MARKETPLACE_PAGE_SIZE, null, {
+        categoryId: selectedCategory || undefined,
+        sortBy: 'newest',
+      });
       if (reqId !== requestIdRef.current) return;
-      setProducts(result.products);
+      setBrowseProducts(
+        result.products.filter((item) => item.categoryId !== 'accommodation')
+      );
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
     } catch (err) {
@@ -308,16 +312,22 @@ export function MarketplaceIndex() {
         setLoading(false);
       }
     }
-  }, [
-    debouncedSearch,
-    activeFilters.categoryId,
-    activeFilters.subcategory,
-    activeFilters.sortBy,
-  ]);
+  }, [debouncedSearch, searchPhoto, selectedCategory]);
 
   useEffect(() => {
     void loadInitialProducts();
   }, [loadInitialProducts]);
+
+  // Apply category filter (if chosen) & search sort filter
+  const products = useMemo(() => {
+    if (!isSearchActive) {
+      return browseProducts;
+    }
+    const categoryFiltered = selectedCategory
+      ? rawSearchProducts.filter((item) => item.categoryId === selectedCategory)
+      : rawSearchProducts;
+    return sortSearchResults(categoryFiltered, sortBy);
+  }, [isSearchActive, browseProducts, rawSearchProducts, selectedCategory, sortBy]);
 
   // Load next 12 items for infinite scroll (browse mode)
   const loadMoreProducts = useCallback(async () => {
@@ -333,16 +343,19 @@ export function MarketplaceIndex() {
         MARKETPLACE_PAGE_SIZE,
         lastVisibleDoc,
         {
-          categoryId: activeFilters.categoryId,
-          subcategory: activeFilters.subcategory,
-          sortBy: activeFilters.sortBy,
+          categoryId: selectedCategory || undefined,
+          sortBy: 'newest',
         }
       );
       if (reqId !== requestIdRef.current) return;
 
-      setProducts((prev) => {
+      const cleanNext = result.products.filter(
+        (item) => item.categoryId !== 'accommodation'
+      );
+
+      setBrowseProducts((prev) => {
         const seen = new Set(prev.map((item) => item.id));
-        const uniqueNext = result.products.filter((item) => !seen.has(item.id));
+        const uniqueNext = cleanNext.filter((item) => !seen.has(item.id));
         return [...prev, ...uniqueNext];
       });
       setLastVisibleDoc(result.lastVisibleDoc);
@@ -359,16 +372,7 @@ export function MarketplaceIndex() {
         setLoadingMore(false);
       }
     }
-  }, [
-    isSearchActive,
-    loading,
-    loadingMore,
-    hasMore,
-    lastVisibleDoc,
-    activeFilters.categoryId,
-    activeFilters.subcategory,
-    activeFilters.sortBy,
-  ]);
+  }, [isSearchActive, loading, loadingMore, hasMore, lastVisibleDoc, selectedCategory]);
 
   // IntersectionObserver for automatic infinite scroll
   useEffect(() => {
@@ -390,23 +394,35 @@ export function MarketplaceIndex() {
     return () => observer.disconnect();
   }, [isSearchActive, hasMore, loading, loadingMore, loadMoreProducts]);
 
-  const handleCategoryChange = (nextCategory: string) => {
-    setSelectedCategory(nextCategory);
-    setSelectedSubcategory('');
+  const handlePhotoSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    try {
+      const dataUrl = await compressImageToBase64(file);
+      const inline = dataUrlToInlinePart(dataUrl);
+      setSearchPhoto({
+        previewUrl: dataUrl,
+        mimeType: inline.mimeType,
+        data: inline.data,
+        name: file.name,
+      });
+    } catch (err) {
+      console.error('Photo compression error:', err);
+    }
   };
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setDebouncedSearch('');
+    setSelectedCategory('');
+    setSearchPhoto(null);
     setAiKeywords([]);
     setAiAnswer(null);
     setAiCorrectedQuery(null);
     setUsedRelatedFallback(false);
-    setAiNotice(null);
-    setSelectedCategory('');
-    setSelectedSubcategory('');
     setSortBy('newest');
-    setMobileFilterOpen(false);
   };
 
   return (
@@ -467,16 +483,12 @@ export function MarketplaceIndex() {
         </section>
       )}
 
-      {/* Search & Filter Bar */}
-      <section aria-label="Search and filter marketplace" className="space-y-3">
+      {/* Search Bar & PRODUCT_CATEGORIES Filter */}
+      <section aria-label="Search marketplace" className="space-y-3">
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-3 sm:p-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            {/* Magic Search Input */}
-            <div
-              className={`${
-                isTypingSearch ? 'md:col-span-12' : 'md:col-span-5'
-              } space-y-1.5 transition-all`}
-            >
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            {/* Search Input + Visual Photo Scan Button */}
+            <div className="flex-1 space-y-1.5">
               <label
                 htmlFor="marketplace-search"
                 className="block text-sm font-medium text-slate-700"
@@ -492,106 +504,118 @@ export function MarketplaceIndex() {
                     role="searchbox"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Ask anything or search (e.g. 'eat bread', 'niky snikers', 'boil water in hostel')..."
+                    placeholder="Ask AI, type keywords, or scan a photo (e.g. 'eat bread', 'niky snikers')..."
                     aria-label="Search marketplace products"
-                    className="w-full pl-9 pr-9 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full pl-9 pr-20 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
-                  {searchQuery && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {(searchQuery || searchPhoto || selectedCategory) && (
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        aria-label="Clear search and filters"
+                        className="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setDebouncedSearch('');
-                        setAiKeywords([]);
-                        setAiAnswer(null);
-                        setAiCorrectedQuery(null);
-                        setUsedRelatedFallback(false);
-                        setAiNotice(null);
-                      }}
-                      aria-label="Clear search"
-                      className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 absolute right-2 top-1/2 -translate-y-1/2"
+                      onClick={() => photoInputRef.current?.click()}
+                      aria-label="Search by photo"
+                      title="Scan a picture to search"
+                      className="p-1.5 rounded-md text-primary-600 hover:bg-primary-50 transition-colors"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <Camera className="w-4 h-4" />
                     </button>
-                  )}
+                  </div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => void handlePhotoSelected(e)}
+                    className="hidden"
+                    aria-hidden="true"
+                  />
                 </div>
-
-                {/* Mobile Filter Trigger (hidden while searching) */}
-                {!isTypingSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setMobileFilterOpen(true)}
-                    aria-label="Open marketplace filters"
-                    className="md:hidden inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium shadow-sm shrink-0 whitespace-nowrap"
-                  >
-                    <SlidersHorizontal className="w-4 h-4 text-slate-500" />
-                    <span>Filters</span>
-                    {activeFilterBadgeCount > 0 && (
-                      <span className="ml-0.5 px-1.5 py-0.5 text-[11px] font-bold rounded-full bg-primary-500 text-white tabular-nums">
-                        {activeFilterBadgeCount}
-                      </span>
-                    )}
-                  </button>
-                )}
               </div>
             </div>
 
-            {/* Category, Subcategory & Sort Dropdowns (Hidden while typing a search query) */}
-            {!isTypingSearch && (
-              <>
-                <div className="hidden md:block md:col-span-3">
-                  <Select
-                    label="Category"
-                    aria-label="Category"
-                    placeholder="All Categories"
-                    options={categoryOptions}
-                    value={selectedCategory}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                  />
-                </div>
+            {/* Category Filter (Strictly PRODUCT_CATEGORIES only) */}
+            <div className="w-full md:w-60 space-y-1.5 shrink-0">
+              <label
+                htmlFor="marketplace-category-filter"
+                className="block text-sm font-medium text-slate-700"
+              >
+                Product Category
+              </label>
+              <select
+                id="marketplace-category-filter"
+                aria-label="Filter by product category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
+              >
+                <option value="">All Product Categories</option>
+                {PRODUCT_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <div className="hidden md:block md:col-span-2">
-                  <Select
-                    label="Subcategory"
-                    aria-label="Subcategory"
-                    placeholder={
-                      selectedCategory ? 'All Subcategories' : 'Select category'
-                    }
-                    options={subcategoryOptions}
-                    value={selectedSubcategory}
-                    disabled={!selectedCategory}
-                    onChange={(e) => setSelectedSubcategory(e.target.value)}
-                  />
-                </div>
-
-                <div className="hidden md:block md:col-span-2">
-                  <div className="w-full space-y-1.5">
-                    <label
-                      htmlFor="marketplace-sort-desktop"
-                      className="block text-sm font-medium text-slate-700"
-                    >
-                      Sort By
-                    </label>
-                    <select
-                      id="marketplace-sort-desktop"
-                      aria-label="Sort By"
-                      value={sortBy}
-                      onChange={(e) =>
-                        setSortBy(e.target.value as MarketplaceSortOption)
-                      }
-                      className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
-                    >
-                      {SORT_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </>
+            {/* Sort Results (Search mode) */}
+            {isTypingSearch && (
+              <div className="w-full md:w-48 space-y-1.5 shrink-0">
+                <label
+                  htmlFor="marketplace-search-sort"
+                  className="block text-sm font-medium text-slate-700"
+                >
+                  Sort Results
+                </label>
+                <select
+                  id="marketplace-search-sort"
+                  aria-label="Sort search results"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SearchSortValue)}
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
+                >
+                  {SEARCH_SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
+
+          {/* Selected Search Photo Chip */}
+          {searchPhoto && (
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={searchPhoto.previewUrl}
+                  alt="Search photo preview"
+                  className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">
+                    Visual AI Photo Search
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{searchPhoto.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearchPhoto(null)}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-200/70"
+              >
+                Remove
+              </button>
+            </div>
+          )}
 
           {/* AI Search Status & Expanded Terms */}
           {isTypingSearch && aiSearching && (
@@ -600,7 +624,11 @@ export function MarketplaceIndex() {
               className="flex items-center gap-2 text-sm font-medium text-primary-600 pt-1"
             >
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              <span>AI is finding the best matches...</span>
+              <span>
+                {searchPhoto
+                  ? 'AI is scanning your photo and finding matches...'
+                  : 'AI is finding the best matches...'}
+              </span>
             </div>
           )}
 
@@ -617,7 +645,7 @@ export function MarketplaceIndex() {
                   aiCorrectedQuery.toLowerCase() !== debouncedSearch.trim().toLowerCase() && (
                     <span>
                       <strong className="font-semibold text-slate-700">
-                        Interpreted as:
+                        {searchPhoto ? 'Detected in photo:' : 'Interpreted as:'}
                       </strong>{' '}
                       {aiCorrectedQuery}
                     </span>
@@ -635,118 +663,20 @@ export function MarketplaceIndex() {
             </div>
           )}
 
-          {isSearchActive && !aiSearching && usedRelatedFallback && !aiNotice && (
+          {isSearchActive && !aiSearching && usedRelatedFallback && (
             <div
               role="status"
               className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700"
             >
               <Info className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
               <span>
-                Showing closest related campus listings for &ldquo;{debouncedSearch.trim()}&rdquo;.
+                Showing closest related campus listings
+                {debouncedSearch.trim() ? ` for "${debouncedSearch.trim()}"` : ''}.
               </span>
-            </div>
-          )}
-
-          {isSearchActive && !aiSearching && aiNotice && (
-            <div
-              role="status"
-              className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900"
-            >
-              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>{aiNotice}</span>
             </div>
           )}
         </div>
       </section>
-
-      {/* Mobile Filter Drawer Modal (Only available when NOT searching) */}
-      {mobileFilterOpen && !isTypingSearch && (
-        <div
-          className="md:hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Marketplace filters"
-        >
-          <div className="w-full bg-white rounded-t-2xl p-5 space-y-5 shadow-xl max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-base font-bold text-slate-900">
-                Filter & Sort
-              </h2>
-              <button
-                type="button"
-                onClick={() => setMobileFilterOpen(false)}
-                aria-label="Close filters"
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <Select
-                label="Category"
-                placeholder="All Categories"
-                options={categoryOptions}
-                value={selectedCategory}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-              />
-
-              <Select
-                label="Subcategory"
-                placeholder={
-                  selectedCategory ? 'All Subcategories' : 'Select category first'
-                }
-                options={subcategoryOptions}
-                value={selectedSubcategory}
-                disabled={!selectedCategory}
-                onChange={(e) => setSelectedSubcategory(e.target.value)}
-              />
-
-              <div className="w-full space-y-1.5">
-                <label
-                  htmlFor="marketplace-sort-mobile"
-                  className="block text-sm font-medium text-slate-700"
-                >
-                  Sort By
-                </label>
-                <select
-                  id="marketplace-sort-mobile"
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(e.target.value as MarketplaceSortOption)
-                  }
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500"
-                >
-                  {SORT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <Button
-                variant="outline"
-                size="md"
-                fullWidth
-                onClick={handleClearFilters}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                fullWidth
-                onClick={() => setMobileFilterOpen(false)}
-              >
-                Show Results
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content Grid */}
       {loading ? (
@@ -775,8 +705,8 @@ export function MarketplaceIndex() {
                   No results found
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Try adjusting your search or filters to find what you&apos;re
-                  looking for.
+                  Try adjusting your search, category filter, or photo to find
+                  what you&apos;re looking for.
                 </p>
               </div>
               <div>
@@ -785,7 +715,7 @@ export function MarketplaceIndex() {
                   size="sm"
                   onClick={handleClearFilters}
                 >
-                  Clear Filters
+                  Reset Filters
                 </Button>
               </div>
             </>

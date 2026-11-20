@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Product } from '../types';
 import { getCategoryName } from './categories';
 import { getTimestampMillis } from './homeHelpers';
@@ -18,7 +19,10 @@ export interface ExpandSearchResult {
   relatedIds?: string[];
   correctedQuery?: string;
   answer?: string;
-  error?: string;
+}
+
+export interface VisualSearchResult extends ExpandSearchResult {
+  detectedItem?: string;
 }
 
 export interface SmartSearchMatchResult {
@@ -72,17 +76,29 @@ const STOPWORDS = new Set([
   'all',
 ]);
 
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const clientSearchCache = new Map<
+  string,
+  { expiresAt: number; payload: ExpandSearchResult }
+>();
+
+function getGeminiApiKey(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+  }
+  return '';
+}
+
 export function extractImageHint(images: string[] | undefined): string {
   if (!Array.isArray(images) || images.length === 0) return '';
   const words = new Set<string>();
   for (const url of images) {
-    if (typeof url !== 'string' || !url.trim()) continue;
+    if (typeof url !== 'string' || !url.trim() || url.startsWith('data:')) continue;
     const cleanPath = url.split('?')[0].split('#')[0];
     const fileName = cleanPath.split('/').pop() || '';
     const baseName = fileName.replace(/\.[a-z0-9]{2,5}$/i, '');
     for (const part of baseName.split(/[-_\s]+/)) {
       const normalized = part.toLowerCase().trim();
-      // Skip short fragments or hex/hash chunks
       if (
         normalized.length >= 3 &&
         !/^[0-9]+$/.test(normalized) &&
@@ -97,7 +113,13 @@ export function extractImageHint(images: string[] | undefined): string {
 
 export function buildCatalogSummaryForAi(products: Product[]): CatalogSummaryItem[] {
   return products
-    .filter((p) => p.isApproved === true && p.isActive === true && p.id)
+    .filter(
+      (p) =>
+        p.isApproved === true &&
+        p.isActive === true &&
+        p.categoryId !== 'accommodation' &&
+        Boolean(p.id)
+    )
     .slice(0, 200)
     .map((p) => ({
       id: p.id as string,
@@ -105,7 +127,12 @@ export function buildCatalogSummaryForAi(products: Product[]): CatalogSummaryIte
       category: getCategoryName(p.categoryId) || p.categoryName,
       subcategory: p.subcategory,
       description: p.description?.slice(0, 180),
-      location: p.locationName || p.location || p.shopName,
+      location:
+        p.serviceLocation === 'online' || p.locationType === 'online'
+          ? 'Online / Delivery'
+          : p.serviceLocation === 'mobile'
+            ? 'We come to you'
+            : p.locationName || p.landmark || p.location || p.storeName || p.shopName,
       imageHint: extractImageHint(p.images),
     }));
 }
@@ -191,7 +218,6 @@ function matchesTermOrFuzzy(text: string, term: string): 'exact' | 'fuzzy' | nul
 
   const words = tokenizeWords(normalizedText);
 
-  // Support long compound words (e.g. "phonecharger" contains "phone" and "charger")
   if (normalizedTerm.length >= 8) {
     const matchedSubwords = words.filter(
       (w) => w.length >= 4 && normalizedTerm.includes(w)
@@ -201,7 +227,6 @@ function matchesTermOrFuzzy(text: string, term: string): 'exact' | 'fuzzy' | nul
     }
   }
 
-  // Typo / misspelling tolerance for terms >= 4 characters
   if (normalizedTerm.length >= 4) {
     const maxAllowedEdits = normalizedTerm.length >= 6 ? 2 : 1;
     for (const word of words) {
@@ -242,11 +267,6 @@ export function matchProductsBySearchKeywords(
     matchedIdRank.set(id, idx);
   });
 
-  const relatedIdRank = new Map<string, number>();
-  (aiHints?.relatedIds || []).forEach((id, idx) => {
-    relatedIdRank.set(id, idx);
-  });
-
   if (
     !normalizedQuery &&
     !correctedQuery &&
@@ -259,7 +279,11 @@ export function matchProductsBySearchKeywords(
   const scored: { product: Product; score: number }[] = [];
 
   for (const product of products) {
-    if (product.isApproved !== true || product.isActive !== true) {
+    if (
+      product.isApproved !== true ||
+      product.isActive !== true ||
+      product.categoryId === 'accommodation'
+    ) {
       continue;
     }
 
@@ -274,7 +298,9 @@ export function matchProductsBySearchKeywords(
     const description = (product.description || '').toLowerCase();
     const location = (
       product.locationName ||
+      product.landmark ||
       product.location ||
+      product.storeName ||
       product.shopName ||
       ''
     ).toLowerCase();
@@ -282,7 +308,6 @@ export function matchProductsBySearchKeywords(
 
     let score = 0;
 
-    // Gemini direct catalog scan rank boost
     if (product.id && matchedIdRank.has(product.id)) {
       const rank = matchedIdRank.get(product.id) ?? 99;
       score += Math.max(12, 30 - rank);
@@ -355,17 +380,16 @@ export function matchProductsBySearchKeywords(
   return scored.map((entry) => entry.product);
 }
 
-/**
- * Guarantees related results are returned whenever the marketplace has active
- * listings so users never hit an empty "No results found" screen.
- */
 export function findBestAndRelatedProducts(
   products: Product[],
   originalQuery: string,
   aiResult?: ExpandSearchResult
 ): SmartSearchMatchResult {
   const activeApproved = products.filter(
-    (p) => p.isApproved === true && p.isActive === true
+    (p) =>
+      p.isApproved === true &&
+      p.isActive === true &&
+      p.categoryId !== 'accommodation'
   );
 
   const directMatches = matchProductsBySearchKeywords(
@@ -380,7 +404,6 @@ export function findBestAndRelatedProducts(
   );
 
   if (directMatches.length > 0) {
-    // Append AI-suggested related items if direct matches are very sparse (< 2)
     if (directMatches.length < 2 && aiResult?.relatedIds?.length) {
       const seen = new Set(directMatches.map((item) => item.id));
       const extras = aiResult.relatedIds
@@ -410,7 +433,6 @@ export function findBestAndRelatedProducts(
     };
   }
 
-  // Build related fallback list: prefer Gemini relatedIds, then popular/trending items
   const fallbackList: Product[] = [];
   const seen = new Set<string>();
 
@@ -450,75 +472,294 @@ export async function expandSearchQuery(
   catalog: CatalogSummaryItem[] = [],
   signal?: AbortSignal
 ): Promise<ExpandSearchResult> {
-  const trimmed = query.trim();
+  const trimmed = query.trim().slice(0, 600);
   if (!trimmed) {
     return { keywords: [] };
   }
 
+  const filteredCatalog = catalog
+    .filter((c) => c.category?.toLowerCase() !== 'accommodation')
+    .slice(0, 200);
+  const validCatalogIds = new Set(filteredCatalog.map((c) => c.id));
+  const cacheKey = `${trimmed.toLowerCase()}::${filteredCatalog.map((c) => c.id).join(',')}`;
+  const cached = clientSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.payload;
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    console.warn(
+      'VITE_GEMINI_API_KEY is not configured. Add it in Settings > Secrets or .env.local to enable Gemini AI search.'
+    );
+    return { keywords: [] };
+  }
+
   try {
-    const response = await fetch('/api/ai/expand-search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: trimmed,
-        catalog,
-      }),
-      signal,
-    });
+    const genAI = new GoogleGenerativeAI(apiKey);
 
-    const data = (await response.json().catch(() => ({}))) as {
-      keywords?: unknown;
-      matchedIds?: unknown;
-      relatedIds?: unknown;
-      correctedQuery?: string;
-      answer?: string;
-      rawText?: string;
-      error?: string;
-    };
+    if (filteredCatalog.length > 0) {
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-4-hydrogen',
+        generationConfig: { responseMimeType: 'application/json' },
+      });
 
-    if (!response.ok) {
-      return {
-        keywords: [],
-        error:
-          data.error ||
-          'AI search expansion is currently unavailable. Showing direct keyword matches.',
+      const compactCatalog = filteredCatalog.map((c) => ({
+        id: c.id,
+        t: c.title,
+        c: [c.category, c.subcategory].filter(Boolean).join(' / '),
+        d: c.description,
+        l: c.location,
+        img: c.imageHint,
+      }));
+
+      const prompt = `Smart campus marketplace search for LASUEDPLUG (products & services only, never houses/accommodation).
+Query: "${trimmed}"
+Listings (id, t=title, c=category, d=description, l=location, img=image words):
+${JSON.stringify(compactCatalog)}
+
+Rules:
+- Fix typos/misspellings, slang, compound words, and long questions.
+- Scan every listing. Put best matching IDs in "matchedIds", and backup related IDs in "relatedIds" so results are NEVER empty.
+- Include "correctedQuery", 5-8 "keywords", and a 1-sentence "answer" for the user.
+Return ONLY valid JSON:
+{"correctedQuery":"...","keywords":["..."],"matchedIds":["..."],"relatedIds":["..."],"answer":"..."}`;
+
+      const result = await model.generateContent(prompt, { signal });
+      const rawJson = result.response
+        .text()
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```$/i, '')
+        .trim();
+
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(rawJson) as Record<string, unknown>;
+      } catch {
+        parsed = {};
+      }
+
+      const keywords = Array.isArray(parsed.keywords)
+        ? parsed.keywords
+            .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+            .slice(0, 8)
+        : [];
+
+      const matchedIds = Array.isArray(parsed.matchedIds)
+        ? Array.from(
+            new Set(
+              parsed.matchedIds.filter(
+                (id): id is string => typeof id === 'string' && validCatalogIds.has(id)
+              )
+            )
+          )
+        : [];
+
+      const relatedIds = Array.isArray(parsed.relatedIds)
+        ? Array.from(
+            new Set(
+              parsed.relatedIds.filter(
+                (id): id is string =>
+                  typeof id === 'string' &&
+                  validCatalogIds.has(id) &&
+                  !matchedIds.includes(id)
+              )
+            )
+          )
+        : [];
+
+      const correctedQuery =
+        typeof parsed.correctedQuery === 'string' && parsed.correctedQuery.trim()
+          ? parsed.correctedQuery.trim()
+          : undefined;
+
+      const answer =
+        typeof parsed.answer === 'string' && parsed.answer.trim()
+          ? parsed.answer.trim()
+          : undefined;
+
+      const payload: ExpandSearchResult = {
+        keywords,
+        matchedIds,
+        relatedIds,
+        correctedQuery,
+        answer,
       };
+      clientSearchCache.set(cacheKey, {
+        expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+        payload,
+      });
+      return payload;
     }
 
-    const keywords = Array.isArray(data.keywords)
-      ? data.keywords.filter(
-          (item): item is string => typeof item === 'string' && item.trim().length > 0
+    const model = genAI.getGenerativeModel({ model: 'gemini-4-hydrogen' });
+    const prompt = `The user is searching a campus marketplace for: '${trimmed}'. Handle any typos, misspellings, slang, or long phrases. Return a comma-separated list of 5 specific related items they might be looking for. Example: If they search 'eat bread', return 'butter, akara, egg, tea, jam'. If they search 'phone', return 'iphone, android, charger, case, screen protector'. Return ONLY the comma-separated list, no other text.`;
+
+    const result = await model.generateContent(prompt, { signal });
+    const rawText = result.response.text().trim();
+    return {
+      keywords: parseExpandedKeywords(rawText),
+    };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    console.error('AI Error:', error);
+    return { keywords: [] };
+  }
+}
+
+export async function searchByImage(
+  image: { mimeType: string; data: string },
+  catalog: CatalogSummaryItem[] = [],
+  query = '',
+  signal?: AbortSignal
+): Promise<VisualSearchResult> {
+  const filteredCatalog = catalog
+    .filter((c) => c.category?.toLowerCase() !== 'accommodation')
+    .slice(0, 200);
+  const validCatalogIds = new Set(filteredCatalog.map((c) => c.id));
+
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    console.warn(
+      'VITE_GEMINI_API_KEY is not configured. Add it in Settings > Secrets or .env.local to enable Gemini AI visual search.'
+    );
+    return { keywords: [] };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-4-hydrogen',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+
+    const compactCatalog = filteredCatalog.map((c) => ({
+      id: c.id,
+      t: c.title,
+      c: [c.category, c.subcategory].filter(Boolean).join(' / '),
+      d: c.description,
+      l: c.location,
+    }));
+
+    const userNote = query.trim().slice(0, 300);
+    const prompt = `Visual campus marketplace search for LASUEDPLUG.
+Analyze the uploaded photo carefully${userNote ? ` along with the user note "${userNote}"` : ''}.
+Identify what product/item is shown in the picture (type, brand, purpose, synonyms) and match it against these active marketplace listings:
+${JSON.stringify(compactCatalog)}
+
+Rules:
+- "detectedItem": short 2-5 word name of what you see in the picture (e.g. "White Nike sneakers", "Electric kettle", "HP laptop").
+- "keywords": 5-8 relevant search terms describing the object in the image.
+- "matchedIds": listing IDs that best match what is in the picture.
+- "relatedIds": backup similar listing IDs if direct matches are few.
+- "answer": 1 friendly sentence explaining what was detected in the photo and what matching campus listings were found.
+Return ONLY valid JSON:
+{"detectedItem":"...","keywords":["..."],"matchedIds":["..."],"relatedIds":["..."],"answer":"..."}`;
+
+    const cleanData = image.data.replace(
+      /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
+      ''
+    );
+
+    const result = await model.generateContent(
+      [
+        {
+          inlineData: {
+            mimeType: image.mimeType,
+            data: cleanData,
+          },
+        },
+        prompt,
+      ],
+      { signal }
+    );
+
+    const rawJson = result.response
+      .text()
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(rawJson) as Record<string, unknown>;
+    } catch {
+      parsed = {};
+    }
+
+    const detectedItem =
+      typeof parsed.detectedItem === 'string' && parsed.detectedItem.trim()
+        ? parsed.detectedItem.trim()
+        : undefined;
+
+    const keywords = Array.isArray(parsed.keywords)
+      ? parsed.keywords
+          .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+          .slice(0, 8)
+      : [];
+
+    const matchedIds = Array.isArray(parsed.matchedIds)
+      ? Array.from(
+          new Set(
+            parsed.matchedIds.filter(
+              (id): id is string => typeof id === 'string' && validCatalogIds.has(id)
+            )
+          )
         )
-      : parseExpandedKeywords(data.rawText || '');
+      : [];
 
-    const matchedIds = Array.isArray(data.matchedIds)
-      ? data.matchedIds.filter((id): id is string => typeof id === 'string')
-      : undefined;
+    const relatedIds = Array.isArray(parsed.relatedIds)
+      ? Array.from(
+          new Set(
+            parsed.relatedIds.filter(
+              (id): id is string =>
+                typeof id === 'string' &&
+                validCatalogIds.has(id) &&
+                !matchedIds.includes(id)
+            )
+          )
+        )
+      : [];
 
-    const relatedIds = Array.isArray(data.relatedIds)
-      ? data.relatedIds.filter((id): id is string => typeof id === 'string')
-      : undefined;
+    const answer =
+      typeof parsed.answer === 'string' && parsed.answer.trim()
+        ? parsed.answer.trim()
+        : undefined;
 
     return {
+      detectedItem,
       keywords,
       matchedIds,
       relatedIds,
       correctedQuery:
-        typeof data.correctedQuery === 'string' ? data.correctedQuery : undefined,
-      answer: typeof data.answer === 'string' ? data.answer : undefined,
+        typeof parsed.correctedQuery === 'string' && parsed.correctedQuery.trim()
+          ? parsed.correctedQuery.trim()
+          : detectedItem,
+      answer,
     };
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw err;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
     }
-    return {
-      keywords: [],
-      error:
-        err instanceof Error
-          ? err.message
-          : 'Unable to reach AI search service. Showing direct keyword matches.',
-    };
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    console.error('AI Error:', error);
+    return { keywords: [] };
   }
 }

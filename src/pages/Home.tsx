@@ -1,5 +1,5 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShoppingBag,
   Wrench,
@@ -11,7 +11,7 @@ import {
   MapPin,
   ArrowRight,
   Database,
-  ImageOff,
+  X,
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
 import {
@@ -20,7 +20,13 @@ import {
   getLatestServices,
 } from '../lib/homeService';
 import { buildMarketplaceSearchUrl } from '../lib/homeHelpers';
+import {
+  getAccommodationPublicLocation,
+  getAccommodationRent,
+  getAccommodationTypeLabel,
+} from '../lib/accommodationHelpers';
 import { getProductPriceDisplay } from '../lib/marketplaceHelpers';
+import { getCategoryName } from '../lib/categories';
 import { seedDatabase } from '../lib/seedData';
 import { formatNaira } from '../lib/utils';
 import { Accommodation, Product, Service } from '../types';
@@ -84,8 +90,21 @@ const TRUST_BULLETS = [
   },
 ];
 
+function matchesHomeQuery(fields: Array<string | undefined>, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  const haystack = fields.filter(Boolean).join(' ').toLowerCase();
+  if (haystack.includes(normalized)) return true;
+  const tokens = normalized.split(/\s+/).filter((t) => t.length >= 2);
+  return tokens.length > 0 && tokens.some((token) => haystack.includes(token));
+}
+
 export function Home() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
+
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const [activeSearch, setActiveSearch] = useState(initialQuery.trim());
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -94,22 +113,21 @@ export function Home() {
   const [seeding, setSeeding] = useState(false);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
 
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
   const autoSeededRef = useRef(false);
 
   const isSeedMode = searchParams.get('seed') === 'true';
 
-  const loadListings = useCallback(async () => {
+  const loadListings = useCallback(async (fetchFullCatalog: boolean) => {
     setLoading(true);
     setError(null);
+    const limitCount = fetchFullCatalog ? 60 : 4;
     try {
       const [latestProducts, latestServices, latestAccommodations] =
         await Promise.all([
-          getLatestProducts(4),
-          getLatestServices(4),
-          getLatestAccommodations(4),
+          getLatestProducts(limitCount),
+          getLatestServices(limitCount),
+          getLatestAccommodations(limitCount),
         ]);
       setProducts(latestProducts);
       setServices(latestServices);
@@ -132,13 +150,13 @@ export function Home() {
     showToast(result.message, result.ok ? 'success' : 'error');
     setSeeding(false);
     if (result.ok) {
-      await loadListings();
+      await loadListings(Boolean(activeSearch));
     }
-  }, [loadListings, showToast]);
+  }, [loadListings, showToast, activeSearch]);
 
   useEffect(() => {
-    loadListings();
-  }, [loadListings]);
+    void loadListings(Boolean(activeSearch));
+  }, [loadListings, activeSearch]);
 
   useEffect(() => {
     if (isSeedMode && !autoSeededRef.current) {
@@ -149,8 +167,83 @@ export function Home() {
 
   const handleSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
-    navigate(buildMarketplaceSearchUrl(searchQuery));
+    const trimmed = searchQuery.trim();
+    setActiveSearch(trimmed);
+    const nextParams = new URLSearchParams(searchParams);
+    if (trimmed) {
+      nextParams.set('q', trimmed);
+    } else {
+      nextParams.delete('q');
+    }
+    setSearchParams(nextParams, { replace: true });
   };
+
+  const handleClearHomeSearch = () => {
+    setSearchQuery('');
+    setActiveSearch('');
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('q');
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  // Filtered per section so Marketplace NEVER includes houses/accommodation
+  const visibleProducts = useMemo(() => {
+    const marketplaceOnly = products.filter(
+      (p) => p.categoryId !== 'accommodation'
+    );
+    if (!activeSearch) return marketplaceOnly.slice(0, 4);
+    return marketplaceOnly.filter((p) =>
+      matchesHomeQuery(
+        [
+          p.title,
+          p.description,
+          getCategoryName(p.categoryId),
+          p.categoryName,
+          p.subcategory,
+          p.locationName,
+          p.shopName,
+        ],
+        activeSearch
+      )
+    );
+  }, [products, activeSearch]);
+
+  const visibleServices = useMemo(() => {
+    if (!activeSearch) return services.slice(0, 4);
+    return services.filter((s) =>
+      matchesHomeQuery(
+        [
+          s.title,
+          s.description,
+          getCategoryName(s.categoryId),
+          s.subcategory,
+          s.locationName,
+          s.shopName,
+        ],
+        activeSearch
+      )
+    );
+  }, [services, activeSearch]);
+
+  const visibleAccommodations = useMemo(() => {
+    if (!activeSearch) return accommodations.slice(0, 4);
+    return accommodations.filter((a) =>
+      matchesHomeQuery(
+        [
+          a.title,
+          a.description,
+          getAccommodationTypeLabel(a.type),
+          getAccommodationPublicLocation(a),
+          ...(Array.isArray(a.amenities) ? a.amenities : []),
+        ],
+        activeSearch
+      )
+    );
+  }, [accommodations, activeSearch]);
+
+  const marketplaceSectionLink = activeSearch
+    ? buildMarketplaceSearchUrl(activeSearch)
+    : '/marketplace';
 
   return (
     <div className="flex flex-col">
@@ -190,7 +283,7 @@ export function Home() {
           <form
             onSubmit={handleSearchSubmit}
             role="search"
-            aria-label="Search campus marketplace"
+            aria-label="Search campus marketplace, services, and accommodation"
             className="max-w-2xl mx-auto pt-2"
           >
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
@@ -199,99 +292,147 @@ export function Home() {
                 <input
                   type="search"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search textbooks, phones, services, or lodges..."
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSearchQuery(next);
+                    if (!next.trim() && activeSearch) {
+                      handleClearHomeSearch();
+                    }
+                  }}
+                  placeholder="Search products, services, or off-campus lodges..."
                   aria-label="Search products, services, or accommodation"
                   className="w-full py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={handleClearHomeSearch}
+                    aria-label="Clear search"
+                    className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <Button type="submit" variant="primary" size="md" className="sm:px-6">
                 Search
               </Button>
             </div>
           </form>
+
+          {activeSearch && (
+            <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-600">
+              <span>
+                Showing results across <strong>Marketplace</strong>,{' '}
+                <strong>Services</strong>, and <strong>Accommodation</strong> for &ldquo;
+                {activeSearch}&rdquo;.
+              </span>
+              <button
+                type="button"
+                onClick={handleClearHomeSearch}
+                className="font-semibold text-blue-600 hover:text-blue-700"
+              >
+                Clear Search
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Category Grid */}
-      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Browse by Category
-          </h2>
-          <p className="text-sm text-slate-600 mt-1">
-            Everything students need across campus life in one place.
-          </p>
-        </div>
+      {!activeSearch && (
+        <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Browse by Category
+            </h2>
+            <p className="text-sm text-slate-600 mt-1">
+              Everything students need across campus life in one place.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {CATEGORIES.map((category) => {
-            const Icon = category.icon;
-            return (
-              <Link key={category.path} to={category.path} className="group block h-full">
-                <Card className="h-full flex flex-col justify-between space-y-4 group-hover:border-primary-100">
-                  <div className="space-y-4">
-                    <div
-                      className={`w-11 h-11 rounded-xl flex items-center justify-center ${category.iconBg}`}
-                    >
-                      <Icon className="w-5 h-5" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {CATEGORIES.map((category) => {
+              const Icon = category.icon;
+              return (
+                <Link key={category.path} to={category.path} className="group block h-full">
+                  <Card className="h-full flex flex-col justify-between space-y-4 group-hover:border-primary-100">
+                    <div className="space-y-4">
+                      <div
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center ${category.iconBg}`}
+                      >
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between">
+                          <span>{category.title}</span>
+                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200" />
+                        </h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">
+                          {category.description}
+                        </p>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between">
-                        <span>{category.title}</span>
-                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200" />
-                      </h3>
-                      <p className="text-sm text-slate-500 leading-relaxed">
-                        {category.description}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-      {/* Featured Products Section */}
+      {/* Featured Products Section (Marketplace — Houses Excluded) */}
       <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Fresh in the Marketplace
+              {activeSearch ? 'Matching Marketplace Items' : 'Fresh in the Marketplace'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
-              Recently approved campus items from verified community sellers.
+              Recently approved campus products from verified community sellers.
             </p>
           </div>
           <Link
-            to="/marketplace"
+            to={marketplaceSectionLink}
             className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0"
           >
-            View all <ArrowRight className="w-4 h-4" />
+            View in Marketplace <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         {loading ? (
           <Loading variant="skeleton" message="Loading latest products..." />
         ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadListings()} />
-        ) : products.length === 0 ? (
+          <ErrorState
+            message={error}
+            onRetry={() => void loadListings(Boolean(activeSearch))}
+          />
+        ) : visibleProducts.length === 0 ? (
           <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
             <p className="text-sm font-medium text-slate-600">
-              No products listed yet. Be the first to sell!
+              {activeSearch
+                ? `No marketplace products matched "${activeSearch}".`
+                : 'No products listed yet. Be the first to sell!'}
             </p>
             <div>
-              <Link to="/marketplace/create">
-                <Button variant="outline" size="sm">
-                  List a Product
-                </Button>
-              </Link>
+              {activeSearch ? (
+                <Link to={marketplaceSectionLink}>
+                  <Button variant="outline" size="sm">
+                    Try Smart AI Search in Marketplace
+                  </Button>
+                </Link>
+              ) : (
+                <Link to="/marketplace/create">
+                  <Button variant="outline" size="sm">
+                    List a Product
+                  </Button>
+                </Link>
+              )}
             </div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {products.map((product) => {
+            {visibleProducts.map((product) => {
               const priceInfo = getProductPriceDisplay(product);
               return (
                 <Link
@@ -335,7 +476,7 @@ export function Home() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Top Services Around Campus
+              {activeSearch ? 'Matching Campus Services' : 'Top Services Around Campus'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
               Trusted student skills, tutoring, laundry, and technical help.
@@ -352,23 +493,30 @@ export function Home() {
         {loading ? (
           <Loading variant="skeleton" message="Loading campus services..." />
         ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadListings()} />
-        ) : services.length === 0 ? (
+          <ErrorState
+            message={error}
+            onRetry={() => void loadListings(Boolean(activeSearch))}
+          />
+        ) : visibleServices.length === 0 ? (
           <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
             <p className="text-sm font-medium text-slate-600">
-              No services listed yet. Offer your skill to the campus community!
+              {activeSearch
+                ? `No campus services matched "${activeSearch}".`
+                : 'No services listed yet. Offer your skill to the campus community!'}
             </p>
-            <div>
-              <Link to="/services/create">
-                <Button variant="outline" size="sm">
-                  Post a Service
-                </Button>
-              </Link>
-            </div>
+            {!activeSearch && (
+              <div>
+                <Link to="/services/create">
+                  <Button variant="outline" size="sm">
+                    Post a Service
+                  </Button>
+                </Link>
+              </div>
+            )}
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {services.map((service) => (
+            {visibleServices.map((service) => (
               <Link
                 key={service.id || service.title}
                 to={`/services/${service.id}`}
@@ -398,12 +546,14 @@ export function Home() {
         )}
       </section>
 
-      {/* Featured Accommodations Section */}
+      {/* Featured Accommodations Section (Houses stay strictly in Accommodation) */}
       <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Off-Campus Accommodation
+              {activeSearch
+                ? 'Matching Off-Campus Accommodation'
+                : 'Off-Campus Accommodation'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
               Available lodges, rooms, and hostels around Epe and campus gates.
@@ -420,23 +570,30 @@ export function Home() {
         {loading ? (
           <Loading variant="skeleton" message="Loading accommodations..." />
         ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadListings()} />
-        ) : accommodations.length === 0 ? (
+          <ErrorState
+            message={error}
+            onRetry={() => void loadListings(Boolean(activeSearch))}
+          />
+        ) : visibleAccommodations.length === 0 ? (
           <Card hoverable={false} className="border-dashed text-center py-10 space-y-3">
             <p className="text-sm font-medium text-slate-600">
-              No accommodation listed yet. List an available lodge or room!
+              {activeSearch
+                ? `No lodges or accommodation matched "${activeSearch}".`
+                : 'No accommodation listed yet. List an available lodge or room!'}
             </p>
-            <div>
-              <Link to="/accommodation/create">
-                <Button variant="outline" size="sm">
-                  List Accommodation
-                </Button>
-              </Link>
-            </div>
+            {!activeSearch && (
+              <div>
+                <Link to="/accommodation/create">
+                  <Button variant="outline" size="sm">
+                    List Accommodation
+                  </Button>
+                </Link>
+              </div>
+            )}
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {accommodations.map((item) => (
+            {visibleAccommodations.map((item) => (
               <Link
                 key={item.id || item.title}
                 to={`/accommodation/${item.id}`}
@@ -458,12 +615,14 @@ export function Home() {
                       </h3>
                       <p className="text-xs text-slate-500 flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{item.location}</span>
+                        <span className="truncate">
+                          {getAccommodationPublicLocation(item)}
+                        </span>
                       </p>
                     </div>
                     <p className="text-base font-bold text-primary-600">
-                      {formatNaira(item.price)}
-                      <span className="text-xs font-normal text-slate-500"> / yr</span>
+                      {formatNaira(getAccommodationRent(item))}
+                      <span className="text-xs font-normal text-slate-500"> / year</span>
                     </p>
                   </div>
                 </Card>

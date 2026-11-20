@@ -6,6 +6,7 @@ import {
   SEED_ACCOMMODATIONS,
   SEED_CATEGORIES,
   SEED_PRODUCTS,
+  SEED_ROOMMATE_REQUESTS,
   SEED_SERVICES,
 } from './homeHelpers';
 import { formatNaira } from './utils';
@@ -40,8 +41,8 @@ test('formatNaira formats Nigerian Naira cleanly without decimals', () => {
   assert.ok(formatted.includes('₦') || formatted.includes('NGN'));
 });
 
-test('seed datasets include AI search food/tech items, tracking defaults, and >12 products for infinite scroll', () => {
-  assert.equal(SEED_CATEGORIES.length, 12);
+test('seed datasets include AI search food/tech items, adType, serviceLocation, and >12 products', () => {
+  assert.equal(SEED_CATEGORIES.length, 11);
   assert.equal(SEED_PRODUCTS.length, 15);
   assert.equal(SEED_SERVICES.length, 3);
   assert.equal(SEED_ACCOMMODATIONS.length, 3);
@@ -55,7 +56,7 @@ test('seed datasets include AI search food/tech items, tracking defaults, and >1
     'HP Laptop',
     'Phone Charger',
     'Nike Sneakers',
-    'Phone Charging Services',
+    'Phone Charging & Device Care',
   ]) {
     assert.ok(titles.includes(requiredTitle), `Missing seed product: ${requiredTitle}`);
   }
@@ -67,10 +68,52 @@ test('seed datasets include AI search food/tech items, tracking defaults, and >1
         p.isActive &&
         p.viewCount === 0 &&
         p.contactCount === 0 &&
+        (p.adType === 'item' || p.adType === 'service') &&
+        (p.adType === 'service'
+          ? p.quantity === undefined &&
+            p.priceType === 'contact' &&
+            (p.serviceLocation === 'shop' ||
+              p.serviceLocation === 'mobile' ||
+              p.serviceLocation === 'online')
+          : typeof p.quantity === 'number' && p.quantity >= 1) &&
         Boolean(p.locationName) &&
+        typeof p.latitude === 'number' &&
+        typeof p.longitude === 'number' &&
+        p.images.every((img) => img.startsWith('data:image/')) &&
+        !('googleMapLink' in p) &&
         p.whatsappNumber.startsWith('234')
     )
   );
-  assert.ok(SEED_SERVICES.every((s) => s.isApproved && s.isActive && s.viewCount === 0 && s.contactCount === 0));
-  assert.ok(SEED_ACCOMMODATIONS.every((a) => a.isApproved && a.isActive));
+  assert.ok(SEED_PRODUCTS.some((p) => p.adType === 'service'));
+  assert.ok(SEED_PRODUCTS.some((p) => p.adType === 'item'));
+  assert.ok(
+    SEED_SERVICES.every(
+      (s) => s.isApproved && s.isActive && s.viewCount === 0 && s.contactCount === 0
+    )
+  );
+  assert.ok(
+    SEED_ACCOMMODATIONS.every(
+      (a) =>
+        a.isApproved &&
+        a.isActive &&
+        typeof a.rentPrice === 'number' &&
+        a.rentPrice > 0 &&
+        Boolean(a.generalLocation) &&
+        a.images.every((img) => img.startsWith('data:image/')) &&
+        a.whatsappNumber.startsWith('234')
+    )
+  );
+  assert.equal(SEED_ROOMMATE_REQUESTS.length, 2);
+  assert.ok(
+    SEED_ROOMMATE_REQUESTS.every(
+      (r) =>
+        r.isApproved &&
+        r.isActive &&
+        Boolean(r.generalLocation) &&
+        Boolean(r.preferences) &&
+        Array.isArray(r.images) &&
+        r.images.every((img) => img.startsWith('data:image/')) &&
+        r.whatsappNumber.startsWith('234')
+    )
+  );
 });

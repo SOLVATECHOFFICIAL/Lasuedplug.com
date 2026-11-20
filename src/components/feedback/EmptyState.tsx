@@ -22,7 +22,6 @@ export function EmptyState({
       <div className="space-y-1">
         <h2 className="text-xl font-bold text-slate-900">{title}</h2>
         <p className="text-sm text-slate-500">{description}</p>
-        <p className="text-xs font-semibold text-blue-600 pt-1">Coming in a later prompt.</p>
       </div>
       {actionTo && (
         <div className="pt-2">

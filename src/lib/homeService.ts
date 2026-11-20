@@ -55,7 +55,8 @@ async function fetchLatestFromCollection<
 }
 
 export async function getLatestProducts(limitCount = 4): Promise<Product[]> {
-  return fetchLatestFromCollection<Product>('products', limitCount);
+  const rows = await fetchLatestFromCollection<Product>('products', Math.max(limitCount * 2, limitCount));
+  return rows.filter((item) => item.categoryId !== 'accommodation').slice(0, limitCount);
 }
 
 export async function getLatestServices(limitCount = 4): Promise<Service[]> {

@@ -1,17 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  Bell,
+  CheckCheck,
   ChevronDown,
   LayoutDashboard,
   LogOut,
   Menu,
+  ShieldCheck,
+  Store,
   User as UserIcon,
   X,
 } from 'lucide-react';
 import { LOGO_URL, SITE_NAME } from '../../lib/constants';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { getInitials } from '../../lib/authHelpers';
+import {
+  countUnreadNotifications,
+  formatNotificationTime,
+} from '../../lib/notificationHelpers';
+import {
+  markAllAsRead,
+  markAsRead,
+  subscribeToUserNotifications,
+} from '../../lib/notificationService';
+import { AppNotification } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../ui/Button';
@@ -26,7 +40,10 @@ const NAV_LINKS = [
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,24 +56,46 @@ export function Navbar() {
     profile?.fullName || user?.displayName,
     user?.email
   );
+  const unreadCount = useMemo(
+    () => countUnreadNotifications(notifications),
+    [notifications]
+  );
 
   useEffect(() => {
     setDropdownOpen(false);
+    setNotifDropdownOpen(false);
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!user?.uid) {
+      setNotifications([]);
+      return;
+    }
+    const unsubscribe = subscribeToUserNotifications(
+      user.uid,
+      (items) => setNotifications(items),
+      () => {
+        // Silent background fallback if offline
+      }
+    );
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setDropdownOpen(false);
+      }
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(target)) {
+        setNotifDropdownOpen(false);
       }
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setDropdownOpen(false);
+        setNotifDropdownOpen(false);
         setMobileMenuOpen(false);
       }
     }
@@ -68,6 +107,35 @@ export function Navbar() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, []);
+
+  const handleNotificationItemClick = async (item: AppNotification) => {
+    setNotifDropdownOpen(false);
+    if (item.id && !item.isRead) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
+      );
+      try {
+        await markAsRead(item.id);
+      } catch {
+        // Non-blocking
+      }
+    }
+    navigate(item.link || '/notifications');
+  };
+
+  const handleMarkAllRead = async () => {
+    const unreadIds = notifications
+      .filter((n) => !n.isRead && Boolean(n.id))
+      .map((n) => n.id as string);
+    if (unreadIds.length === 0) return;
+
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try {
+      await markAllAsRead(unreadIds);
+    } catch {
+      // Non-blocking
+    }
+  };
 
   const handleMobileNav = (path: string) => {
     setMobileMenuOpen(false);
@@ -144,15 +212,121 @@ export function Navbar() {
             {loading ? (
               <div className="h-9 w-24 rounded-lg bg-slate-100 animate-pulse" />
             ) : user ? (
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setDropdownOpen((prev) => !prev)}
-                  aria-label="Account menu"
-                  aria-expanded={dropdownOpen}
-                  aria-haspopup="menu"
-                  className="flex items-center gap-2 p-1 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
+              <div className="flex items-center gap-2">
+                {/* Notification Bell Dropdown */}
+                <div className="relative" ref={notifDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifDropdownOpen((prev) => !prev);
+                      setDropdownOpen(false);
+                    }}
+                    aria-label={
+                      unreadCount > 0
+                        ? `Notifications (${unreadCount} unread)`
+                        : 'Notifications'
+                    }
+                    aria-expanded={notifDropdownOpen}
+                    aria-haspopup="menu"
+                    className="relative p-2 rounded-full border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span
+                        data-testid="unread-notification-badge"
+                        className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center leading-none shadow-sm"
+                      >
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {notifDropdownOpen && (
+                    <div
+                      role="menu"
+                      aria-label="Recent Notifications"
+                      className="absolute right-0 mt-2 w-80 rounded-xl bg-white border border-slate-200 shadow-lg py-2 z-50"
+                    >
+                      <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-slate-900">
+                          Notifications
+                        </span>
+                        {unreadCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleMarkAllRead()}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                          >
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>Mark all read</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                        {notifications.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-xs text-slate-500">
+                            No notifications yet.
+                          </div>
+                        ) : (
+                          notifications.slice(0, 6).map((item) => (
+                            <button
+                              key={item.id || `${item.title}-${item.message}`}
+                              type="button"
+                              role="menuitem"
+                              onClick={() => void handleNotificationItemClick(item)}
+                              className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-start gap-2.5 ${
+                                !item.isRead ? 'bg-blue-50/50' : ''
+                              }`}
+                            >
+                              <span
+                                className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                  item.isRead ? 'bg-transparent' : 'bg-blue-600'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1 space-y-0.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-slate-900 truncate">
+                                    {item.title}
+                                  </p>
+                                  <span className="text-[11px] text-slate-400 shrink-0">
+                                    {formatNotificationTime(item.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 line-clamp-2">
+                                  {item.message}
+                                </p>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-1.5 px-3">
+                        <Link
+                          to="/notifications"
+                          onClick={() => setNotifDropdownOpen(false)}
+                          className="block w-full text-center py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                          View all notifications
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDropdownOpen((prev) => !prev);
+                      setNotifDropdownOpen(false);
+                    }}
+                    aria-label="Account menu"
+                    aria-expanded={dropdownOpen}
+                    aria-haspopup="menu"
+                    className="flex items-center gap-2 p-1 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                   {profile?.avatarUrl ? (
                     <img
                       src={profile.avatarUrl}
@@ -196,14 +370,36 @@ export function Navbar() {
                     </Link>
 
                     <Link
+                      to="/dashboard/seller"
+                      role="menuitem"
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                    >
+                      <Store className="w-4 h-4" />
+                      <span>Seller Dashboard</span>
+                    </Link>
+
+                    <Link
                       to="/dashboard/buyer"
                       role="menuitem"
                       onClick={() => setDropdownOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
                     >
                       <LayoutDashboard className="w-4 h-4" />
-                      <span>Dashboard</span>
+                      <span>My Dashboard</span>
                     </Link>
+
+                    {profile?.roles?.admin === true && (
+                      <Link
+                        to="/admin"
+                        role="menuitem"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Admin Console</span>
+                      </Link>
+                    )}
 
                     <div className="border-t border-slate-100 mt-1 pt-1">
                       <button
@@ -218,6 +414,7 @@ export function Navbar() {
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             ) : (
               <>
@@ -242,21 +439,39 @@ export function Navbar() {
           {/* Mobile Right Controls */}
           <div className="flex md:hidden items-center gap-2">
             {!loading && user && (
-              <Link
-                to="/dashboard/profile"
-                aria-label="Go to profile"
-                className="w-9 h-9 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden"
-              >
-                {profile?.avatarUrl ? (
-                  <img
-                    src={profile.avatarUrl}
-                    alt={displayName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  initials
-                )}
-              </Link>
+              <>
+                <Link
+                  to="/notifications"
+                  aria-label={
+                    unreadCount > 0
+                      ? `Notifications (${unreadCount} unread)`
+                      : 'Notifications'
+                  }
+                  className="relative w-9 h-9 rounded-full border border-slate-200 bg-white text-slate-600 flex items-center justify-center hover:bg-slate-50"
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  to="/dashboard/profile"
+                  aria-label="Go to profile"
+                  className="w-9 h-9 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden"
+                >
+                  {profile?.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    initials
+                  )}
+                </Link>
+              </>
             )}
             <button
               type="button"
@@ -359,11 +574,31 @@ export function Navbar() {
                   variant="secondary"
                   size="lg"
                   fullWidth
+                  onClick={() => handleMobileNav('/dashboard/seller')}
+                >
+                  <Store className="w-4 h-4" />
+                  Seller Dashboard
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
                   onClick={() => handleMobileNav('/dashboard/buyer')}
                 >
                   <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
+                  My Dashboard
                 </Button>
+                {profile?.roles?.admin === true && (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={() => handleMobileNav('/admin')}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Admin Console
+                  </Button>
+                )}
                 <Button
                   variant="danger"
                   size="lg"

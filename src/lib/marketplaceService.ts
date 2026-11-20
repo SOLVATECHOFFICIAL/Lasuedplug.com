@@ -69,10 +69,12 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
       limit(limitCount)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Product, 'id'>),
-    }));
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((item) => item.categoryId !== 'accommodation');
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
@@ -87,7 +89,12 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
         }))
-        .filter((item) => item.isApproved === true && item.isActive === true)
+        .filter(
+          (item) =>
+            item.isApproved === true &&
+            item.isActive === true &&
+            item.categoryId !== 'accommodation'
+        )
         .sort((a, b) => {
           const viewDiff = (b.viewCount || 0) - (a.viewCount || 0);
           if (viewDiff !== 0) return viewDiff;
@@ -125,10 +132,12 @@ export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
       limit(250)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Product, 'id'>),
-    }));
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((item) => item.categoryId !== 'accommodation');
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
@@ -139,7 +148,12 @@ export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
         }))
-        .filter((item) => item.isApproved === true && item.isActive === true);
+        .filter(
+          (item) =>
+            item.isApproved === true &&
+            item.isActive === true &&
+            item.categoryId !== 'accommodation'
+        );
     }
     if (firestoreErr?.code === 'unavailable') {
       throw new Error(
@@ -209,10 +223,12 @@ export async function fetchMarketplaceProducts(
     if (trimmedSearch) {
       const searchQ = query(colRef, ...baseConstraints, limit(100));
       const snapshot = await getDocs(searchQ);
-      const rawDocs = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Product, 'id'>),
-      }));
+      const rawDocs = snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Product, 'id'>),
+        }))
+        .filter((item) => item.categoryId !== 'accommodation');
       const matched = filterProductsByQuery(rawDocs, trimmedSearch);
       return {
         products: matched,
@@ -235,10 +251,12 @@ export async function fetchMarketplaceProducts(
       ? snapshot.docs.slice(0, limitCount)
       : snapshot.docs;
 
-    const products = pageDocs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Product, 'id'>),
-    }));
+    const products = pageDocs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((item) => item.categoryId !== 'accommodation');
 
     return {
       products,

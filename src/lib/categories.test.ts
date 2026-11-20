@@ -1,36 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ALL_MARKETPLACE_CATEGORIES,
+  getCategoriesForAdType,
   getCategoryById,
   getCategoryName,
   getSubcategoriesForCategory,
-  MASTER_CATEGORIES,
+  PRODUCT_CATEGORIES,
+  SERVICE_CATEGORIES,
 } from './categories';
 
-test('MASTER_CATEGORIES contains all 12 strict categories with subcategories', () => {
-  assert.equal(MASTER_CATEGORIES.length, 12);
-  const ids = MASTER_CATEGORIES.map((c) => c.id);
-  assert.deepEqual(ids, [
-    'electronics',
-    'fashion',
-    'books',
-    'hostel',
-    'food',
-    'cyber',
-    'tech_repairs',
-    'beauty',
-    'creative',
-    'everyday',
-    'academics',
-    'accommodation',
-  ]);
-  for (const cat of MASTER_CATEGORIES) {
+test('PRODUCT_CATEGORIES and SERVICE_CATEGORIES contain strict split categories with subcategories', () => {
+  assert.equal(PRODUCT_CATEGORIES.length, 5);
+  assert.deepEqual(
+    PRODUCT_CATEGORIES.map((c) => c.id),
+    ['electronics', 'fashion', 'books', 'hostel', 'food']
+  );
+
+  assert.equal(SERVICE_CATEGORIES.length, 6);
+  assert.deepEqual(
+    SERVICE_CATEGORIES.map((c) => c.id),
+    ['tech_repairs', 'beauty', 'cyber', 'creative', 'everyday', 'academics']
+  );
+
+  assert.equal(ALL_MARKETPLACE_CATEGORIES.length, 11);
+  assert.ok(ALL_MARKETPLACE_CATEGORIES.every((c) => c.id !== 'accommodation'));
+
+  for (const cat of ALL_MARKETPLACE_CATEGORIES) {
     assert.ok(cat.name.length > 0);
     assert.ok(cat.subs.length > 0);
   }
 });
 
-test('category lookup helpers return expected names and subcategories', () => {
+test('getCategoriesForAdType and category lookup helpers return expected values', () => {
+  assert.equal(getCategoriesForAdType('item'), PRODUCT_CATEGORIES);
+  assert.equal(getCategoriesForAdType('service'), SERVICE_CATEGORIES);
   assert.equal(getCategoryById('electronics')?.name, 'Electronics & Gadgets');
   assert.equal(getCategoryName('tech_repairs'), 'Tech & Repairs');
   assert.equal(getCategoryName('unknown_id'), 'unknown_id');
