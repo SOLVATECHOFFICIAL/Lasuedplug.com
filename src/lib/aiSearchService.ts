@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Product } from '../types';
 import { getCategoryName } from './categories';
 import { getTimestampMillis } from './homeHelpers';
@@ -81,13 +80,6 @@ const clientSearchCache = new Map<
   string,
   { expiresAt: number; payload: ExpandSearchResult }
 >();
-
-function getGeminiApiKey(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-  }
-  return '';
-}
 
 export function extractImageHint(images: string[] | undefined): string {
   if (!Array.isArray(images) || images.length === 0) return '';
@@ -480,7 +472,6 @@ export async function expandSearchQuery(
   const filteredCatalog = catalog
     .filter((c) => c.category?.toLowerCase() !== 'accommodation')
     .slice(0, 200);
-  const validCatalogIds = new Set(filteredCatalog.map((c) => c.id));
   const cacheKey = `${trimmed.toLowerCase()}::${filteredCatalog.map((c) => c.id).join(',')}`;
   const cached = clientSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -491,120 +482,27 @@ export async function expandSearchQuery(
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    console.warn(
-      'VITE_GEMINI_API_KEY is not configured. Add it in Settings > Secrets or .env.local to enable Gemini AI search.'
-    );
-    return { keywords: [] };
-  }
-
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const response = await fetch('/api/ai/expand-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: trimmed,
+        catalog: filteredCatalog,
+      }),
+      signal,
+    });
 
-    if (filteredCatalog.length > 0) {
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-4-hydrogen',
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-
-      const compactCatalog = filteredCatalog.map((c) => ({
-        id: c.id,
-        t: c.title,
-        c: [c.category, c.subcategory].filter(Boolean).join(' / '),
-        d: c.description,
-        l: c.location,
-        img: c.imageHint,
-      }));
-
-      const prompt = `Smart campus marketplace search for LASUEDPLUG (products & services only, never houses/accommodation).
-Query: "${trimmed}"
-Listings (id, t=title, c=category, d=description, l=location, img=image words):
-${JSON.stringify(compactCatalog)}
-
-Rules:
-- Fix typos/misspellings, slang, compound words, and long questions.
-- Scan every listing. Put best matching IDs in "matchedIds", and backup related IDs in "relatedIds" so results are NEVER empty.
-- Include "correctedQuery", 5-8 "keywords", and a 1-sentence "answer" for the user.
-Return ONLY valid JSON:
-{"correctedQuery":"...","keywords":["..."],"matchedIds":["..."],"relatedIds":["..."],"answer":"..."}`;
-
-      const result = await model.generateContent(prompt, { signal });
-      const rawJson = result.response
-        .text()
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/```$/i, '')
-        .trim();
-
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = JSON.parse(rawJson) as Record<string, unknown>;
-      } catch {
-        parsed = {};
-      }
-
-      const keywords = Array.isArray(parsed.keywords)
-        ? parsed.keywords
-            .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
-            .slice(0, 8)
-        : [];
-
-      const matchedIds = Array.isArray(parsed.matchedIds)
-        ? Array.from(
-            new Set(
-              parsed.matchedIds.filter(
-                (id): id is string => typeof id === 'string' && validCatalogIds.has(id)
-              )
-            )
-          )
-        : [];
-
-      const relatedIds = Array.isArray(parsed.relatedIds)
-        ? Array.from(
-            new Set(
-              parsed.relatedIds.filter(
-                (id): id is string =>
-                  typeof id === 'string' &&
-                  validCatalogIds.has(id) &&
-                  !matchedIds.includes(id)
-              )
-            )
-          )
-        : [];
-
-      const correctedQuery =
-        typeof parsed.correctedQuery === 'string' && parsed.correctedQuery.trim()
-          ? parsed.correctedQuery.trim()
-          : undefined;
-
-      const answer =
-        typeof parsed.answer === 'string' && parsed.answer.trim()
-          ? parsed.answer.trim()
-          : undefined;
-
-      const payload: ExpandSearchResult = {
-        keywords,
-        matchedIds,
-        relatedIds,
-        correctedQuery,
-        answer,
-      };
-      clientSearchCache.set(cacheKey, {
-        expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
-        payload,
-      });
-      return payload;
+    if (!response.ok) {
+      return { keywords: [] };
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-4-hydrogen' });
-    const prompt = `The user is searching a campus marketplace for: '${trimmed}'. Handle any typos, misspellings, slang, or long phrases. Return a comma-separated list of 5 specific related items they might be looking for. Example: If they search 'eat bread', return 'butter, akara, egg, tea, jam'. If they search 'phone', return 'iphone, android, charger, case, screen protector'. Return ONLY the comma-separated list, no other text.`;
-
-    const result = await model.generateContent(prompt, { signal });
-    const rawText = result.response.text().trim();
-    return {
-      keywords: parseExpandedKeywords(rawText),
-    };
+    const payload = (await response.json()) as ExpandSearchResult;
+    clientSearchCache.set(cacheKey, {
+      expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+      payload,
+    });
+    return payload;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw error;
@@ -612,7 +510,7 @@ Return ONLY valid JSON:
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    console.error('AI Error:', error);
+    console.error('AI Search Error:', error);
     return { keywords: [] };
   }
 }
@@ -626,132 +524,28 @@ export async function searchByImage(
   const filteredCatalog = catalog
     .filter((c) => c.category?.toLowerCase() !== 'accommodation')
     .slice(0, 200);
-  const validCatalogIds = new Set(filteredCatalog.map((c) => c.id));
 
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    console.warn(
-      'VITE_GEMINI_API_KEY is not configured. Add it in Settings > Secrets or .env.local to enable Gemini AI visual search.'
-    );
-    return { keywords: [] };
-  }
-
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-4-hydrogen',
-      generationConfig: { responseMimeType: 'application/json' },
+    const response = await fetch('/api/ai/search-by-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image,
+        catalog: filteredCatalog,
+        query,
+      }),
+      signal,
     });
 
-    const compactCatalog = filteredCatalog.map((c) => ({
-      id: c.id,
-      t: c.title,
-      c: [c.category, c.subcategory].filter(Boolean).join(' / '),
-      d: c.description,
-      l: c.location,
-    }));
-
-    const userNote = query.trim().slice(0, 300);
-    const prompt = `Visual campus marketplace search for LASUEDPLUG.
-Analyze the uploaded photo carefully${userNote ? ` along with the user note "${userNote}"` : ''}.
-Identify what product/item is shown in the picture (type, brand, purpose, synonyms) and match it against these active marketplace listings:
-${JSON.stringify(compactCatalog)}
-
-Rules:
-- "detectedItem": short 2-5 word name of what you see in the picture (e.g. "White Nike sneakers", "Electric kettle", "HP laptop").
-- "keywords": 5-8 relevant search terms describing the object in the image.
-- "matchedIds": listing IDs that best match what is in the picture.
-- "relatedIds": backup similar listing IDs if direct matches are few.
-- "answer": 1 friendly sentence explaining what was detected in the photo and what matching campus listings were found.
-Return ONLY valid JSON:
-{"detectedItem":"...","keywords":["..."],"matchedIds":["..."],"relatedIds":["..."],"answer":"..."}`;
-
-    const cleanData = image.data.replace(
-      /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
-      ''
-    );
-
-    const result = await model.generateContent(
-      [
-        {
-          inlineData: {
-            mimeType: image.mimeType,
-            data: cleanData,
-          },
-        },
-        prompt,
-      ],
-      { signal }
-    );
-
-    const rawJson = result.response
-      .text()
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/i, '')
-      .trim();
-
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = JSON.parse(rawJson) as Record<string, unknown>;
-    } catch {
-      parsed = {};
+    if (!response.ok) {
+      return { keywords: [] };
     }
 
-    const detectedItem =
-      typeof parsed.detectedItem === 'string' && parsed.detectedItem.trim()
-        ? parsed.detectedItem.trim()
-        : undefined;
-
-    const keywords = Array.isArray(parsed.keywords)
-      ? parsed.keywords
-          .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
-          .slice(0, 8)
-      : [];
-
-    const matchedIds = Array.isArray(parsed.matchedIds)
-      ? Array.from(
-          new Set(
-            parsed.matchedIds.filter(
-              (id): id is string => typeof id === 'string' && validCatalogIds.has(id)
-            )
-          )
-        )
-      : [];
-
-    const relatedIds = Array.isArray(parsed.relatedIds)
-      ? Array.from(
-          new Set(
-            parsed.relatedIds.filter(
-              (id): id is string =>
-                typeof id === 'string' &&
-                validCatalogIds.has(id) &&
-                !matchedIds.includes(id)
-            )
-          )
-        )
-      : [];
-
-    const answer =
-      typeof parsed.answer === 'string' && parsed.answer.trim()
-        ? parsed.answer.trim()
-        : undefined;
-
-    return {
-      detectedItem,
-      keywords,
-      matchedIds,
-      relatedIds,
-      correctedQuery:
-        typeof parsed.correctedQuery === 'string' && parsed.correctedQuery.trim()
-          ? parsed.correctedQuery.trim()
-          : detectedItem,
-      answer,
-    };
+    return (await response.json()) as VisualSearchResult;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw error;
@@ -759,7 +553,7 @@ Return ONLY valid JSON:
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    console.error('AI Error:', error);
+    console.error('AI Visual Search Error:', error);
     return { keywords: [] };
   }
 }
