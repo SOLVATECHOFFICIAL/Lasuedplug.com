@@ -319,11 +319,11 @@ export function MarketplaceDetail() {
       {/* Back link */}
       <div>
         <Link
-          to="/marketplace"
+          to={isServiceListing ? '/services' : '/marketplace'}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Marketplace</span>
+          <span>{isServiceListing ? 'Back to Services' : 'Back to Marketplace'}</span>
         </Link>
       </div>
 

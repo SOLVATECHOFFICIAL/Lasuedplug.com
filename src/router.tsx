@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute';
 
@@ -15,8 +15,6 @@ import { MarketplaceCreate } from './pages/marketplace/Create';
 import { MarketplaceEdit } from './pages/marketplace/Edit';
 
 import { ServicesIndex } from './pages/services/Index';
-import { ServicesDetail } from './pages/services/Detail';
-import { ServicesCreate } from './pages/services/Create';
 
 import { AccommodationIndex } from './pages/accommodation/Index';
 import { AccommodationDetail } from './pages/accommodation/Detail';
@@ -26,11 +24,7 @@ import { Roommates } from './pages/accommodation/Roommates';
 import { SellerDashboard } from './pages/dashboard/Seller';
 import { BuyerDashboard } from './pages/dashboard/Buyer';
 import { ProfilePage } from './pages/dashboard/Profile';
-import { SettingsPage } from './pages/dashboard/Settings';
 import { CreateStore } from './pages/store/CreateStore';
-
-import { MessagesIndex } from './pages/messages/Index';
-import { MessageDetail } from './pages/messages/Detail';
 
 import { NotificationsIndex } from './pages/notifications/Index';
 
@@ -81,15 +75,6 @@ export function AppRouter() {
 
       {/* Services */}
       <Route path="/services" element={<ServicesIndex />} />
-      <Route
-        path="/services/create"
-        element={
-          <ProtectedRoute requireCompleteProfile>
-            <ServicesCreate />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/services/:id" element={<ServicesDetail />} />
 
       {/* Accommodation & Roommates */}
       <Route path="/accommodation" element={<AccommodationIndex />} />
@@ -132,11 +117,7 @@ export function AppRouter() {
       />
       <Route
         path="/dashboard/settings"
-        element={
-          <ProtectedRoute>
-            <SettingsPage />
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/dashboard/profile" replace />}
       />
 
       {/* Stores (Protected) */}
@@ -157,23 +138,6 @@ export function AppRouter() {
         }
       />
 
-      {/* Messages (Protected) */}
-      <Route
-        path="/messages"
-        element={
-          <ProtectedRoute requireCompleteProfile>
-            <MessagesIndex />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/messages/:id"
-        element={
-          <ProtectedRoute requireCompleteProfile>
-            <MessageDetail />
-          </ProtectedRoute>
-        }
-      />
 
       {/* Notifications (Protected) */}
       <Route

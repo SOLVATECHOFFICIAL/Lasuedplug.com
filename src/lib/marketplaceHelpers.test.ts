@@ -262,4 +262,20 @@ test('applyLocalMarketplaceFiltersAndSort excludes accommodation listings from m
   const filtered = applyLocalMarketplaceFiltersAndSort(withHouse, {});
   assert.ok(filtered.every((item) => item.categoryId !== 'accommodation'));
   assert.equal(filtered.length, 3);
+
+  const itemsOnly = applyLocalMarketplaceFiltersAndSort(withHouse, {
+    adType: 'item',
+  });
+  assert.deepEqual(
+    itemsOnly.map((item) => item.id),
+    ['2', '1']
+  );
+
+  const servicesOnly = applyLocalMarketplaceFiltersAndSort(withHouse, {
+    adType: 'service',
+  });
+  assert.deepEqual(
+    servicesOnly.map((item) => item.id),
+    ['3']
+  );
 });

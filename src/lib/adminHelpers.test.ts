@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  extractListingOwnerId,
   filterAdminUsers,
   filterPendingAdminItems,
   getAdminModuleLabel,
   getAdminReportTargetCollection,
+  getAdminUserFilterUrl,
   getPrimaryUserRoleBadge,
+  getReportListingRoute,
   isAuthorizedAdminEmail,
   isAuthorizedAdminSession,
   isUserAdmin,
@@ -96,8 +99,11 @@ test('admin pending queue mappers normalize all 4 modules cleanly', () => {
     status: 'active',
     isApproved: false,
     isActive: true,
+    needsAiReview: true,
     createdAt: 200,
   });
+  assert.equal(servicePending.needsAiReview, true);
+  assert.equal(itemPending.needsAiReview, false);
   const roomPending = mapAccommodationToPendingAdminItem({
     id: 'a1',
     ownerId: 'u2',
@@ -195,8 +201,54 @@ test('filterAdminUsers filters by name, email, or department and detects primary
 
   assert.equal(filterAdminUsers(users, 'ada').length, 1);
   assert.equal(filterAdminUsers(users, 'economics').length, 1);
+  assert.equal(filterAdminUsers(users, '2').length, 1);
+  assert.equal(filterAdminUsers(users, '2')[0].email, 'tunde@lasued.edu.ng');
   assert.equal(getPrimaryUserRoleBadge(users[0]), 'Admin');
   assert.equal(getPrimaryUserRoleBadge(users[1]), 'Landlord');
+});
+
+test('extractListingOwnerId, getReportListingRoute, and getAdminUserFilterUrl resolve moderation targets', () => {
+  assert.equal(
+    extractListingOwnerId('product', 'p-1', { sellerId: 'u-seller' }),
+    'u-seller'
+  );
+  assert.equal(
+    extractListingOwnerId('service', 's-1', { providerId: 'u-provider' }),
+    'u-provider'
+  );
+  assert.equal(
+    extractListingOwnerId('accommodation', 'a-1', { ownerId: 'u-landlord' }),
+    'u-landlord'
+  );
+  assert.equal(
+    extractListingOwnerId('roommate_request', 'r-1', { userId: 'u-student' }),
+    'u-student'
+  );
+  assert.equal(
+    extractListingOwnerId('store', 'st-1', { ownerId: 'u-store' }),
+    'u-store'
+  );
+  assert.equal(extractListingOwnerId('user', 'u-reported', null), 'u-reported');
+  assert.equal(extractListingOwnerId('product', 'p-missing', null), null);
+
+  assert.equal(getReportListingRoute('product', 'p-1'), '/marketplace/p-1');
+  assert.equal(getReportListingRoute('service', 's-1'), '/marketplace/s-1');
+  assert.equal(
+    getReportListingRoute('accommodation', 'a-1'),
+    '/accommodation/a-1'
+  );
+  assert.equal(
+    getReportListingRoute('roommate_request', 'r-1'),
+    '/roommates'
+  );
+  assert.equal(
+    getReportListingRoute('store', 'st-1', { name: 'Plug Store' }),
+    '/marketplace?tab=stores&q=Plug%20Store'
+  );
+  assert.equal(getReportListingRoute('user', 'u-1'), null);
+
+  assert.equal(getAdminUserFilterUrl('ada@lasued.edu.ng'), '/admin/users?q=ada%40lasued.edu.ng');
+  assert.equal(getAdminUserFilterUrl(''), '/admin/users');
 });
 
 test('unified seller dashboard helpers combine accommodations, roommates, and stores with status badges', () => {

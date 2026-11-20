@@ -1,9 +1,9 @@
 import imageCompression from 'browser-image-compression';
 
 const MAX_DIMENSION_PX = 800;
-const MAX_SIZE_MB = 0.1;
-// 100 KB binary ≈ 136,500 Base64 chars (+ data URL prefix)
-const MAX_DATA_URL_LENGTH = 140_000;
+const MAX_SIZE_MB = 0.07;
+// Base64 expands binary by ~33%, so 98,000 chars keeps even the Base64 Data URL < 100 KB
+const MAX_DATA_URL_LENGTH = 98_000;
 
 export function isImageFile(file: File): boolean {
   if (file.type && file.type.startsWith('image/')) {
@@ -81,7 +81,7 @@ async function compressViaCanvas(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    for (const quality of [0.8, 0.65, 0.5, 0.35, 0.25]) {
+    for (const quality of [0.8, 0.65, 0.5, 0.35, 0.25, 0.15]) {
       const candidate = canvas.toDataURL('image/jpeg', quality);
       if (candidate.length <= maxDataUrlLength) {
         return candidate;
@@ -89,7 +89,7 @@ async function compressViaCanvas(
     }
   }
 
-  return canvas.toDataURL('image/jpeg', 0.25);
+  return canvas.toDataURL('image/jpeg', 0.15);
 }
 
 /**

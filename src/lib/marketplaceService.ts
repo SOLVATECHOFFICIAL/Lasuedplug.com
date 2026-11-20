@@ -24,7 +24,8 @@ import {
   MarketplaceSortOption,
 } from './marketplaceHelpers';
 import { matchProductsBySearchKeywords } from './aiSearchService';
-import { Product } from '../types';
+import { AdType, Product } from '../types';
+import { getListingAdType } from './marketplaceHelpers';
 
 export const MARKETPLACE_PAGE_SIZE = 12;
 
@@ -38,7 +39,7 @@ function getRequiredCompositeIndexHint(
   filters: MarketplaceFilters,
   sortBy: MarketplaceSortOption
 ): string {
-  const fields = ['isApproved ASC', 'isActive ASC'];
+  const fields = ['isApproved ASC', 'isActive ASC', 'adType ASC'];
   if (filters.categoryId) fields.push('categoryId ASC');
   if (filters.subcategory) fields.push('subcategory ASC');
   if (sortBy === 'price_asc') fields.push('price ASC');
@@ -50,8 +51,7 @@ function getRequiredCompositeIndexHint(
 }
 
 /**
- * Fetches the top 8 trending products sorted by viewCount (descending).
- * Requires composite index: products (isApproved ASC, isActive ASC, viewCount DESC).
+ * Fetches the top 8 trending items (adType == 'item') sorted by viewCount (descending).
  */
 export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> {
   if (!db) {
@@ -65,6 +65,7 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
       colRef,
       where('isApproved', '==', true),
       where('isActive', '==', true),
+      where('adType', '==', 'item'),
       orderBy('viewCount', 'desc'),
       limit(limitCount)
     );
@@ -74,12 +75,15 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
         id: docSnap.id,
         ...(docSnap.data() as Omit<Product, 'id'>),
       }))
-      .filter((item) => item.categoryId !== 'accommodation');
+      .filter(
+        (item) =>
+          item.categoryId !== 'accommodation' && getListingAdType(item) === 'item'
+      );
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
       console.warn(
-        'Firestore composite index required on collection "products": (isApproved ASC, isActive ASC, viewCount DESC). Check firestore.indexes.json.',
+        'Firestore composite index required on collection "products": (isApproved ASC, isActive ASC, adType ASC, viewCount DESC). Check firestore.indexes.json.',
         firestoreErr.message
       );
       const fallbackQ = query(colRef, where('isApproved', '==', true));
@@ -93,7 +97,8 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
           (item) =>
             item.isApproved === true &&
             item.isActive === true &&
-            item.categoryId !== 'accommodation'
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === 'item'
         )
         .sort((a, b) => {
           const viewDiff = (b.viewCount || 0) - (a.viewCount || 0);
@@ -114,10 +119,12 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
 }
 
 /**
- * Fetches all approved & active Firestore products so AI search can scan
- * every listing (titles, descriptions, categories, locations, and image hints).
+ * Fetches all approved & active Firestore products strictly filtered by adType (defaults to 'item')
+ * so Marketplace AI search only scans physical items and Services only scans services.
  */
-export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
+export async function fetchAllApprovedActiveProducts(
+  targetAdType: AdType = 'item'
+): Promise<Product[]> {
   if (!db) {
     return [];
   }
@@ -125,19 +132,27 @@ export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
   const colRef = collection(db, 'products');
 
   try {
-    const q = query(
-      colRef,
+    const constraints: QueryConstraint[] = [
       where('isApproved', '==', true),
       where('isActive', '==', true),
-      limit(250)
-    );
+    ];
+    if (targetAdType === 'service') {
+      constraints.push(where('adType', '==', 'service'));
+    }
+    constraints.push(limit(250));
+
+    const q = query(colRef, ...constraints);
     const snapshot = await getDocs(q);
     return snapshot.docs
       .map((docSnap) => ({
         id: docSnap.id,
         ...(docSnap.data() as Omit<Product, 'id'>),
       }))
-      .filter((item) => item.categoryId !== 'accommodation');
+      .filter(
+        (item) =>
+          item.categoryId !== 'accommodation' &&
+          getListingAdType(item) === targetAdType
+      );
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
@@ -152,7 +167,8 @@ export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
           (item) =>
             item.isApproved === true &&
             item.isActive === true &&
-            item.categoryId !== 'accommodation'
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === targetAdType
         );
     }
     if (firestoreErr?.code === 'unavailable') {
@@ -164,24 +180,25 @@ export async function fetchAllApprovedActiveProducts(): Promise<Product[]> {
   }
 }
 
+export async function fetchApprovedActiveServices(): Promise<Product[]> {
+  return fetchAllApprovedActiveProducts('service');
+}
+
 /**
- * Queries approved & active Firestore products and matches them against
+ * Queries approved & active Firestore products (items only) and matches them against
  * the original search query plus AI-expanded keywords.
  */
 export async function fetchProductsByAiKeywords(
   originalQuery: string,
   expandedKeywords: string[]
 ): Promise<Product[]> {
-  const docs = await fetchAllApprovedActiveProducts();
+  const docs = await fetchAllApprovedActiveProducts('item');
   return matchProductsBySearchKeywords(docs, originalQuery, expandedKeywords);
 }
 
 /**
- * Fetches paginated marketplace products with category, subcategory, search, and sorting.
- *
- * NOTE: Combining `where` clauses (isApproved, isActive, categoryId, subcategory)
- * with `orderBy` (createdAt, price, or contactCount) requires composite indexes in Firestore.
- * Required indexes are defined in `firestore.indexes.json`.
+ * Fetches paginated marketplace products (strictly adType == 'item' by default)
+ * with category, subcategory, search, and sorting.
  */
 export async function fetchMarketplaceProducts(
   limitCount = MARKETPLACE_PAGE_SIZE,
@@ -194,11 +211,13 @@ export async function fetchMarketplaceProducts(
 
   const colRef = collection(db, 'products');
   const sortBy: MarketplaceSortOption = filters.sortBy || 'newest';
+  const targetAdType: AdType = filters.adType || 'item';
   const trimmedSearch = filters.searchQuery?.trim() || '';
 
   const baseConstraints: QueryConstraint[] = [
     where('isApproved', '==', true),
     where('isActive', '==', true),
+    where('adType', '==', targetAdType),
   ];
 
   if (filters.categoryId?.trim()) {
@@ -228,7 +247,11 @@ export async function fetchMarketplaceProducts(
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
         }))
-        .filter((item) => item.categoryId !== 'accommodation');
+        .filter(
+          (item) =>
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === targetAdType
+        );
       const matched = filterProductsByQuery(rawDocs, trimmedSearch);
       return {
         products: matched,
@@ -256,7 +279,11 @@ export async function fetchMarketplaceProducts(
         id: docSnap.id,
         ...(docSnap.data() as Omit<Product, 'id'>),
       }))
-      .filter((item) => item.categoryId !== 'accommodation');
+      .filter(
+        (item) =>
+          item.categoryId !== 'accommodation' &&
+          getListingAdType(item) === targetAdType
+      );
 
     return {
       products,
@@ -281,7 +308,10 @@ export async function fetchMarketplaceProducts(
           ...(docSnap.data() as Omit<Product, 'id'>),
         };
       });
-      const filtered = applyLocalMarketplaceFiltersAndSort(rawDocs, filters);
+      const filtered = applyLocalMarketplaceFiltersAndSort(rawDocs, {
+        ...filters,
+        adType: targetAdType,
+      });
 
       if (trimmedSearch) {
         return {
@@ -317,7 +347,10 @@ export async function fetchMarketplaceProducts(
 }
 
 export async function getApprovedProducts(): Promise<Product[]> {
-  const result = await fetchMarketplaceProducts(100, null, { sortBy: 'newest' });
+  const result = await fetchMarketplaceProducts(100, null, {
+    adType: 'item',
+    sortBy: 'newest',
+  });
   return result.products;
 }
 
@@ -328,13 +361,31 @@ export async function getProductById(id: string): Promise<Product | null> {
 
   try {
     const snap = await getDoc(doc(db, 'products', id));
-    if (!snap.exists()) {
-      return null;
+    if (snap.exists()) {
+      return {
+        id: snap.id,
+        ...(snap.data() as Omit<Product, 'id'>),
+      };
     }
-    return {
-      id: snap.id,
-      ...(snap.data() as Omit<Product, 'id'>),
-    };
+
+    // Fallback for legacy documents in `services` collection now routed to /marketplace/:id
+    const legacyServiceSnap = await getDoc(doc(db, 'services', id));
+    if (legacyServiceSnap.exists()) {
+      const data = legacyServiceSnap.data() as Record<string, unknown>;
+      return {
+        ...(data as Omit<Product, 'id'>),
+        id: legacyServiceSnap.id,
+        sellerId:
+          typeof data.providerId === 'string'
+            ? data.providerId
+            : typeof data.sellerId === 'string'
+              ? data.sellerId
+              : '',
+        adType: 'service',
+      };
+    }
+
+    return null;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'unavailable') {

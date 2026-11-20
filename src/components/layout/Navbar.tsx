@@ -4,6 +4,7 @@ import {
   Bell,
   CheckCheck,
   ChevronDown,
+  Download,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -26,6 +27,7 @@ import {
 import { isAuthorizedAdminEmail } from '../../lib/adminHelpers';
 import { AppNotification } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePWAInstall } from '../../contexts/PWAContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../ui/Button';
 import { OfflineBanner } from './OfflineBanner';
@@ -48,6 +50,8 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, loading, signOut } = useAuth();
+  const { canInstall, installing: pwaInstalling, install: installPwa } =
+    usePWAInstall();
   const { showToast } = useToast();
 
   const displayName = profile?.fullName || user?.displayName || 'Campus User';
@@ -199,6 +203,19 @@ export function Navbar() {
 
           {/* Desktop Right Auth / Account */}
           <div className="hidden md:flex items-center gap-2.5 shrink-0">
+            {canInstall && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pwaInstalling}
+                onClick={() => void installPwa()}
+                aria-label="Install App"
+                data-testid="navbar-install-app-desktop"
+              >
+                <Download className="w-4 h-4 text-primary-600" />
+                <span>Install App</span>
+              </Button>
+            )}
             {loading ? (
               <div className="h-9 w-24 rounded-lg bg-slate-100 animate-pulse" />
             ) : user ? (
@@ -429,6 +446,21 @@ export function Navbar() {
 
           {/* Mobile Right Controls */}
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            {canInstall && (
+              <button
+                type="button"
+                disabled={pwaInstalling}
+                onClick={() => void installPwa()}
+                aria-label="Install App"
+                data-testid="navbar-install-app-mobile"
+                className="inline-flex items-center gap-1 min-h-[40px] px-2.5 py-1.5 rounded-full bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-60 shrink-0"
+              >
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Install<span className="hidden min-[400px]:inline"> App</span>
+                </span>
+              </button>
+            )}
             {!loading && user && (
               <>
                 <Link
@@ -551,6 +583,21 @@ export function Navbar() {
           </div>
 
           <div className="pt-6 border-t border-slate-200 flex flex-col gap-3">
+            {canInstall && (
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={pwaInstalling}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  void installPwa();
+                }}
+              >
+                <Download className="w-4 h-4" />
+                Install App
+              </Button>
+            )}
             {user ? (
               <>
                 <Button

@@ -1,11 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  expandSearchQuery,
   extractImageHint,
   findBestAndRelatedProducts,
+  getSearchCacheKey,
   matchProductsBySearchKeywords,
   parseExpandedKeywords,
   parseSafeJsonResponse,
+  parseStructuredSearchPayload,
+  parseStructuredVisualSearchPayload,
+  readCachedSearchKeywords,
+  writeCachedSearchKeywords,
 } from './aiSearchService';
 import { Product } from '../types';
 
@@ -104,7 +110,7 @@ const TEST_PRODUCTS: Product[] = [
   },
 ];
 
-test('parseExpandedKeywords parses comma-separated Gemini responses cleanly up to 8 items', () => {
+test('parseExpandedKeywords parses comma-separated Groq responses cleanly up to 8 items', () => {
   assert.deepEqual(
     parseExpandedKeywords('butter, akara, egg, tea, jam'),
     ['butter', 'akara', 'egg', 'tea', 'jam']
@@ -116,6 +122,57 @@ test('parseExpandedKeywords parses comma-separated Gemini responses cleanly up t
   );
 
   assert.deepEqual(parseExpandedKeywords(''), []);
+});
+
+test('search localStorage caching stores and reads ai_search_<query> arrays cleanly', async () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      store.set(k, v);
+    },
+  };
+
+  assert.equal(getSearchCacheKey('eat bread'), 'ai_search_eat bread');
+  assert.equal(readCachedSearchKeywords('eat bread', mockStorage), null);
+
+  writeCachedSearchKeywords(
+    'eat bread',
+    ['butter', 'akara', 'egg', 'jam', 'tea'],
+    mockStorage
+  );
+  assert.equal(
+    store.get('ai_search_eat bread'),
+    JSON.stringify(['butter', 'akara', 'egg', 'jam', 'tea'])
+  );
+  assert.deepEqual(readCachedSearchKeywords('eat bread', mockStorage), [
+    'butter',
+    'akara',
+    'egg',
+    'jam',
+    'tea',
+  ]);
+
+  const prevLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: mockStorage,
+  });
+  try {
+    const cachedResult = await expandSearchQuery('eat bread');
+    assert.deepEqual(cachedResult.keywords, [
+      'butter',
+      'akara',
+      'egg',
+      'jam',
+      'tea',
+    ]);
+  } finally {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: prevLocalStorage,
+    });
+  }
 });
 
 test('matchProductsBySearchKeywords ranks direct and AI-expanded matches cleanly', () => {
@@ -242,4 +299,31 @@ test('parseSafeJsonResponse returns null on HTML SPA fallback responses and pars
     keywords: ['butter', 'bread'],
     correctedQuery: 'butter',
   });
+});
+
+test('parseStructuredSearchPayload & parseStructuredVisualSearchPayload sanitize catalog IDs safely', () => {
+  const validIds = new Set(['p1', 'p2']);
+  const searchPayload = parseStructuredSearchPayload(
+    '```json\n{"correctedQuery":"butter","keywords":["butter","spread"],"matchedIds":["p1","fake"],"relatedIds":["p1","p2"],"answer":"Found butter."}\n```',
+    validIds
+  );
+
+  assert.equal(searchPayload.correctedQuery, 'butter');
+  assert.deepEqual(searchPayload.matchedIds, ['p1']);
+  assert.deepEqual(searchPayload.relatedIds, ['p2']);
+  assert.equal(searchPayload.answer, 'Found butter.');
+
+  const visualPayload = parseStructuredVisualSearchPayload(
+    JSON.stringify({
+      detectedItem: 'Fresh Butter',
+      keywords: ['butter'],
+      matchedIds: ['p1'],
+      relatedIds: ['p2'],
+      answer: 'Detected Fresh Butter.',
+    }),
+    validIds
+  );
+  assert.equal(visualPayload.detectedItem, 'Fresh Butter');
+  assert.equal(visualPayload.correctedQuery, 'Fresh Butter');
+  assert.deepEqual(visualPayload.matchedIds, ['p1']);
 });

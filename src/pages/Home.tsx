@@ -471,7 +471,7 @@ export function Home() {
             {visibleServices.map((service) => (
               <Link
                 key={service.id || service.title}
-                to={`/services/${service.id}`}
+                to={`/marketplace/${service.id}`}
                 className="group block h-full transition-all duration-200"
               >
                 <Card padded={false} className="h-full overflow-hidden flex flex-col">

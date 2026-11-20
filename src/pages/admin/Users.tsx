@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
+  Ban,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -7,6 +9,7 @@ import {
   ShieldAlert,
   UserCheck,
   UserX,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -24,12 +27,32 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 export function AdminUsers() {
   const { user: currentUser } = useAuth();
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [busyUid, setBusyUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    const paramQuery = searchParams.get('q') || '';
+    if (paramQuery !== searchQuery) {
+      setSearchQuery(paramQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      nextParams.set('q', value);
+    } else {
+      nextParams.delete('q');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -70,12 +93,18 @@ export function AdminUsers() {
       await updateUserAccountStatus(target.uid, nextStatus);
       setUsers((prev) =>
         prev.map((u) =>
-          u.uid === target.uid ? { ...u, status: nextStatus } : u
+          u.uid === target.uid
+            ? {
+                ...u,
+                status: nextStatus,
+                ...(nextStatus === 'active' ? { isBanned: false } : {}),
+              }
+            : u
         )
       );
       showToast(
         nextStatus === 'suspended'
-          ? `${target.fullName || target.email} has been suspended.`
+          ? `${target.fullName || target.email} has been suspended and their listings hidden.`
           : `${target.fullName || target.email} is active again.`,
         'info'
       );
@@ -92,7 +121,7 @@ export function AdminUsers() {
   return (
     <AdminLayout
       title="Users Management"
-      subtitle="View registered campus accounts, roles, and manage account access."
+      subtitle="View registered campus accounts, roles, and manage reversible account suspensions."
       actionSlot={
         <Button
           variant="outline"
@@ -125,11 +154,21 @@ export function AdminUsers() {
             <input
               type="search"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or department..."
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by name, email, department, or UID..."
               aria-label="Search users"
-              className="block w-full pl-10 pr-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="block w-full pl-10 pr-9 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                aria-label="Clear user search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {filteredUsers.length === 0 ? (
@@ -152,6 +191,7 @@ export function AdminUsers() {
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {filteredUsers.map((account) => {
                       const isSuspended = account.status === 'suspended';
+                      const isBanned = account.isBanned === true;
                       const isSelf = account.uid === currentUser?.uid;
                       const isBusy = busyUid === account.uid;
 
@@ -177,17 +217,25 @@ export function AdminUsers() {
                             </span>
                           </td>
                           <td className="py-3.5 px-4">
-                            {isSuspended ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-                                <ShieldAlert className="w-3.5 h-3.5" />
-                                <span>Suspended</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Active</span>
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {isSuspended ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                  <ShieldAlert className="w-3.5 h-3.5" />
+                                  <span>Suspended</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Active</span>
+                                </span>
+                              )}
+                              {isBanned && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-900 text-white">
+                                  <Ban className="w-3 h-3" />
+                                  <span>Banned</span>
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <Button

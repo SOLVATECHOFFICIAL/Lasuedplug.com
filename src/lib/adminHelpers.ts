@@ -33,6 +33,7 @@ export interface PendingAdminItem {
   priceOrSubtitle: string;
   locationLabel: string;
   thumbnail?: string;
+  needsAiReview?: boolean;
   createdAt: unknown;
 }
 
@@ -101,6 +102,7 @@ export function mapProductToPendingAdminItem(product: Product): PendingAdminItem
     priceOrSubtitle: priceText,
     locationLabel: product.locationName || product.landmark || 'Campus Area',
     thumbnail: product.images?.[0],
+    needsAiReview: Boolean(product.needsAiReview),
     createdAt: product.createdAt,
   };
 }
@@ -188,6 +190,7 @@ export function filterAdminUsers(
   }
   return users.filter(
     (user) =>
+      (user.uid || '').toLowerCase().includes(q) ||
       (user.fullName || '').toLowerCase().includes(q) ||
       (user.email || '').toLowerCase().includes(q) ||
       (user.department || '').toLowerCase().includes(q)
@@ -218,6 +221,73 @@ export function getAdminReportTargetCollection(
     default:
       return null;
   }
+}
+
+export function extractListingOwnerId(
+  targetType: Report['targetType'],
+  targetId: string,
+  targetData?: Record<string, unknown> | null
+): string | null {
+  if (targetType === 'user') {
+    return targetId || null;
+  }
+  if (!targetData) {
+    return null;
+  }
+  const candidate =
+    targetData.sellerId ??
+    targetData.providerId ??
+    targetData.ownerId ??
+    targetData.userId;
+  return typeof candidate === 'string' && candidate.trim()
+    ? candidate.trim()
+    : null;
+}
+
+export function getReportListingRoute(
+  targetType: Report['targetType'],
+  targetId: string,
+  targetData?: Record<string, unknown> | null
+): string | null {
+  if (!targetId.trim()) return null;
+  switch (targetType) {
+    case 'product':
+    case 'service':
+      return `/marketplace/${targetId}`;
+    case 'accommodation':
+      return `/accommodation/${targetId}`;
+    case 'roommate_request':
+      return '/roommates';
+    case 'store': {
+      const storeName =
+        typeof targetData?.name === 'string' ? targetData.name.trim() : '';
+      return storeName
+        ? `/marketplace?tab=stores&q=${encodeURIComponent(storeName)}`
+        : '/marketplace?tab=stores';
+    }
+    case 'user':
+    default:
+      return null;
+  }
+}
+
+export function getAdminUserFilterUrl(searchTerm?: string | null): string {
+  const clean = (searchTerm || '').trim();
+  return clean ? `/admin/users?q=${encodeURIComponent(clean)}` : '/admin/users';
+}
+
+export interface EnrichedReport {
+  report: Report;
+  reporterName: string;
+  offenderId: string | null;
+  offenderName: string;
+  offenderEmail: string;
+  offenderStatus: 'active' | 'suspended' | null;
+  offenderIsBanned: boolean;
+  offenderProfileUrl: string | null;
+  listingTitle: string;
+  listingExists: boolean;
+  listingUrl: string | null;
 }
 
 export function getPrimaryUserRoleBadge(user: Pick<UserProfile, 'roles'>): string {

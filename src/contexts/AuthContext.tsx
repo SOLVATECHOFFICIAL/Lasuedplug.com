@@ -6,6 +6,7 @@ import {
   ReactNode,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import {
   User as FirebaseUser,
@@ -15,17 +16,32 @@ import {
   signOut as firebaseSignOut,
   updateProfile,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { useToast } from './ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
+  BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
   getFieldCooldownStatus,
   isAcademicFieldLocked,
+  isAccountSuspended,
   NAME_LOCK_MESSAGE,
   PHONE_UPDATE_COOLDOWN_DAYS,
+  SUSPENDED_ACCOUNT_MESSAGE,
 } from '../lib/authHelpers';
 import { UserProfile } from '../types';
 
@@ -40,6 +56,8 @@ export interface ProfileUpdateFields {
 export interface AuthContextValue {
   user: FirebaseUser | null;
   profile: UserProfile | null;
+  status: UserProfile['status'] | null;
+  isSuspended: boolean;
   loading: boolean;
   isProfileComplete: boolean;
   signUp: (email: string, password: string, fullName?: string) => Promise<void>;
@@ -51,33 +69,94 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function isEmailBannedInFirestore(email: string): Promise<boolean> {
+  if (!db || !email.trim()) {
+    return false;
+  }
+  try {
+    const normalized = email.trim().toLowerCase();
+    const snap = await getDocs(
+      query(collection(db, 'users'), where('email', '==', normalized), limit(5))
+    );
+    return snap.docs.some((docSnap) => {
+      const data = docSnap.data() as Partial<UserProfile>;
+      return data.isBanned === true;
+    });
+  } catch (err) {
+    console.warn('Failed to verify email ban status:', err);
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const { showToast } = useToast();
+  const suspensionToastUidRef = useRef<string | null>(null);
+
+  const isSuspended = useMemo(() => isAccountSuspended(profile), [profile]);
+  const status: UserProfile['status'] | null = profile?.status ?? null;
 
   const isProfileComplete = useMemo(
-    () => Boolean(user) && checkProfileCompleteness(profile),
-    [user, profile]
+    () => Boolean(user) && !isSuspended && checkProfileCompleteness(profile),
+    [user, profile, isSuspended]
   );
 
-  const fetchUserProfile = useCallback(async (uid: string) => {
-    if (!db) {
-      setProfile(null);
-      return;
-    }
-    try {
-      const snap = await getDoc(doc(db, 'users', uid));
-      if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
-      } else {
-        setProfile(null);
+  const handleSuspendedLogout = useCallback(
+    async (uid?: string | null) => {
+      if (auth) {
+        try {
+          await firebaseSignOut(auth);
+        } catch (err) {
+          console.warn('Failed to sign out suspended user:', err);
+        }
       }
-    } catch (err) {
-      console.warn('Failed to load user profile:', err);
+      setUser(null);
       setProfile(null);
-    }
-  }, []);
+      const key = uid || 'suspended';
+      if (suspensionToastUidRef.current !== key) {
+        suspensionToastUidRef.current = key;
+        showToast(SUSPENDED_ACCOUNT_MESSAGE, 'error');
+      }
+    },
+    [showToast]
+  );
+
+  const fetchUserProfile = useCallback(
+    async (uid: string, email?: string | null) => {
+      if (!db) {
+        setProfile(null);
+        return null;
+      }
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (snap.exists()) {
+          const data = {
+            uid: snap.id,
+            ...(snap.data() as Omit<UserProfile, 'uid'>),
+          };
+          if (isAccountSuspended(data)) {
+            await handleSuspendedLogout(uid);
+            return null;
+          }
+          setProfile(data);
+          return data;
+        }
+        if (email && (await isEmailBannedInFirestore(email))) {
+          await handleSuspendedLogout(uid);
+          return null;
+        }
+        setProfile(null);
+        return null;
+      } catch (err) {
+        console.warn('Failed to load user profile:', err);
+        setProfile(null);
+        return null;
+      }
+    },
+    [handleSuspendedLogout]
+  );
 
   useEffect(() => {
     if (!auth) {
@@ -87,26 +166,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        await fetchUserProfile(firebaseUser.uid);
-      } else {
-        setProfile(null);
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
       }
+
+      if (!firebaseUser) {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      suspensionToastUidRef.current = null;
+      const loadedProfile = await fetchUserProfile(
+        firebaseUser.uid,
+        firebaseUser.email
+      );
+
+      if (!auth?.currentUser) {
+        setLoading(false);
+        return;
+      }
+
+      setUser(firebaseUser);
+      if (loadedProfile) {
+        setProfile(loadedProfile);
+      }
+
+      if (db) {
+        unsubscribeProfile = onSnapshot(
+          doc(db, 'users', firebaseUser.uid),
+          (snap) => {
+            if (!snap.exists()) return;
+            const liveProfile = {
+              uid: snap.id,
+              ...(snap.data() as Omit<UserProfile, 'uid'>),
+            };
+            if (isAccountSuspended(liveProfile)) {
+              void handleSuspendedLogout(firebaseUser.uid);
+              return;
+            }
+            setProfile(liveProfile);
+          },
+          (err) => {
+            console.warn('Profile status listener warning:', err);
+          }
+        );
+      }
+
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [fetchUserProfile]);
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
+  }, [fetchUserProfile, handleSuspendedLogout]);
 
   const signUp = useCallback(
     async (email: string, password: string, fullName?: string) => {
       if (!auth || !db) {
         throw new Error('Firebase is not configured. Check .env.local.');
       }
-      const trimmedEmail = email.trim();
+      const trimmedEmail = email.trim().toLowerCase();
       const trimmedName = fullName?.trim() || '';
+
+      const emailIsBanned = await isEmailBannedInFirestore(trimmedEmail);
+      if (emailIsBanned) {
+        showToast(BANNED_ACCOUNT_MESSAGE, 'error');
+        throw new Error(BANNED_ACCOUNT_MESSAGE);
+      }
+
       const credential = await createUserWithEmailAndPassword(
         auth,
         trimmedEmail,
@@ -124,15 +260,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await setDoc(doc(db, 'users', credential.user.uid), newProfile);
       setProfile(newProfile);
     },
-    []
+    [showToast]
   );
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!auth) {
-      throw new Error('Firebase is not configured. Check .env.local.');
-    }
-    await signInWithEmailAndPassword(auth, email.trim(), password);
-  }, []);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      if (!auth) {
+        throw new Error('Firebase is not configured. Check .env.local.');
+      }
+      const normalizedEmail = email.trim().toLowerCase();
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password
+      );
+
+      if (db) {
+        const snap = await getDoc(doc(db, 'users', credential.user.uid));
+        const profileData = snap.exists()
+          ? ({
+              uid: snap.id,
+              ...(snap.data() as Omit<UserProfile, 'uid'>),
+            } as UserProfile)
+          : null;
+
+        const bannedByEmail =
+          !profileData && (await isEmailBannedInFirestore(normalizedEmail));
+
+        if (isAccountSuspended(profileData) || bannedByEmail) {
+          suspensionToastUidRef.current = credential.user.uid;
+          await firebaseSignOut(auth);
+          setUser(null);
+          setProfile(null);
+          showToast(SUSPENDED_ACCOUNT_MESSAGE, 'error');
+          throw new Error(SUSPENDED_ACCOUNT_MESSAGE);
+        }
+      }
+    },
+    [showToast]
+  );
 
   const signOut = useCallback(async () => {
     if (!auth) {
@@ -141,19 +307,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     await firebaseSignOut(auth);
+    setUser(null);
     setProfile(null);
   }, []);
 
   const refreshProfile = useCallback(async () => {
     if (user) {
-      await fetchUserProfile(user.uid);
+      await fetchUserProfile(user.uid, user.email);
     }
   }, [user, fetchUserProfile]);
 
   const updateUserProfile = useCallback(
     async (updates: ProfileUpdateFields) => {
-      if (!auth || !db || !user) {
-        throw new Error('You must be signed in to update your profile.');
+      if (!auth || !db || !user || isAccountSuspended(profile)) {
+        throw new Error('You must be signed in with an active account to update your profile.');
       }
 
       const nextFullName = updates.fullName.trim();
@@ -276,6 +443,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         profile,
+        status,
+        isSuspended,
         loading,
         isProfileComplete,
         signUp,

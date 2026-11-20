@@ -21,6 +21,7 @@ export interface UserProfile {
   roles: UserRoles;
   isVerified: boolean;
   status: 'active' | 'suspended';
+  isBanned?: boolean;
   createdAt: any;
   updatedAt: any;
 }
@@ -74,6 +75,7 @@ export interface Product {
   status: 'active' | 'sold' | 'unavailable';
   isApproved: boolean;
   isActive: boolean;
+  needsAiReview?: boolean;
   createdAt: any;
   viewCount?: number;
   contactCount?: number;
@@ -190,7 +192,7 @@ export interface Report {
     | 'store'
     | 'user';
   reason: string;
-  status: 'open' | 'resolved';
+  status: 'open' | 'resolved' | 'dismissed';
   createdAt: any;
 }
 

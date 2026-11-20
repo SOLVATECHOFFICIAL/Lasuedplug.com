@@ -1,3 +1,4 @@
+import { createGroqChatCompletion } from './groqService';
 import { Product } from '../types';
 import { getCategoryName } from './categories';
 import { getTimestampMillis } from './homeHelpers';
@@ -75,11 +76,73 @@ const STOPWORDS = new Set([
   'all',
 ]);
 
-const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
-const clientSearchCache = new Map<
-  string,
-  { expiresAt: number; payload: ExpandSearchResult }
->();
+const AI_SEARCH_STORAGE_PREFIX = 'ai_search_';
+
+export function getSearchCacheKey(query: string): string {
+  return `${AI_SEARCH_STORAGE_PREFIX}${query.trim()}`;
+}
+
+export function readCachedSearchKeywords(
+  query: string,
+  storage?: Pick<Storage, 'getItem'> | null
+): string[] | null {
+  const key = getSearchCacheKey(query);
+  if (!query.trim()) return null;
+
+  const targetStorage =
+    storage !== undefined
+      ? storage
+      : typeof globalThis !== 'undefined' && 'localStorage' in globalThis
+        ? globalThis.localStorage
+        : null;
+
+  if (!targetStorage) return null;
+
+  try {
+    const raw = targetStorage.getItem(key);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const clean = parsed
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((item) => item.trim());
+        return clean.length > 0 ? clean : null;
+      }
+    } catch {
+      const fallback = parseExpandedKeywords(raw);
+      return fallback.length > 0 ? fallback : null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedSearchKeywords(
+  query: string,
+  keywords: string[],
+  storage?: Pick<Storage, 'setItem'> | null
+): void {
+  if (!query.trim() || keywords.length === 0) return;
+
+  const targetStorage =
+    storage !== undefined
+      ? storage
+      : typeof globalThis !== 'undefined' && 'localStorage' in globalThis
+        ? globalThis.localStorage
+        : null;
+
+  if (!targetStorage) return;
+
+  try {
+    targetStorage.setItem(getSearchCacheKey(query), JSON.stringify(keywords));
+  } catch {
+    // Ignore storage quota or private browsing errors
+  }
+}
 
 export function extractImageHint(images: string[] | undefined): string {
   if (!Array.isArray(images) || images.length === 0) return '';
@@ -459,6 +522,135 @@ export function findBestAndRelatedProducts(
   };
 }
 
+export function withAbortSignal<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      }
+    );
+  });
+}
+
+export function stripMarkdownCodeFences(rawText: string): string {
+  return rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+}
+
+export function parseStructuredSearchPayload(
+  rawText: string,
+  validCatalogIds: Set<string>
+): ExpandSearchResult {
+  const cleaned = stripMarkdownCodeFences(rawText);
+  if (!cleaned) {
+    return { keywords: [] };
+  }
+
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    return { keywords: parseExpandedKeywords(rawText) };
+  }
+
+  const keywords = Array.isArray(parsed.keywords)
+    ? parsed.keywords
+        .filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+        .slice(0, 8)
+    : [];
+
+  const matchedIds = Array.isArray(parsed.matchedIds)
+    ? Array.from(
+        new Set(
+          parsed.matchedIds.filter(
+            (id): id is string => typeof id === 'string' && validCatalogIds.has(id)
+          )
+        )
+      )
+    : [];
+
+  const relatedIds = Array.isArray(parsed.relatedIds)
+    ? Array.from(
+        new Set(
+          parsed.relatedIds.filter(
+            (id): id is string =>
+              typeof id === 'string' &&
+              validCatalogIds.has(id) &&
+              !matchedIds.includes(id)
+          )
+        )
+      )
+    : [];
+
+  const correctedQuery =
+    typeof parsed.correctedQuery === 'string' && parsed.correctedQuery.trim()
+      ? parsed.correctedQuery.trim()
+      : undefined;
+
+  const answer =
+    typeof parsed.answer === 'string' && parsed.answer.trim()
+      ? parsed.answer.trim()
+      : undefined;
+
+  return {
+    keywords,
+    matchedIds,
+    relatedIds,
+    correctedQuery,
+    answer,
+  };
+}
+
+export function parseStructuredVisualSearchPayload(
+  rawText: string,
+  validCatalogIds: Set<string>
+): VisualSearchResult {
+  const cleaned = stripMarkdownCodeFences(rawText);
+  if (!cleaned) {
+    return { keywords: [] };
+  }
+
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    return { keywords: parseExpandedKeywords(rawText) };
+  }
+
+  const base = parseStructuredSearchPayload(cleaned, validCatalogIds);
+  const detectedItem =
+    typeof parsed.detectedItem === 'string' && parsed.detectedItem.trim()
+      ? parsed.detectedItem.trim()
+      : undefined;
+
+  return {
+    ...base,
+    detectedItem,
+    correctedQuery: base.correctedQuery || detectedItem,
+  };
+}
+
 export async function parseSafeJsonResponse<T>(
   response: Response
 ): Promise<T | null> {
@@ -467,7 +659,11 @@ export async function parseSafeJsonResponse<T>(
   }
 
   const contentType = response.headers.get('content-type')?.toLowerCase() || '';
-  if (contentType && !contentType.includes('application/json') && !contentType.includes('+json')) {
+  if (
+    contentType &&
+    !contentType.includes('application/json') &&
+    !contentType.includes('+json')
+  ) {
     return null;
   }
 
@@ -516,7 +712,7 @@ function createLinkedTimeoutSignal(
 
 export async function expandSearchQuery(
   query: string,
-  catalog: CatalogSummaryItem[] = [],
+  _catalog: CatalogSummaryItem[] = [],
   signal?: AbortSignal
 ): Promise<ExpandSearchResult> {
   const trimmed = query.trim().slice(0, 600);
@@ -524,88 +720,47 @@ export async function expandSearchQuery(
     return { keywords: [] };
   }
 
-  const filteredCatalog = catalog
-    .filter((c) => c.category?.toLowerCase() !== 'accommodation')
-    .slice(0, 200);
-  const cacheKey = `${trimmed.toLowerCase()}::${filteredCatalog.map((c) => c.id).join(',')}`;
-  const cached = clientSearchCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.payload;
-  }
-
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
+  }
+
+  const cachedKeywords = readCachedSearchKeywords(trimmed);
+  if (cachedKeywords) {
+    return { keywords: cachedKeywords };
   }
 
   const linked = createLinkedTimeoutSignal(12_000, signal);
 
   try {
-    const response = await fetch('/api/ai/expand-search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: trimmed,
-        catalog: filteredCatalog,
-      }),
-      signal: linked.signal,
-    });
+    const prompt = `You are a campus marketplace assistant. The user searches for: '${trimmed}'. Return a comma-separated list of 5 related items. Example: 'bread' -> 'butter, akara, egg, jam, tea'. Return ONLY the list.`;
 
-    const payload = await parseSafeJsonResponse<ExpandSearchResult>(response);
-    if (!payload) {
+    const rawText = await withAbortSignal(
+      createGroqChatCompletion(prompt, {
+        signal: linked.signal,
+        temperature: 0.2,
+        maxTokens: 80,
+      }),
+      linked.signal
+    );
+
+    if (!rawText) {
       return { keywords: [] };
     }
 
-    clientSearchCache.set(cacheKey, {
-      expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
-      payload,
-    });
-    return payload;
+    const keywords = parseExpandedKeywords(rawText).slice(0, 5);
+    if (keywords.length > 0) {
+      writeCachedSearchKeywords(trimmed, keywords);
+    }
+
+    return { keywords };
   } catch (error) {
-    if (signal?.aborted) {
+    if (
+      signal?.aborted ||
+      (error instanceof DOMException && error.name === 'AbortError')
+    ) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    console.warn('AI Search unavailable, using local matching:', error);
-    return { keywords: [] };
-  } finally {
-    linked.cleanup();
-  }
-}
-
-export async function searchByImage(
-  image: { mimeType: string; data: string },
-  catalog: CatalogSummaryItem[] = [],
-  query = '',
-  signal?: AbortSignal
-): Promise<VisualSearchResult> {
-  const filteredCatalog = catalog
-    .filter((c) => c.category?.toLowerCase() !== 'accommodation')
-    .slice(0, 200);
-
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  const linked = createLinkedTimeoutSignal(15_000, signal);
-
-  try {
-    const response = await fetch('/api/ai/search-by-image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image,
-        catalog: filteredCatalog,
-        query,
-      }),
-      signal: linked.signal,
-    });
-
-    const payload = await parseSafeJsonResponse<VisualSearchResult>(response);
-    return payload || { keywords: [] };
-  } catch (error) {
-    if (signal?.aborted) {
-      throw new DOMException('Aborted', 'AbortError');
-    }
-    console.warn('AI Visual Search unavailable, using local matching:', error);
+    console.error('Groq Error:', error);
     return { keywords: [] };
   } finally {
     linked.cleanup();

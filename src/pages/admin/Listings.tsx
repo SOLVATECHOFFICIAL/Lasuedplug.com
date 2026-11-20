@@ -300,6 +300,11 @@ export function AdminListings() {
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <AdminModuleBadge type={item._type} />
+                            {item.needsAiReview && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                                Needs AI Review
+                              </span>
+                            )}
                             <span className="text-xs font-semibold text-primary-700 tabular-nums">
                               {item.priceOrSubtitle}
                             </span>

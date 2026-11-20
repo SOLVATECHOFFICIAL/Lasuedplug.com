@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
@@ -9,7 +10,10 @@ import {
   getPrimaryRoleLabel,
   getProtectedRouteDecision,
   isAcademicFieldLocked,
+  isAccountBanned,
+  isAccountSuspended,
   PHONE_UPDATE_COOLDOWN_DAYS,
+  SUSPENDED_ACCOUNT_MESSAGE,
   validateEmailField,
   validateLoginForm,
   validateSignupForm,
@@ -43,9 +47,40 @@ test('getProtectedRouteDecision returns loading, redirect, or allow correctly', 
     'redirect'
   );
   assert.equal(
+    getProtectedRouteDecision({
+      loading: false,
+      isAuthenticated: true,
+      isSuspended: true,
+    }),
+    'redirect'
+  );
+  assert.equal(
+    getProtectedRouteDecision({
+      loading: false,
+      isAuthenticated: true,
+      isSuspended: false,
+    }),
+    'allow'
+  );
+  assert.equal(
     getProtectedRouteDecision({ loading: false, isAuthenticated: true }),
     'allow'
   );
+});
+
+test('isAccountSuspended and isAccountBanned detect suspended/banned states and preserve exact messages', () => {
+  assert.equal(isAccountSuspended(null), false);
+  assert.equal(isAccountSuspended({ status: 'active', isBanned: false }), false);
+  assert.equal(isAccountSuspended({ status: 'suspended', isBanned: false }), true);
+  assert.equal(isAccountSuspended({ status: 'active', isBanned: true }), true);
+  assert.equal(isAccountBanned(null), false);
+  assert.equal(isAccountBanned({ isBanned: false }), false);
+  assert.equal(isAccountBanned({ isBanned: true }), true);
+  assert.equal(
+    SUSPENDED_ACCOUNT_MESSAGE,
+    'Your account has been suspended. Contact Admin on WhatsApp.'
+  );
+  assert.ok(BANNED_ACCOUNT_MESSAGE.includes('permanently banned'));
 });
 
 test('validateSignupForm enforces required fields, email, password length, and matching passwords', () => {

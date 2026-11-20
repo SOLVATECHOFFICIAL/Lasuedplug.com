@@ -1,5 +1,13 @@
-const CACHE_NAME = 'lasuedplug-static-v1';
-const APP_SHELL_ASSETS = ['/', '/index.html', '/manifest.json', '/lasued.png'];
+const CACHE_NAME = 'lasuedplug-static-v2';
+const APP_SHELL_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/lasued.png',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

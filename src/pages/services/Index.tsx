@@ -9,7 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, getCategoryName } from '../../lib/categories';
-import { fetchAllApprovedActiveProducts } from '../../lib/marketplaceService';
+import { fetchApprovedActiveServices } from '../../lib/marketplaceService';
 import { getLatestServices } from '../../lib/homeService';
 import { getListingAdType, getProductPriceDisplay } from '../../lib/marketplaceHelpers';
 import { Product, Service } from '../../types';
@@ -35,17 +35,19 @@ export function ServicesIndex() {
     setLoading(true);
     setError(null);
     try {
-      const [allProducts, rawServices] = await Promise.all([
-        fetchAllApprovedActiveProducts(),
+      const [serviceProducts, rawServices] = await Promise.all([
+        fetchApprovedActiveServices(),
         getLatestServices(60),
       ]);
-      const serviceProducts = allProducts.filter(
+      const filteredServiceProducts = serviceProducts.filter(
         (item) => getListingAdType(item) === 'service'
       );
-      const seenIds = new Set(serviceProducts.map((p) => p.id).filter(Boolean));
+      const seenIds = new Set(
+        filteredServiceProducts.map((p) => p.id).filter(Boolean)
+      );
       const uniqueLegacy = rawServices.filter((s) => !s.id || !seenIds.has(s.id));
 
-      setProductServices(serviceProducts);
+      setProductServices(filteredServiceProducts);
       setLegacyServices(uniqueLegacy);
     } catch (err) {
       setError(
@@ -256,7 +258,7 @@ export function ServicesIndex() {
             {filteredLegacyServices.map((service) => (
               <Link
                 key={service.id || service.title}
-                to={`/services/${service.id}`}
+                to={`/marketplace/${service.id}`}
                 className="group block h-full focus:outline-none"
               >
                 <Card

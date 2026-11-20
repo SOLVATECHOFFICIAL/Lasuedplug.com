@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import {
   AlertCircle,
@@ -27,7 +27,6 @@ import {
 import { suggestCategory } from '../../lib/aiCategoryService';
 import {
   compressImageToBase64,
-  dataUrlToInlinePart,
   isImageFile,
 } from '../../lib/imageUtils';
 import { getUserStores } from '../../lib/storeService';
@@ -88,8 +87,11 @@ export function MarketplaceCreate() {
   const { user, profile, loading, isProfileComplete } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [adType, setAdType] = useState<AdType>('item');
+  const [adType, setAdType] = useState<AdType>(() =>
+    searchParams.get('type') === 'service' ? 'service' : 'item'
+  );
   const [userStores, setUserStores] = useState<Store[]>([]);
   const [storesLoaded, setStoresLoaded] = useState(false);
   const [selectedStoreId, setSelectedStoreId] = useState('');
@@ -287,19 +289,18 @@ export function MarketplaceCreate() {
     clearFieldError('subcategory');
   };
 
-  const runAiCategorization = async (overrideImage?: File) => {
+  const runAiCategorization = async () => {
     const trimmedTitle = title.trim();
     const trimmedDesc = description.trim();
-    const imageFile = overrideImage || selectedImages[0]?.file;
 
-    if (!trimmedTitle && !trimmedDesc && !imageFile) {
+    if (!trimmedTitle && !trimmedDesc) {
       return;
     }
-    if (trimmedTitle.length < 2 && !trimmedDesc && !imageFile) {
+    if (trimmedTitle.length < 2 && !trimmedDesc) {
       return;
     }
 
-    const querySignature = `${adType}::${trimmedTitle}::${trimmedDesc}::${imageFile?.name || ''}`;
+    const querySignature = `${adType}::${trimmedTitle}::${trimmedDesc}`;
     if (querySignature === lastAiQueryRef.current) {
       return;
     }
@@ -308,22 +309,7 @@ export function MarketplaceCreate() {
     setAiSuggesting(true);
 
     try {
-      let imagePayload: { mimeType: string; data: string } | undefined;
-      if (imageFile) {
-        try {
-          const base64Url = await compressImageToBase64(imageFile);
-          imagePayload = dataUrlToInlinePart(base64Url);
-        } catch {
-          imagePayload = undefined;
-        }
-      }
-
-      const result = await suggestCategory(
-        trimmedTitle,
-        trimmedDesc,
-        imagePayload,
-        adType
-      );
+      const result = await suggestCategory(trimmedTitle, trimmedDesc, adType);
       if (result.suggestion && !result.isFallback) {
         setCategoryId(result.suggestion.categoryId);
         setSubcategory(result.suggestion.subcategory);
@@ -368,10 +354,6 @@ export function MarketplaceCreate() {
     }));
 
     setSelectedImages((prev) => [...prev, ...nextItems]);
-
-    if (!categoryId && nextItems[0]) {
-      void runAiCategorization(nextItems[0].file);
-    }
   };
 
   const handleRemoveImage = (id: string) => {
@@ -466,19 +448,20 @@ export function MarketplaceCreate() {
     return errors;
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const persistListing = async (options?: {
+    overrideCategoryId?: string;
+    overrideSubcategory?: string;
+    needsAiReview?: boolean;
+    precompressedImages?: string[];
+  }) => {
     if (submittingRef.current) {
       return;
     }
-    setSubmitError(null);
-
     if (!user || !isProfileComplete) {
       showToast('Please complete your profile to post a listing.', 'info');
       navigate('/dashboard/profile');
       return;
     }
-
     if (!db) {
       const msg = 'Firebase is not configured. Check .env.local.';
       setSubmitError(msg);
@@ -486,33 +469,29 @@ export function MarketplaceCreate() {
       return;
     }
 
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      const firstError = Object.values(errors)[0];
-      if (firstError) {
-        showToast(firstError, 'error');
-      }
-      return;
-    }
-
     submittingRef.current = true;
     setSubmitting(true);
+
     try {
-      let compressedImages: string[] = [];
-      if (selectedImages.length > 0) {
-        setSubmitStatusText(
-          `Compressing ${selectedImages.length} ${
-            selectedImages.length === 1 ? 'image' : 'images'
-          }...`
-        );
-        compressedImages = await Promise.all(
-          selectedImages.map((item) => compressImageToBase64(item.file))
-        );
+      let compressedImages = options?.precompressedImages;
+      if (!compressedImages) {
+        compressedImages = [];
+        if (selectedImages.length > 0) {
+          setSubmitStatusText(
+            `Compressing ${selectedImages.length} ${
+              selectedImages.length === 1 ? 'image' : 'images'
+            }...`
+          );
+          compressedImages = await Promise.all(
+            selectedImages.map((item) => compressImageToBase64(item.file))
+          );
+        }
       }
 
       setSubmitStatusText('Saving listing...');
 
+      const finalCategoryId = options?.overrideCategoryId || categoryId;
+      const finalSubcategory = options?.overrideSubcategory || subcategory;
       const trimmedLandmark = locationName.trim();
       const effectivePriceType: PriceType =
         adType === 'service' ? 'contact' : priceType;
@@ -522,9 +501,9 @@ export function MarketplaceCreate() {
         adType,
         title: title.trim(),
         description: description.trim(),
-        categoryId,
-        subcategory,
-        categoryName: getCategoryName(categoryId),
+        categoryId: finalCategoryId,
+        subcategory: finalSubcategory,
+        categoryName: getCategoryName(finalCategoryId),
         images: compressedImages,
         priceType: effectivePriceType,
         whatsappNumber: whatsappNumber.trim(),
@@ -534,6 +513,7 @@ export function MarketplaceCreate() {
         status: 'active',
         isApproved: false,
         isActive: true,
+        needsAiReview: Boolean(options?.needsAiReview),
         createdAt: serverTimestamp(),
         sellerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
@@ -656,6 +636,41 @@ export function MarketplaceCreate() {
       setSubmitting(false);
       setSubmitStatusText('');
     }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    setSubmitError(null);
+
+    if (!user || !isProfileComplete) {
+      showToast('Please complete your profile to post a listing.', 'info');
+      navigate('/dashboard/profile');
+      return;
+    }
+
+    if (!db) {
+      const msg = 'Firebase is not configured. Check .env.local.';
+      setSubmitError(msg);
+      showToast(msg, 'error');
+      return;
+    }
+
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const firstError = Object.values(errors)[0];
+      if (firstError) {
+        showToast(firstError, 'error');
+      }
+      return;
+    }
+
+    await persistListing({
+      needsAiReview: false,
+    });
   };
 
   return (

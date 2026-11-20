@@ -20,14 +20,35 @@ export function buildNewUserProfile(params: {
   };
 }
 
+export const SUSPENDED_ACCOUNT_MESSAGE =
+  'Your account has been suspended. Contact Admin on WhatsApp.';
+export const BANNED_ACCOUNT_MESSAGE =
+  'This account has been permanently banned and cannot sign up again.';
+
+export function isAccountSuspended(
+  profile?: Partial<Pick<UserProfile, 'status' | 'isBanned'>> | null
+): boolean {
+  if (!profile) {
+    return false;
+  }
+  return profile.status === 'suspended' || profile.isBanned === true;
+}
+
+export function isAccountBanned(
+  profile?: Partial<Pick<UserProfile, 'isBanned'>> | null
+): boolean {
+  return profile?.isBanned === true;
+}
+
 export function getProtectedRouteDecision(state: {
   loading: boolean;
   isAuthenticated: boolean;
+  isSuspended?: boolean;
 }): 'loading' | 'redirect' | 'allow' {
   if (state.loading) {
     return 'loading';
   }
-  if (!state.isAuthenticated) {
+  if (!state.isAuthenticated || state.isSuspended) {
     return 'redirect';
   }
   return 'allow';

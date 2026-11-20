@@ -8,7 +8,8 @@ import {
   FirestoreError,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { filterAndSortListings } from './homeHelpers';
+import { filterAndSortListings, getTimestampMillis } from './homeHelpers';
+import { getListingAdType } from './marketplaceHelpers';
 import { Accommodation, Product, Service } from '../types';
 
 async function fetchLatestFromCollection<
@@ -54,13 +55,114 @@ async function fetchLatestFromCollection<
   }
 }
 
+async function fetchLatestProductsByAdType(
+  adType: 'item' | 'service',
+  limitCount: number
+): Promise<Product[]> {
+  if (!db) {
+    return [];
+  }
+
+  const colRef = collection(db, 'products');
+
+  try {
+    const q = query(
+      colRef,
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('adType', '==', adType),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter(
+        (item) =>
+          item.categoryId !== 'accommodation' && getListingAdType(item) === adType
+      );
+  } catch (err) {
+    const firestoreErr = err as FirestoreError;
+    if (firestoreErr?.code === 'failed-precondition') {
+      const fallbackQ = query(colRef, where('isApproved', '==', true));
+      const snapshot = await getDocs(fallbackQ);
+      const docs = snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Product, 'id'>),
+        }))
+        .filter(
+          (item) =>
+            item.isApproved === true &&
+            item.isActive === true &&
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === adType
+        );
+      return filterAndSortListings(docs, limitCount);
+    }
+    if (firestoreErr?.code === 'unavailable') {
+      throw new Error(
+        'Could not reach the marketplace database. Check your internet connection and try again.'
+      );
+    }
+    throw err;
+  }
+}
+
 export async function getLatestProducts(limitCount = 4): Promise<Product[]> {
-  const rows = await fetchLatestFromCollection<Product>('products', Math.max(limitCount * 2, limitCount));
-  return rows.filter((item) => item.categoryId !== 'accommodation').slice(0, limitCount);
+  const rows = await fetchLatestProductsByAdType(
+    'item',
+    Math.max(limitCount * 2, limitCount)
+  );
+  return rows.slice(0, limitCount);
 }
 
 export async function getLatestServices(limitCount = 4): Promise<Service[]> {
-  return fetchLatestFromCollection<Service>('services', limitCount);
+  const [productServices, legacyServices] = await Promise.all([
+    fetchLatestProductsByAdType('service', limitCount),
+    fetchLatestFromCollection<Service>('services', limitCount),
+  ]);
+
+  const seenIds = new Set<string>();
+  const normalizedProductServices: Service[] = productServices.map((p) => ({
+    id: p.id,
+    providerId: p.sellerId,
+    title: p.title,
+    description: p.description,
+    categoryId: p.categoryId,
+    subcategory: p.subcategory,
+    images: p.images || [],
+    priceType: p.priceType,
+    price: p.price,
+    priceUnit: p.priceUnit,
+    whatsappNumber: p.whatsappNumber,
+    landmark: p.landmark,
+    latitude: p.latitude,
+    longitude: p.longitude,
+    locationName: p.locationName,
+    shopName: p.storeName || p.shopName,
+    hasDelivery: Boolean(p.hasDelivery),
+    viewCount: p.viewCount || 0,
+    contactCount: p.contactCount || 0,
+    status: p.status,
+    isApproved: p.isApproved,
+    isActive: p.isActive,
+    createdAt: p.createdAt,
+    sellerSnapshot: p.sellerSnapshot,
+  }));
+
+  const merged = [...normalizedProductServices, ...legacyServices].filter((item) => {
+    if (!item.id) return true;
+    if (seenIds.has(item.id)) return false;
+    seenIds.add(item.id);
+    return true;
+  });
+
+  merged.sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt));
+  return merged.slice(0, limitCount);
 }
 
 export async function getLatestAccommodations(

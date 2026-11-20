@@ -5,7 +5,6 @@ import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { MobileNav } from './MobileNav';
 import { InstallPWA } from './InstallPWA';
-import { ToastProvider } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthorizedAdminSession } from '../../lib/adminHelpers';
 import { shouldShowMaintenanceScreen } from '../../lib/platformSettingsHelpers';
@@ -16,7 +15,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { user, loading, isProfileComplete } = useAuth();
+  const { user, loading, isProfileComplete, isSuspended } = useAuth();
   const location = useLocation();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
@@ -36,8 +35,7 @@ export function AppShell({ children }: AppShellProps) {
 
   if (showMaintenanceGate) {
     return (
-      <ToastProvider>
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-900 px-4 py-12 font-sans antialiased">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-900 px-4 py-12 font-sans antialiased">
           <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-5">
             <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
               <Wrench className="w-7 h-7" aria-hidden="true" />
@@ -61,16 +59,15 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </div>
         </div>
-      </ToastProvider>
     );
   }
 
-  const showIncompleteBanner = !loading && Boolean(user) && !isProfileComplete;
+  const showIncompleteBanner =
+    !loading && Boolean(user) && !isSuspended && !isProfileComplete;
 
   return (
-    <ToastProvider>
-      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased overflow-x-clip">
-        <Navbar />
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased overflow-x-clip">
+      <Navbar />
         {maintenanceMode && isAdminSession && (
           <div
             role="status"
@@ -113,7 +110,6 @@ export function AppShell({ children }: AppShellProps) {
         <Footer />
         <InstallPWA />
         <MobileNav />
-      </div>
-    </ToastProvider>
+    </div>
   );
 }

@@ -1,8 +1,7 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import {
-  Camera,
   ChevronRight,
   Info,
   Loader2,
@@ -28,15 +27,11 @@ import {
   buildCatalogSummaryForAi,
   expandSearchQuery,
   findBestAndRelatedProducts,
-  searchByImage,
 } from '../../lib/aiSearchService';
-import {
-  compressImageToBase64,
-  dataUrlToInlinePart,
-} from '../../lib/imageUtils';
 import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
 import {
+  getListingAdType,
   hasActiveMarketplaceFilters,
   MarketplaceSortOption,
 } from '../../lib/marketplaceHelpers';
@@ -55,13 +50,6 @@ const SEARCH_SORT_OPTIONS = [
 ] as const;
 
 type SearchSortValue = (typeof SEARCH_SORT_OPTIONS)[number]['value'];
-
-interface SearchPhotoState {
-  previewUrl: string;
-  mimeType: string;
-  data: string;
-  name: string;
-}
 
 function sortSearchResults(
   items: Product[],
@@ -110,7 +98,6 @@ export function MarketplaceIndex() {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [debouncedSearch, setDebouncedSearch] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [searchPhoto, setSearchPhoto] = useState<SearchPhotoState | null>(null);
   const [sortBy, setSortBy] = useState<SearchSortValue>(initialSort);
 
   const [aiKeywords, setAiKeywords] = useState<string[]>([]);
@@ -131,14 +118,11 @@ export function MarketplaceIndex() {
   const [error, setError] = useState<string | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const requestIdRef = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
 
-  const isTypingSearch =
-    searchQuery.trim().length > 0 || Boolean(searchPhoto);
-  const isSearchActive =
-    debouncedSearch.trim().length > 0 || Boolean(searchPhoto);
+  const isTypingSearch = searchQuery.trim().length > 0;
+  const isSearchActive = debouncedSearch.trim().length > 0;
 
   // Debounce search input so AI search waits briefly after user pauses typing
   useEffect(() => {
@@ -160,11 +144,9 @@ export function MarketplaceIndex() {
     if (debouncedSearch.trim()) {
       nextParams.q = debouncedSearch.trim();
       if (sortBy !== 'newest') nextParams.sort = sortBy;
-    } else if (searchPhoto && sortBy !== 'newest') {
-      nextParams.sort = sortBy;
     }
     setSearchParams(nextParams, { replace: true });
-  }, [activeBrowseTab, debouncedSearch, searchPhoto, selectedCategory, sortBy, setSearchParams]);
+  }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, setSearchParams]);
 
   const loadStores = useCallback(async () => {
     setStoresLoading(true);
@@ -189,13 +171,12 @@ export function MarketplaceIndex() {
 
   const filtersActive = useMemo(
     () =>
-      Boolean(searchPhoto) ||
       hasActiveMarketplaceFilters({
         categoryId: selectedCategory,
         searchQuery,
         sortBy: sortBy as MarketplaceSortOption,
       }),
-    [searchPhoto, selectedCategory, searchQuery, sortBy]
+    [selectedCategory, searchQuery, sortBy]
   );
 
   // Fetch Trending Carousel (Top 8 sorted by viewCount, excluding houses) once on mount
@@ -207,7 +188,11 @@ export function MarketplaceIndex() {
         const rows = await fetchTrendingProducts(8);
         if (!cancelled) {
           setTrendingProducts(
-            rows.filter((item) => item.categoryId !== 'accommodation')
+            rows.filter(
+              (item) =>
+                item.categoryId !== 'accommodation' &&
+                getListingAdType(item) === 'item'
+            )
           );
         }
       } catch {
@@ -241,7 +226,7 @@ export function MarketplaceIndex() {
       searchAbortRef.current = null;
     }
 
-    if (trimmedQuery || searchPhoto) {
+    if (trimmedQuery) {
       const controller = new AbortController();
       searchAbortRef.current = controller;
 
@@ -252,36 +237,26 @@ export function MarketplaceIndex() {
       setUsedRelatedFallback(false);
 
       try {
-        const allProducts = (await fetchAllApprovedActiveProducts()).filter(
-          (item) => item.categoryId !== 'accommodation'
+        const allProducts = (await fetchAllApprovedActiveProducts('item')).filter(
+          (item) =>
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === 'item'
         );
         if (reqId !== requestIdRef.current) return;
 
         // Phase 1: Instant client-side typo-tolerant & compound-word results
-        if (trimmedQuery) {
-          const instantResult = findBestAndRelatedProducts(allProducts, trimmedQuery);
-          setRawSearchProducts(instantResult.products);
-          setUsedRelatedFallback(instantResult.usedRelatedFallback);
-          setLoading(false);
-        } else {
-          setRawSearchProducts(allProducts);
-          setLoading(false);
-        }
+        const instantResult = findBestAndRelatedProducts(allProducts, trimmedQuery);
+        setRawSearchProducts(instantResult.products);
+        setUsedRelatedFallback(instantResult.usedRelatedFallback);
+        setLoading(false);
 
-        // Phase 2: Real Gemini AI scan (Visual Vision scan if photo attached, or text semantic scan)
+        // Phase 2: Groq AI search expansion (cached in localStorage)
         const catalogSummary = buildCatalogSummaryForAi(allProducts);
-        const aiResult = searchPhoto
-          ? await searchByImage(
-              { mimeType: searchPhoto.mimeType, data: searchPhoto.data },
-              catalogSummary,
-              trimmedQuery,
-              controller.signal
-            )
-          : await expandSearchQuery(
-              trimmedQuery,
-              catalogSummary,
-              controller.signal
-            );
+        const aiResult = await expandSearchQuery(
+          trimmedQuery,
+          catalogSummary,
+          controller.signal
+        );
 
         if (reqId !== requestIdRef.current) return;
 
@@ -328,12 +303,17 @@ export function MarketplaceIndex() {
 
     try {
       const result = await fetchMarketplaceProducts(MARKETPLACE_PAGE_SIZE, null, {
+        adType: 'item',
         categoryId: selectedCategory || undefined,
         sortBy: 'newest',
       });
       if (reqId !== requestIdRef.current) return;
       setBrowseProducts(
-        result.products.filter((item) => item.categoryId !== 'accommodation')
+        result.products.filter(
+          (item) =>
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === 'item'
+        )
       );
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
@@ -349,7 +329,7 @@ export function MarketplaceIndex() {
         setLoading(false);
       }
     }
-  }, [debouncedSearch, searchPhoto, selectedCategory]);
+  }, [debouncedSearch, selectedCategory]);
 
   useEffect(() => {
     void loadInitialProducts();
@@ -392,6 +372,7 @@ export function MarketplaceIndex() {
         MARKETPLACE_PAGE_SIZE,
         lastVisibleDoc,
         {
+          adType: 'item',
           categoryId: selectedCategory || undefined,
           sortBy: 'newest',
         }
@@ -399,7 +380,9 @@ export function MarketplaceIndex() {
       if (reqId !== requestIdRef.current) return;
 
       const cleanNext = result.products.filter(
-        (item) => item.categoryId !== 'accommodation'
+        (item) =>
+          item.categoryId !== 'accommodation' &&
+          getListingAdType(item) === 'item'
       );
 
       setBrowseProducts((prev) => {
@@ -443,30 +426,10 @@ export function MarketplaceIndex() {
     return () => observer.disconnect();
   }, [isSearchActive, hasMore, loading, loadingMore, loadMoreProducts]);
 
-  const handlePhotoSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    try {
-      const dataUrl = await compressImageToBase64(file);
-      const inline = dataUrlToInlinePart(dataUrl);
-      setSearchPhoto({
-        previewUrl: dataUrl,
-        mimeType: inline.mimeType,
-        data: inline.data,
-        name: file.name,
-      });
-    } catch (err) {
-      console.error('Photo compression error:', err);
-    }
-  };
-
   const handleClearFilters = () => {
     setSearchQuery('');
     setDebouncedSearch('');
     setSelectedCategory('');
-    setSearchPhoto(null);
     setAiKeywords([]);
     setAiAnswer(null);
     setAiCorrectedQuery(null);
@@ -613,13 +576,13 @@ export function MarketplaceIndex() {
                     placeholder={
                       activeBrowseTab === 'stores'
                         ? 'Search stores by name or category...'
-                        : 'Search items, ask AI, or scan a photo...'
+                        : 'Search items or ask AI (e.g. eat bread)...'
                     }
                     aria-label="Search marketplace products"
-                    className="w-full min-w-0 pl-9 pr-20 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full min-w-0 pl-9 pr-10 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
-                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    {(searchQuery || searchPhoto || selectedCategory) && (
+                  {(searchQuery || selectedCategory) && (
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
                       <button
                         type="button"
                         onClick={handleClearFilters}
@@ -628,27 +591,8 @@ export function MarketplaceIndex() {
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
-                    )}
-                    {activeBrowseTab === 'items' && (
-                      <button
-                        type="button"
-                        onClick={() => photoInputRef.current?.click()}
-                        aria-label="Search by photo"
-                        title="Scan a picture to search"
-                        className="p-2 rounded-md text-primary-600 hover:bg-primary-50 transition-all duration-200"
-                      >
-                        <Camera className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => void handlePhotoSelected(e)}
-                    className="hidden"
-                    aria-hidden="true"
-                  />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -705,33 +649,6 @@ export function MarketplaceIndex() {
             )}
           </div>
 
-          {/* Selected Search Photo Chip */}
-          {activeBrowseTab === 'items' && searchPhoto && (
-            <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <img
-                  src={searchPhoto.previewUrl}
-                  alt="Search photo preview"
-                  loading="lazy"
-                  className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-slate-800 truncate">
-                    Visual AI Photo Search
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">{searchPhoto.name}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSearchPhoto(null)}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded hover:bg-slate-200/70 transition-all duration-200 shrink-0"
-              >
-                Remove
-              </button>
-            </div>
-          )}
-
           {/* AI Search Status & Expanded Terms */}
           {activeBrowseTab === 'items' && isTypingSearch && aiSearching && (
             <div
@@ -739,11 +656,7 @@ export function MarketplaceIndex() {
               className="flex items-center gap-2 text-sm font-medium text-primary-600 pt-1"
             >
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              <span>
-                {searchPhoto
-                  ? 'AI is scanning your photo and finding matches...'
-                  : 'AI is finding the best matches...'}
-              </span>
+              <span>AI is finding the best matches...</span>
             </div>
           )}
 
@@ -763,7 +676,7 @@ export function MarketplaceIndex() {
                     aiCorrectedQuery.toLowerCase() !== debouncedSearch.trim().toLowerCase() && (
                       <span>
                         <strong className="font-semibold text-slate-700">
-                          {searchPhoto ? 'Detected in photo:' : 'Interpreted as:'}
+                          Interpreted as:
                         </strong>{' '}
                         {aiCorrectedQuery}
                       </span>
@@ -892,7 +805,7 @@ export function MarketplaceIndex() {
           <EmptyState
             icon={SearchX}
             title="Nothing here yet"
-            description="No listings matched your filters. Try adjusting your search, category filter, or photo."
+            description="No listings matched your filters. Try adjusting your search or category filter."
             actionLabel="Reset Filters"
             onAction={handleClearFilters}
             secondaryActionLabel="Post a Listing"

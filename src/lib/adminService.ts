@@ -3,20 +3,27 @@ import {
   collection,
   deleteDoc,
   doc,
+  DocumentReference,
   FirestoreError,
   getCountFromServer,
+  getDoc,
   getDocs,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getTimestampMillis } from './homeHelpers';
 import {
   AdminDashboardStats,
+  EnrichedReport,
+  extractListingOwnerId,
   getAdminReportTargetCollection,
+  getAdminUserFilterUrl,
+  getReportListingRoute,
   mapAccommodationToPendingAdminItem,
   mapProductToPendingAdminItem,
   mapRoommateToPendingAdminItem,
@@ -261,6 +268,62 @@ export async function getAllUsers(): Promise<UserProfile[]> {
   }
 }
 
+const USER_LISTING_COLLECTIONS: ReadonlyArray<{
+  collectionName: string;
+  ownerField: string;
+}> = [
+  { collectionName: 'products', ownerField: 'sellerId' },
+  { collectionName: 'services', ownerField: 'providerId' },
+  { collectionName: 'accommodations', ownerField: 'ownerId' },
+  { collectionName: 'roommate_requests', ownerField: 'userId' },
+  { collectionName: 'stores', ownerField: 'ownerId' },
+];
+
+/**
+ * Hides all listings/stores belonging to a user by setting `isActive = false`
+ * across all listing collections without deleting any documents.
+ */
+export async function hideAllUserListings(uid: string): Promise<number> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
+    return 0;
+  }
+
+  const firestore = db;
+  const refsToHide: DocumentReference[] = [];
+
+  await Promise.all(
+    USER_LISTING_COLLECTIONS.map(async ({ collectionName, ownerField }) => {
+      const q = query(
+        collection(firestore, collectionName),
+        where(ownerField, '==', cleanUid)
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach((docSnap) => {
+        const data = docSnap.data() as { isActive?: boolean };
+        if (data.isActive !== false) {
+          refsToHide.push(docSnap.ref);
+        }
+      });
+    })
+  );
+
+  const BATCH_LIMIT = 400;
+  for (let i = 0; i < refsToHide.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(firestore);
+    const chunk = refsToHide.slice(i, i + BATCH_LIMIT);
+    chunk.forEach((ref) => {
+      batch.update(ref, { isActive: false });
+    });
+    await batch.commit();
+  }
+
+  return refsToHide.length;
+}
+
 export async function updateUserAccountStatus(
   uid: string,
   nextStatus: 'active' | 'suspended'
@@ -268,16 +331,45 @@ export async function updateUserAccountStatus(
   if (!db) {
     throw new Error('Firebase is not configured. Check .env.local.');
   }
-  if (!uid.trim()) {
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
     throw new Error('User ID is missing.');
   }
 
   try {
-    await updateDoc(doc(db, 'users', uid), {
-      status: nextStatus,
-    });
+    if (nextStatus === 'suspended') {
+      await updateDoc(doc(db, 'users', cleanUid), {
+        status: 'suspended',
+      });
+      await hideAllUserListings(cleanUid);
+    } else {
+      await updateDoc(doc(db, 'users', cleanUid), {
+        status: 'active',
+        isBanned: false,
+      });
+    }
   } catch (err) {
     throw mapAdminError(err, 'Failed to update user account status.');
+  }
+}
+
+export async function banUserAccount(uid: string): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
+    throw new Error('User ID is missing.');
+  }
+
+  try {
+    await updateDoc(doc(db, 'users', cleanUid), {
+      status: 'suspended',
+      isBanned: true,
+    });
+    await hideAllUserListings(cleanUid);
+  } catch (err) {
+    throw mapAdminError(err, 'Failed to ban user account.');
   }
 }
 
@@ -320,6 +412,131 @@ export async function getOpenReports(): Promise<Report[]> {
   }
 }
 
+/**
+ * Fetches all open reports and enriches each with reporter name, offender info/profile link,
+ * and reported listing title/link for the admin moderation modal.
+ */
+export async function getEnrichedOpenReports(): Promise<EnrichedReport[]> {
+  if (!db) {
+    return [];
+  }
+
+  const firestore = db;
+  const openReports = await getOpenReports();
+  if (openReports.length === 0) {
+    return [];
+  }
+
+  const userCache = new Map<string, UserProfile | null>();
+
+  async function loadUserCached(uid: string): Promise<UserProfile | null> {
+    const clean = uid.trim();
+    if (!clean) return null;
+    if (userCache.has(clean)) {
+      return userCache.get(clean) || null;
+    }
+    try {
+      const snap = await getDoc(doc(firestore, 'users', clean));
+      const profile = snap.exists()
+        ? ({
+            uid: snap.id,
+            ...(snap.data() as Omit<UserProfile, 'uid'>),
+          } as UserProfile)
+        : null;
+      userCache.set(clean, profile);
+      return profile;
+    } catch {
+      userCache.set(clean, null);
+      return null;
+    }
+  }
+
+  const enriched = await Promise.all(
+    openReports.map(async (report): Promise<EnrichedReport> => {
+      const reporterProfile = await loadUserCached(report.reporterId);
+      const reporterName =
+        reporterProfile?.fullName?.trim() ||
+        reporterProfile?.email ||
+        report.reporterId ||
+        'Unknown Reporter';
+
+      let targetData: Record<string, unknown> | null = null;
+      let listingExists = false;
+      const targetCollection = getAdminReportTargetCollection(report.targetType);
+
+      if (targetCollection && report.targetId) {
+        try {
+          const targetSnap = await getDoc(
+            doc(firestore, targetCollection, report.targetId)
+          );
+          if (targetSnap.exists()) {
+            listingExists = true;
+            targetData = targetSnap.data() as Record<string, unknown>;
+          }
+        } catch {
+          targetData = null;
+        }
+      }
+
+      const offenderId = extractListingOwnerId(
+        report.targetType,
+        report.targetId,
+        targetData
+      );
+      const offenderProfile = offenderId ? await loadUserCached(offenderId) : null;
+
+      const offenderName =
+        offenderProfile?.fullName?.trim() ||
+        offenderProfile?.email ||
+        (offenderId ? `User (${offenderId.slice(0, 8)}...)` : 'Unknown User');
+
+      const offenderEmail = offenderProfile?.email || '';
+      const offenderProfileUrl = offenderId
+        ? getAdminUserFilterUrl(offenderEmail || offenderId)
+        : null;
+
+      const rawTitle =
+        typeof targetData?.title === 'string' && targetData.title.trim()
+          ? targetData.title.trim()
+          : typeof targetData?.name === 'string' && targetData.name.trim()
+          ? targetData.name.trim()
+          : '';
+
+      const listingTitle =
+        report.targetType === 'user'
+          ? offenderName
+          : rawTitle ||
+            (listingExists
+              ? `Listing (${report.targetId})`
+              : `Deleted or unavailable (${report.targetId})`);
+
+      const listingUrl =
+        report.targetType !== 'user' && listingExists
+          ? getReportListingRoute(report.targetType, report.targetId, targetData)
+          : null;
+
+      return {
+        report,
+        reporterName,
+        offenderId,
+        offenderName,
+        offenderEmail,
+        offenderStatus: offenderProfile?.status ?? null,
+        offenderIsBanned: Boolean(offenderProfile?.isBanned),
+        offenderProfileUrl,
+        listingTitle,
+        listingExists,
+        listingUrl,
+      };
+    })
+  );
+
+  return enriched;
+}
+
+/**
+ * Action 1: Dismisses a report without touching the listing or user (`status = 'dismissed'`).
+ */
 export async function dismissReport(reportId: string): Promise<void> {
   if (!db) {
     throw new Error('Firebase is not configured. Check .env.local.');
@@ -330,7 +547,7 @@ export async function dismissReport(reportId: string): Promise<void> {
 
   try {
     await updateDoc(doc(db, 'reports', reportId), {
-      status: 'resolved',
+      status: 'dismissed',
     });
   } catch (err) {
     throw mapAdminError(err, 'Failed to dismiss report.');
@@ -338,8 +555,7 @@ export async function dismissReport(reportId: string): Promise<void> {
 }
 
 /**
- * Deletes the reported listing/store target (or suspends the user if targetType === 'user')
- * and marks the report status as 'resolved'.
+ * Action 2: Deletes the specific reported listing and marks report `status = 'resolved'`.
  */
 export async function deleteReportTargetAndResolve(
   report: Report
@@ -352,18 +568,12 @@ export async function deleteReportTargetAndResolve(
   }
 
   try {
-    if (report.targetId) {
-      if (report.targetType === 'user') {
-        await updateDoc(doc(db, 'users', report.targetId), {
-          status: 'suspended',
-        });
-      } else {
-        const targetCollection = getAdminReportTargetCollection(
-          report.targetType
-        );
-        if (targetCollection) {
-          await deleteDoc(doc(db, targetCollection, report.targetId));
-        }
+    if (report.targetId && report.targetType !== 'user') {
+      const targetCollection = getAdminReportTargetCollection(
+        report.targetType
+      );
+      if (targetCollection) {
+        await deleteDoc(doc(db, targetCollection, report.targetId));
       }
     }
 
@@ -371,7 +581,63 @@ export async function deleteReportTargetAndResolve(
       status: 'resolved',
     });
   } catch (err) {
-    throw mapAdminError(err, 'Failed to remove reported content.');
+    throw mapAdminError(err, 'Failed to delete reported listing.');
+  }
+}
+
+/**
+ * Action 3: Suspends the offending user (`status = 'suspended'`), hides all their listings
+ * (`isActive = false`), and marks report `status = 'resolved'`.
+ */
+export async function suspendReportedUserAndResolve(
+  reportId: string,
+  offenderId: string
+): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  if (!reportId.trim()) {
+    throw new Error('Report ID is missing.');
+  }
+  if (!offenderId.trim()) {
+    throw new Error('Offending user ID could not be resolved.');
+  }
+
+  try {
+    await updateUserAccountStatus(offenderId, 'suspended');
+    await updateDoc(doc(db, 'reports', reportId), {
+      status: 'resolved',
+    });
+  } catch (err) {
+    throw mapAdminError(err, 'Failed to suspend offending user.');
+  }
+}
+
+/**
+ * Action 4: Bans the offending user (`status = 'suspended'`, `isBanned = true`),
+ * hides all their listings (`isActive = false`), and marks report `status = 'resolved'`.
+ */
+export async function banReportedUserAndResolve(
+  reportId: string,
+  offenderId: string
+): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  if (!reportId.trim()) {
+    throw new Error('Report ID is missing.');
+  }
+  if (!offenderId.trim()) {
+    throw new Error('Offending user ID could not be resolved.');
+  }
+
+  try {
+    await banUserAccount(offenderId);
+    await updateDoc(doc(db, 'reports', reportId), {
+      status: 'resolved',
+    });
+  } catch (err) {
+    throw mapAdminError(err, 'Failed to ban offending user.');
   }
 }
 

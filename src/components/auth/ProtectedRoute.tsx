@@ -1,7 +1,11 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getProtectedRouteDecision } from '../../lib/authHelpers';
+import { useToast } from '../../contexts/ToastContext';
+import {
+  getProtectedRouteDecision,
+  SUSPENDED_ACCOUNT_MESSAGE,
+} from '../../lib/authHelpers';
 import { Loading } from '../feedback/Loading';
 
 interface ProtectedRouteProps {
@@ -13,12 +17,26 @@ export function ProtectedRoute({
   children,
   requireCompleteProfile = false,
 }: ProtectedRouteProps) {
-  const { user, loading, isProfileComplete } = useAuth();
+  const { user, loading, isProfileComplete, isSuspended, signOut } = useAuth();
+  const { showToast } = useToast();
   const location = useLocation();
+  const handledSuspensionRef = useRef(false);
+
+  useEffect(() => {
+    if (!loading && isSuspended && !handledSuspensionRef.current) {
+      handledSuspensionRef.current = true;
+      showToast(SUSPENDED_ACCOUNT_MESSAGE, 'error');
+      void signOut();
+    }
+    if (!isSuspended) {
+      handledSuspensionRef.current = false;
+    }
+  }, [loading, isSuspended, signOut, showToast]);
 
   const decision = getProtectedRouteDecision({
     loading,
     isAuthenticated: Boolean(user),
+    isSuspended,
   });
 
   if (decision === 'loading') {

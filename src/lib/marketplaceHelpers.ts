@@ -9,6 +9,7 @@ export type MarketplaceSortOption =
   | 'most_contacted';
 
 export interface MarketplaceFilters {
+  adType?: AdType;
   categoryId?: string;
   subcategory?: string;
   searchQuery?: string;
@@ -223,6 +224,10 @@ export function applyLocalMarketplaceFiltersAndSort(
       item.isActive === true &&
       item.categoryId !== 'accommodation'
   );
+
+  if (filters.adType) {
+    result = result.filter((item) => getListingAdType(item) === filters.adType);
+  }
 
   if (filters.categoryId?.trim()) {
     result = result.filter((item) => item.categoryId === filters.categoryId);
