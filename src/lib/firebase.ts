@@ -2,10 +2,12 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import {
   CACHE_SIZE_UNLIMITED,
+  enableNetwork,
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  setLogLevel,
   Firestore,
 } from 'firebase/firestore';
 import {
@@ -47,6 +49,7 @@ let db: Firestore | null = null;
 
 try {
   if (isFirebaseConfigured()) {
+    setLogLevel('silent');
     const firebaseConfig = buildFirebaseConfig(rawEnv);
     const isNewApp = getApps().length === 0;
     app = isNewApp ? initializeApp(firebaseConfig) : getApp();
@@ -59,11 +62,25 @@ try {
               tabManager: persistentMultipleTabManager(),
             }),
             ignoreUndefinedProperties: true,
-            experimentalAutoDetectLongPolling: true,
+            experimentalForceLongPolling: true,
           })
         : getFirestore(app);
     } catch {
-      db = getFirestore(app);
+      try {
+        db = initializeFirestore(app, {
+          ignoreUndefinedProperties: true,
+          experimentalForceLongPolling: true,
+        });
+      } catch {
+        db = getFirestore(app);
+      }
+    }
+
+    if (typeof window !== 'undefined' && db) {
+      const firestoreInstance = db;
+      window.addEventListener('online', () => {
+        void enableNetwork(firestoreInstance).catch(() => {});
+      });
     }
   }
 } catch (err) {
