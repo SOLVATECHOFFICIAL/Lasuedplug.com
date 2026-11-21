@@ -1,13 +1,14 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
-  ImagePlus,
+  Globe,
   Loader2,
+  MapPin,
   PackageOpen,
   ShieldAlert,
-  Trash2,
+  Truck,
 } from 'lucide-react';
 import { getProductById } from '../../lib/marketplaceService';
 import { updateSellerListing } from '../../lib/sellerService';
@@ -18,7 +19,10 @@ import {
 } from '../../lib/categories';
 import { getListingAdType } from '../../lib/marketplaceHelpers';
 import { getFastCache, invalidateFastCache, invalidateFastCachePrefix } from '../../lib/fastCache';
-import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
+import {
+  MarketplaceCreateValidationErrors,
+  validateMarketplaceCreateInput,
+} from '../../lib/listingValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { PriceType, Product, ServiceLocation } from '../../types';
@@ -28,24 +32,21 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
-import { ProductImage } from '../../components/marketplace/ProductImage';
+import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
+import { LocationPinField } from '../../components/forms/LocationPinField';
 
-const MAX_IMAGES = 4;
-const MAX_DOCUMENT_IMAGE_BYTES = 850_000;
-
-const ITEM_PRICE_TYPE_OPTIONS = [
+const PRICE_TYPE_OPTIONS = [
   { value: 'fixed', label: 'Fixed' },
   { value: 'negotiable', label: 'Negotiable' },
   { value: 'contact', label: 'Contact for Price' },
 ] as const;
 
-const SERVICE_LOCATION_OPTIONS: Array<{
+const NON_SHOP_SERVICE_MODES: Array<{
   value: ServiceLocation;
   label: string;
 }> = [
-  { value: 'shop', label: 'Come to my shop' },
-  { value: 'mobile', label: 'I come to you (Mobile)' },
   { value: 'online', label: 'Online / Delivery' },
+  { value: 'mobile', label: 'I come to you (Mobile)' },
 ];
 
 export function MarketplaceEdit() {
@@ -66,17 +67,26 @@ export function MarketplaceEdit() {
   const [priceType, setPriceType] = useState<PriceType>('fixed');
   const [priceAmount, setPriceAmount] = useState('');
   const [quantity, setQuantity] = useState('1');
-  const [serviceLocation, setServiceLocation] = useState<ServiceLocation>('shop');
+
+  const [itemLocationType, setItemLocationType] = useState<'physical' | 'online'>(
+    'physical'
+  );
+  const [hasPhysicalShop, setHasPhysicalShop] = useState(true);
+  const [nonShopServiceMode, setNonShopServiceMode] =
+    useState<ServiceLocation>('online');
+
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [locationName, setLocationName] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [hasDelivery, setHasDelivery] = useState(false);
 
-  const [compressing, setCompressing] = useState(false);
+  const [fieldErrors, setFieldErrors] =
+    useState<MarketplaceCreateValidationErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const submittingRef = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadListing = useCallback(async () => {
     if (!id) {
@@ -99,13 +109,13 @@ export function MarketplaceEdit() {
         invalidateFastCachePrefix('mkt_');
       }
       if (record) {
-        const adType = getListingAdType(record);
+        const recordAdType = getListingAdType(record);
         setTitle(record.title || '');
         setDescription(record.description || '');
         setCategoryId(record.categoryId || '');
         setSubcategory(record.subcategory || '');
         setImages(Array.isArray(record.images) ? record.images : []);
-        setPriceType(adType === 'service' ? 'contact' : record.priceType || 'fixed');
+        setPriceType(record.priceType || (recordAdType === 'service' ? 'contact' : 'fixed'));
         setPriceAmount(
           typeof record.price === 'number' && Number.isFinite(record.price)
             ? String(record.price)
@@ -116,10 +126,39 @@ export function MarketplaceEdit() {
             ? String(Math.max(0, record.quantity))
             : '1'
         );
-        setServiceLocation(record.serviceLocation || 'shop');
+
+        const inferredLocationType: 'physical' | 'online' =
+          record.locationType === 'online' ||
+          (recordAdType === 'service' &&
+            record.serviceLocation &&
+            record.serviceLocation !== 'shop')
+            ? 'online'
+            : 'physical';
+        setItemLocationType(inferredLocationType);
+
+        if (recordAdType === 'service') {
+          const isShop = (record.serviceLocation || 'shop') === 'shop';
+          setHasPhysicalShop(isShop);
+          if (!isShop && record.serviceLocation) {
+            setNonShopServiceMode(record.serviceLocation);
+          }
+        }
+
         setWhatsappNumber(record.whatsappNumber || '');
+        const existingLocName =
+          record.locationName || record.landmark || record.location || '';
         setLocationName(
-          record.locationName || record.landmark || record.location || ''
+          inferredLocationType === 'online' &&
+            (existingLocName === 'Online / Delivery' ||
+              existingLocName === 'We come to you')
+            ? ''
+            : existingLocName
+        );
+        setLatitude(
+          typeof record.latitude === 'number' ? record.latitude : undefined
+        );
+        setLongitude(
+          typeof record.longitude === 'number' ? record.longitude : undefined
         );
         setHasDelivery(Boolean(record.hasDelivery));
       }
@@ -143,6 +182,17 @@ export function MarketplaceEdit() {
     [listing]
   );
 
+  const effectiveLocationType: 'physical' | 'online' =
+    adType === 'item'
+      ? itemLocationType
+      : hasPhysicalShop
+        ? 'physical'
+        : 'online';
+
+  const effectiveServiceLocation: ServiceLocation = hasPhysicalShop
+    ? 'shop'
+    : nonShopServiceMode;
+
   const categoryOptions = useMemo(
     () =>
       getCategoriesForAdType(adType).map((cat) => ({
@@ -157,57 +207,21 @@ export function MarketplaceEdit() {
     [categoryId]
   );
 
+  const clearFieldError = (key: keyof MarketplaceCreateValidationErrors) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const handleCategoryChange = (nextCategoryId: string) => {
     setCategoryId(nextCategoryId);
     const nextSubs = getSubcategoriesForCategory(nextCategoryId);
     setSubcategory(nextSubs[0] || '');
-  };
-
-  const handleImageSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (files.length === 0) return;
-
-    const remaining = MAX_IMAGES - images.length;
-    if (remaining <= 0) {
-      showToast(`Maximum of ${MAX_IMAGES} images allowed.`, 'info');
-      return;
-    }
-
-    const toProcess = files.slice(0, remaining);
-    setCompressing(true);
-    setFormError(null);
-
-    try {
-      const compressed: string[] = [];
-      for (const file of toProcess) {
-        if (!isImageFile(file)) {
-          throw new Error(`"${file.name}" is not a valid image file.`);
-        }
-        const base64 = await compressImageToBase64(file);
-        compressed.push(base64);
-      }
-
-      const combined = [...images, ...compressed];
-      const totalChars = combined.reduce((sum, img) => sum + img.length, 0);
-      if (totalChars > MAX_DOCUMENT_IMAGE_BYTES) {
-        throw new Error(
-          'Combined images exceed Firestore size limits. Please remove an image or upload smaller photos.'
-        );
-      }
-      setImages(combined);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Failed to process image.';
-      setFormError(msg);
-      showToast(msg, 'error');
-    } finally {
-      setCompressing(false);
-    }
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setImages((prev) => prev.filter((_, idx) => idx !== index));
+    clearFieldError('categoryId');
+    clearFieldError('subcategory');
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -215,49 +229,50 @@ export function MarketplaceEdit() {
     if (submittingRef.current || !listing?.id || !user?.uid) return;
     setFormError(null);
 
-    const trimmedTitle = title.trim();
-    const trimmedDesc = description.trim();
-    const trimmedPhone = whatsappNumber.trim();
-    const trimmedLoc = locationName.trim();
-
-    if (trimmedTitle.length < 3) {
-      setFormError('Please enter a title (at least 3 characters).');
-      return;
-    }
-    if (trimmedDesc.length < 10) {
-      setFormError('Please enter a description (at least 10 characters).');
-      return;
-    }
-    if (!categoryId || !subcategory) {
-      setFormError('Please select both a category and subcategory.');
-      return;
-    }
+    const errors = validateMarketplaceCreateInput({
+      adType,
+      title,
+      description,
+      categoryId,
+      subcategory,
+      imagesCount: images.length,
+      quantity,
+      requireStockQuantity: false,
+      priceType,
+      priceAmount,
+      locationType: effectiveLocationType,
+      serviceLocation:
+        adType === 'service' ? effectiveServiceLocation : undefined,
+      locationName,
+      latitude,
+      longitude,
+      whatsappNumber,
+    });
 
     let parsedQuantity: number | undefined;
-    let parsedPrice: number | undefined;
-
     if (adType === 'item') {
       const numericQty = Number(quantity);
-      if (!Number.isFinite(numericQty) || numericQty < 0) {
-        setFormError('Please enter a valid stock quantity (0 or more).');
-        return;
-      }
-      parsedQuantity = Math.floor(numericQty);
-
-      if (priceType === 'fixed' || priceType === 'negotiable') {
-        const numericPrice = Number(priceAmount);
-        if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
-          setFormError('Please enter a valid price amount in Naira.');
-          return;
-        }
-        parsedPrice = numericPrice;
+      if (!quantity.trim() || !Number.isFinite(numericQty) || numericQty < 0) {
+        errors.quantity = 'Please enter a valid stock quantity (0 or more).';
+      } else {
+        parsedQuantity = Math.floor(numericQty);
       }
     }
 
-    if (trimmedPhone.replace(/[^\d]/g, '').length < 7) {
-      setFormError('Please enter a valid WhatsApp number.');
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const firstError = Object.values(errors)[0];
+      if (firstError) {
+        setFormError(firstError);
+        showToast(firstError, 'error');
+      }
       return;
     }
+
+    const parsedPrice =
+      priceType === 'fixed' || priceType === 'negotiable'
+        ? Number(priceAmount)
+        : undefined;
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -265,20 +280,28 @@ export function MarketplaceEdit() {
     try {
       await updateSellerListing(listing.id, {
         adType,
-        title: trimmedTitle,
-        description: trimmedDesc,
+        title: title.trim(),
+        description: description.trim(),
         categoryId,
         subcategory,
         categoryName: getCategoryName(categoryId) || listing.categoryName || categoryId,
         images,
-        priceType: adType === 'service' ? 'contact' : priceType,
+        priceType,
         price: parsedPrice,
         priceUnit: listing.priceUnit || 'total',
         quantity: parsedQuantity,
-        serviceLocation: adType === 'service' ? serviceLocation : undefined,
-        whatsappNumber: trimmedPhone,
-        locationName: trimmedLoc,
-        hasDelivery: adType === 'item' ? hasDelivery : serviceLocation === 'online',
+        serviceLocation:
+          adType === 'service' ? effectiveServiceLocation : undefined,
+        locationType: effectiveLocationType,
+        latitude: effectiveLocationType === 'physical' ? latitude : undefined,
+        longitude: effectiveLocationType === 'physical' ? longitude : undefined,
+        whatsappNumber: whatsappNumber.trim(),
+        locationName:
+          effectiveLocationType === 'physical' ? locationName.trim() : undefined,
+        hasDelivery:
+          adType === 'item'
+            ? effectiveLocationType === 'online' || hasDelivery
+            : effectiveServiceLocation === 'online',
       });
 
       showToast(
@@ -361,8 +384,7 @@ export function MarketplaceEdit() {
     );
   }
 
-  const showItemPriceField =
-    adType === 'item' && (priceType === 'fixed' || priceType === 'negotiable');
+  const showPriceField = priceType === 'fixed' || priceType === 'negotiable';
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-12 space-y-6">
@@ -399,7 +421,7 @@ export function MarketplaceEdit() {
       </div>
 
       <Card hoverable={false}>
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
+        <form onSubmit={(e) => void handleSubmit(e)} noValidate className="space-y-6">
           {formError && (
             <div
               role="alert"
@@ -413,7 +435,11 @@ export function MarketplaceEdit() {
             label="Title"
             required
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              clearFieldError('title');
+            }}
+            error={fieldErrors.title}
             placeholder="Listing title"
           />
 
@@ -422,16 +448,28 @@ export function MarketplaceEdit() {
               htmlFor="edit-description"
               className="block text-sm font-medium text-slate-700"
             >
-              Description
+              Description <span className="text-red-500 ml-0.5">*</span>
             </label>
             <textarea
               id="edit-description"
               required
               rows={4}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => {
+                setDescription(e.target.value);
+                clearFieldError('description');
+              }}
+              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                fieldErrors.description
+                  ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
+                  : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+              }`}
             />
+            {fieldErrors.description && (
+              <p className="text-xs font-medium text-red-600" role="alert">
+                {fieldErrors.description}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -441,6 +479,7 @@ export function MarketplaceEdit() {
               options={categoryOptions}
               value={categoryId}
               onChange={(e) => handleCategoryChange(e.target.value)}
+              error={fieldErrors.categoryId}
               required
             />
             <Select
@@ -449,13 +488,22 @@ export function MarketplaceEdit() {
               options={subcategoryOptions}
               value={subcategory}
               disabled={!categoryId}
-              onChange={(e) => setSubcategory(e.target.value)}
+              onChange={(e) => {
+                setSubcategory(e.target.value);
+                clearFieldError('subcategory');
+              }}
+              error={fieldErrors.subcategory}
               required
             />
           </div>
 
-          {adType === 'item' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Pricing & Mode */}
+          <div
+            className={`grid grid-cols-1 ${
+              adType === 'item' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+            } gap-4`}
+          >
+            {adType === 'item' && (
               <Input
                 label="Quantity in Stock"
                 type="number"
@@ -463,145 +511,229 @@ export function MarketplaceEdit() {
                 step={1}
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => {
+                  setQuantity(e.target.value);
+                  clearFieldError('quantity');
+                }}
+                error={fieldErrors.quantity}
               />
+            )}
 
-              <Select
-                label="Price Type"
-                name="priceType"
-                options={[...ITEM_PRICE_TYPE_OPTIONS]}
-                value={priceType}
-                onChange={(e) => setPriceType(e.target.value as PriceType)}
+            <Select
+              label="Price Type"
+              name="priceType"
+              options={[...PRICE_TYPE_OPTIONS]}
+              value={priceType}
+              onChange={(e) => {
+                const next = e.target.value as PriceType;
+                setPriceType(next);
+                if (next === 'contact') clearFieldError('price');
+              }}
+              required
+            />
+
+            {showPriceField && (
+              <Input
+                label="Price Amount (₦)"
+                type="number"
+                min={1}
+                step="any"
                 required
+                value={priceAmount}
+                onChange={(e) => {
+                  setPriceAmount(e.target.value);
+                  clearFieldError('price');
+                }}
+                error={fieldErrors.price}
               />
+            )}
+          </div>
 
-              {showItemPriceField && (
-                <Input
-                  label="Price Amount (₦)"
-                  type="number"
-                  min={1}
-                  step="any"
-                  required
-                  value={priceAmount}
-                  onChange={(e) => setPriceAmount(e.target.value)}
-                />
+          {adType === 'service' && (
+            <div className="space-y-3 pt-1">
+              <p className="text-sm font-medium text-slate-700">
+                Do you operate from a physical shop?{' '}
+                <span className="text-red-500">*</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasPhysicalShop(true);
+                    clearFieldError('locationName');
+                    clearFieldError('gps');
+                  }}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-colors ${
+                    hasPhysicalShop
+                      ? 'bg-blue-50 border-blue-600 text-blue-800 ring-1 ring-blue-500'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  <span>Yes, Physical Shop</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasPhysicalShop(false);
+                    setLatitude(undefined);
+                    setLongitude(undefined);
+                    clearFieldError('locationName');
+                    clearFieldError('gps');
+                  }}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-colors ${
+                    !hasPhysicalShop
+                      ? 'bg-blue-50 border-blue-600 text-blue-800 ring-1 ring-blue-500'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Globe className="w-4 h-4 shrink-0" />
+                  <span>No (Online / I come to you)</span>
+                </button>
+              </div>
+
+              {!hasPhysicalShop && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {NON_SHOP_SERVICE_MODES.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setNonShopServiceMode(opt.value)}
+                      className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        nonShopServiceMode === opt.value
+                          ? 'bg-primary-50 border-primary-400 text-primary-700'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {/* Photos (1-4 compulsory with X delete buttons) */}
+          <ImageUploadGrid
+            images={images}
+            onChange={(next) => {
+              setImages(next);
+              clearFieldError('images');
+            }}
+            label={adType === 'service' ? 'Portfolio / Work Photos' : 'Product Photos'}
+            error={fieldErrors.images}
+            inputId="edit-listing-images"
+          />
+
+          <Input
+            label="WhatsApp Number"
+            type="tel"
+            required
+            value={whatsappNumber}
+            onChange={(e) => {
+              setWhatsappNumber(e.target.value);
+              clearFieldError('whatsappNumber');
+            }}
+            error={fieldErrors.whatsappNumber}
+          />
+
+          {adType === 'item' && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700">
-                Service Location Mode
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {SERVICE_LOCATION_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setServiceLocation(opt.value)}
-                    className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
-                      serviceLocation === opt.value
-                        ? 'bg-primary-50 border-primary-400 text-primary-700'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <p className="text-sm font-medium text-slate-700">
+                Pickup / Fulfillment Location
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItemLocationType('physical');
+                    clearFieldError('locationName');
+                    clearFieldError('gps');
+                  }}
+                  className={`p-3 rounded-xl border text-xs font-semibold transition-colors ${
+                    itemLocationType === 'physical'
+                      ? 'bg-blue-50 border-blue-600 text-blue-800'
+                      : 'bg-white border-slate-200 text-slate-700'
+                  }`}
+                >
+                  Physical Location
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItemLocationType('online');
+                    setLatitude(undefined);
+                    setLongitude(undefined);
+                    clearFieldError('locationName');
+                    clearFieldError('gps');
+                  }}
+                  className={`p-3 rounded-xl border text-xs font-semibold transition-colors ${
+                    itemLocationType === 'online'
+                      ? 'bg-blue-50 border-blue-600 text-blue-800'
+                      : 'bg-white border-slate-200 text-slate-700'
+                  }`}
+                >
+                  Online / Delivery Only
+                </button>
               </div>
             </div>
           )}
 
-          {/* Photos */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-slate-700">
-                Photos (Up to {MAX_IMAGES})
-              </label>
-              <span className="text-xs text-slate-500 tabular-nums">
-                {images.length}/{MAX_IMAGES}
-              </span>
-            </div>
+          {effectiveLocationType === 'physical' ? (
+            <div className="space-y-4">
+              <Input
+                label={
+                  adType === 'service'
+                    ? 'Shop Address / Landmark'
+                    : 'Physical Address / Landmark'
+                }
+                value={locationName}
+                onChange={(e) => {
+                  setLocationName(e.target.value);
+                  clearFieldError('locationName');
+                }}
+                error={fieldErrors.locationName}
+                placeholder="e.g. Opposite LASUED Main Gate"
+                required
+              />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {images.map((imgUrl, idx) => (
-                <div
-                  key={`${imgUrl.slice(0, 20)}-${idx}`}
-                  className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100"
-                >
-                  <ProductImage
-                    src={imgUrl}
-                    alt={`Listing photo ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                    iconClassName="w-6 h-6 text-slate-400"
+              <LocationPinField
+                latitude={latitude}
+                longitude={longitude}
+                onPin={({ latitude: lat, longitude: lng }) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                  clearFieldError('gps');
+                }}
+                onClear={() => {
+                  setLatitude(undefined);
+                  setLongitude(undefined);
+                }}
+                error={fieldErrors.gps}
+              />
+
+              {adType === 'item' && (
+                <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasDelivery}
+                    onChange={(e) => setHasDelivery(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    aria-label={`Remove photo ${idx + 1}`}
-                    className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-slate-900/75 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-
-              {images.length < MAX_IMAGES && (
-                <button
-                  type="button"
-                  disabled={compressing}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/40 flex flex-col items-center justify-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors disabled:opacity-60"
-                >
-                  {compressing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ImagePlus className="w-5 h-5" />
-                  )}
-                  <span className="text-xs font-medium">
-                    {compressing ? 'Compressing...' : 'Add Photo'}
+                  <Truck className="w-4 h-4 text-slate-600 shrink-0" />
+                  <span className="text-sm font-medium text-slate-800">
+                    I also offer delivery
                   </span>
-                </button>
+                </label>
               )}
             </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => void handleImageSelect(e)}
-              className="sr-only"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="WhatsApp Number"
-              type="tel"
-              required
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-            />
-            <Input
-              label="Location Landmark"
-              value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
-              placeholder="e.g. Opposite LASUED Main Gate"
-            />
-          </div>
-
-          {adType === 'item' && (
-            <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hasDelivery}
-                onChange={(e) => setHasDelivery(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-slate-800">
-                I offer delivery
+          ) : (
+            <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-3.5 text-xs text-emerald-900 flex items-center gap-2">
+              <Truck className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>
+                Online / Delivery mode active — physical address and GPS pin are not required.
               </span>
-            </label>
+            </div>
           )}
 
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
@@ -610,11 +742,7 @@ export function MarketplaceEdit() {
                 Cancel
               </Button>
             </Link>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={submitting || compressing}
-            >
+            <Button type="submit" variant="primary" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />

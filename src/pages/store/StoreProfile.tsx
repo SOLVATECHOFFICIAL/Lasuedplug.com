@@ -71,6 +71,7 @@ export function StoreProfile() {
   const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
   const [error, setError] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedStoreImageIndex, setSelectedStoreImageIndex] = useState(0);
 
   const loadStoreProfile = useCallback(async () => {
     if (!id) {
@@ -149,6 +150,7 @@ export function StoreProfile() {
   }, [loadStoreProfile]);
 
   useEffect(() => {
+    setSelectedStoreImageIndex(0);
     if (!store?.id || !store.isApproved) return;
     saveRecentlyViewed({
       id: store.id,
@@ -156,7 +158,7 @@ export function StoreProfile() {
       title: store.name,
       subtitle: store.category || 'Campus Store',
       priceLabel: store.openingHours?.trim() || store.locationName || 'Storefront',
-      imageUrl: store.logoUrl,
+      imageUrl: store.images?.[0] || store.logoUrl,
       href: `/store/${store.id}`,
       isVerified: Boolean(ownerProfile?.isVerified || store.ownerSnapshot?.isVerified),
     });
@@ -213,6 +215,15 @@ export function StoreProfile() {
     : '';
   const isOwner = Boolean(user?.uid && user.uid === store.ownerId);
 
+  const storeImages =
+    Array.isArray(store.images) && store.images.length > 0
+      ? store.images
+      : store.logoUrl
+        ? [store.logoUrl]
+        : [];
+  const activeStoreImage =
+    storeImages[selectedStoreImageIndex] || storeImages[0];
+
   const handleReportClick = () => {
     if (!user) {
       showToast('Please log in to report a user.', 'info');
@@ -258,13 +269,39 @@ export function StoreProfile() {
       <Card hoverable={false} className="p-5 sm:p-7">
         <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
           <div className="flex flex-col sm:flex-row gap-5 items-start min-w-0 flex-1">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
-              <ProductImage
-                src={store.logoUrl}
-                alt={store.name}
-                className="w-full h-full object-cover"
-                iconClassName="w-9 h-9 text-slate-400"
-              />
+            <div className="space-y-2 shrink-0">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
+                <ProductImage
+                  src={activeStoreImage}
+                  alt={store.name}
+                  className="w-full h-full object-cover"
+                  iconClassName="w-9 h-9 text-slate-400"
+                />
+              </div>
+              {storeImages.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  {storeImages.map((imgSrc, idx) => (
+                    <button
+                      key={`${imgSrc.slice(0, 20)}-${idx}`}
+                      type="button"
+                      onClick={() => setSelectedStoreImageIndex(idx)}
+                      aria-label={`View store photo ${idx + 1}`}
+                      className={`w-7 h-7 rounded-md overflow-hidden border transition-all ${
+                        idx === selectedStoreImageIndex
+                          ? 'border-blue-600 ring-1 ring-blue-500'
+                          : 'border-slate-200 opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      <ProductImage
+                        src={imgSrc}
+                        alt={`${store.name} thumbnail ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                        iconClassName="w-3 h-3 text-slate-400"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2.5 min-w-0 flex-1">

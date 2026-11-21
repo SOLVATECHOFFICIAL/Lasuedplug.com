@@ -192,6 +192,9 @@ export interface EditListingInput {
   priceUnit?: Product['priceUnit'];
   quantity?: number;
   serviceLocation?: Product['serviceLocation'];
+  locationType?: 'physical' | 'online';
+  latitude?: number;
+  longitude?: number;
   whatsappNumber: string;
   locationName?: string;
   hasDelivery?: boolean;
@@ -206,9 +209,13 @@ export function buildEditedListingUpdatePayload(
   input: EditListingInput
 ): Record<string, unknown> {
   const isService = input.adType === 'service';
-  const effectivePriceType: Product['priceType'] = isService
-    ? 'contact'
-    : input.priceType;
+  const effectivePriceType: Product['priceType'] =
+    isService && (input.priceType === 'contact' || typeof input.price !== 'number')
+      ? 'contact'
+      : input.priceType;
+  const effectiveLocationType: 'physical' | 'online' =
+    input.locationType ||
+    (isService && input.serviceLocation !== 'shop' ? 'online' : 'physical');
   const trimmedLocation = input.locationName?.trim() || '';
 
   const payload: Record<string, unknown> = {
@@ -219,23 +226,37 @@ export function buildEditedListingUpdatePayload(
     categoryName: input.categoryName,
     images: input.images,
     priceType: effectivePriceType,
+    locationType: effectiveLocationType,
     whatsappNumber: input.whatsappNumber.trim(),
     hasDelivery: isService
       ? input.serviceLocation === 'online'
-      : Boolean(input.hasDelivery),
+      : effectiveLocationType === 'online' || Boolean(input.hasDelivery),
     // CRITICAL SECURITY RULE: Auto-hide on edit
     isApproved: false,
   };
+
+  if (
+    (effectivePriceType === 'fixed' || effectivePriceType === 'negotiable') &&
+    typeof input.price === 'number' &&
+    Number.isFinite(input.price)
+  ) {
+    payload.price = input.price;
+    payload.priceUnit = input.priceUnit || 'total';
+  }
 
   if (isService) {
     payload.serviceLocation = input.serviceLocation || 'shop';
     payload.status = 'active';
     payload.isActive = true;
     payload.locationName =
-      trimmedLocation ||
-      (input.serviceLocation === 'online'
-        ? 'Online / Delivery'
-        : 'We come to you');
+      effectiveLocationType === 'physical'
+        ? trimmedLocation
+        : input.serviceLocation === 'mobile'
+          ? 'We come to you'
+          : 'Online / Delivery';
+    if (effectiveLocationType === 'physical' && trimmedLocation) {
+      payload.landmark = trimmedLocation;
+    }
   } else {
     const qty =
       typeof input.quantity === 'number' && Number.isFinite(input.quantity)
@@ -244,18 +265,21 @@ export function buildEditedListingUpdatePayload(
     payload.quantity = qty;
     payload.status = qty === 0 ? 'sold' : 'active';
     payload.isActive = qty > 0;
-    if (
-      (effectivePriceType === 'fixed' || effectivePriceType === 'negotiable') &&
-      typeof input.price === 'number' &&
-      Number.isFinite(input.price)
-    ) {
-      payload.price = input.price;
-      payload.priceUnit = input.priceUnit || 'total';
-    }
-    if (trimmedLocation) {
+    if (effectiveLocationType === 'physical' && trimmedLocation) {
       payload.locationName = trimmedLocation;
       payload.landmark = trimmedLocation;
     }
+  }
+
+  if (
+    effectiveLocationType === 'physical' &&
+    typeof input.latitude === 'number' &&
+    Number.isFinite(input.latitude) &&
+    typeof input.longitude === 'number' &&
+    Number.isFinite(input.longitude)
+  ) {
+    payload.latitude = input.latitude;
+    payload.longitude = input.longitude;
   }
 
   return payload;
@@ -490,6 +514,7 @@ export function storeToUnifiedSellerListing(store: {
   category: string;
   locationName: string;
   logoUrl?: string;
+  images?: string[];
   isApproved?: boolean;
   isActive?: boolean;
   createdAt: unknown;
@@ -501,7 +526,7 @@ export function storeToUnifiedSellerListing(store: {
     title: store.name,
     subtitle: store.category || 'Campus Store',
     locationLabel: store.locationName || 'Epe Campus',
-    thumbnail: store.logoUrl,
+    thumbnail: store.images?.[0] || store.logoUrl,
     isApproved: store.isApproved === true,
     isActive: store.isActive !== false,
     status: store.isActive !== false ? 'active' : 'unavailable',

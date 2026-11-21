@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
+  ExternalLink,
   Lock,
   MapPin,
   MessageCircle,
@@ -277,6 +278,18 @@ export function AccommodationDetail() {
                   <MapPin className="w-4 h-4 text-primary-500 shrink-0" />
                   <span>{publicLocation}</span>
                 </p>
+                {typeof item.latitude === 'number' &&
+                  typeof item.longitude === 'number' && (
+                    <a
+                      href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      <span>View on Map</span>
+                    </a>
+                  )}
                 <p className="text-xs text-slate-500 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span>

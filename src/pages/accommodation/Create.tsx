@@ -1,20 +1,20 @@
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Building2,
   Check,
-  ImagePlus,
-  Loader2,
   Lock,
-  Trash2,
 } from 'lucide-react';
 import {
   ACCOMMODATION_TYPE_OPTIONS,
   COMMON_AMENITIES,
 } from '../../lib/accommodationHelpers';
 import { createAccommodation } from '../../lib/accommodationService';
-import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
+import {
+  MAX_LISTING_IMAGES,
+  validateAccommodationCreateInput,
+} from '../../lib/listingValidation';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,8 +23,9 @@ import { AccommodationType } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
+import { LocationPinField } from '../../components/forms/LocationPinField';
 
-const MAX_IMAGES = 4;
 const MAX_DOCUMENT_IMAGE_BYTES = 850_000;
 
 export function AccommodationCreate() {
@@ -38,18 +39,18 @@ export function AccommodationCreate() {
   const [rentPrice, setRentPrice] = useState('');
   const [generalLocation, setGeneralLocation] = useState('');
   const [exactAddress, setExactAddress] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
     'Running Water',
   ]);
   const [customAmenities, setCustomAmenities] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [compressing, setCompressing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const submittingRef = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profile?.phone && !whatsappNumber) {
@@ -65,53 +66,6 @@ export function AccommodationCreate() {
     );
   };
 
-  const handleImageSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (files.length === 0) return;
-
-    const remainingSlots = MAX_IMAGES - images.length;
-    if (remainingSlots <= 0) {
-      showToast(`Maximum of ${MAX_IMAGES} images allowed.`, 'info');
-      return;
-    }
-
-    const toProcess = files.slice(0, remainingSlots);
-    setCompressing(true);
-    setFormError(null);
-
-    try {
-      const nextImages: string[] = [];
-      for (const file of toProcess) {
-        if (!isImageFile(file)) {
-          throw new Error(`"${file.name}" is not a valid image file.`);
-        }
-        const base64 = await compressImageToBase64(file);
-        nextImages.push(base64);
-      }
-
-      const combined = [...images, ...nextImages];
-      const totalChars = combined.reduce((sum, img) => sum + img.length, 0);
-      if (totalChars > MAX_DOCUMENT_IMAGE_BYTES) {
-        throw new Error(
-          'Selected photos exceed Firestore document size limit. Please remove a photo or use smaller images.'
-        );
-      }
-      setImages(combined);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Unable to process image.';
-      setFormError(msg);
-      showToast(msg, 'error');
-    } finally {
-      setCompressing(false);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (submittingRef.current) return;
@@ -123,42 +77,6 @@ export function AccommodationCreate() {
       return;
     }
 
-    const trimmedTitle = title.trim();
-    const trimmedDesc = description.trim();
-    const parsedRent = Number(rentPrice);
-    const trimmedGeneralLoc = generalLocation.trim();
-    const trimmedExactAddress = exactAddress.trim();
-    const formattedPhone = formatNigerianWhatsAppDigits(whatsappNumber);
-
-    if (!trimmedTitle) {
-      setFormError('Please enter a clear listing title.');
-      return;
-    }
-    if (!trimmedDesc || trimmedDesc.length < 10) {
-      setFormError('Please provide a description (at least 10 characters).');
-      return;
-    }
-    if (!Number.isFinite(parsedRent) || parsedRent <= 0) {
-      setFormError('Please enter a valid annual rent price in Naira.');
-      return;
-    }
-    if (!trimmedGeneralLoc) {
-      setFormError('Please enter a public general area (e.g., Near LASUED Gate).');
-      return;
-    }
-    if (!trimmedExactAddress) {
-      setFormError('Please enter the exact address for admin verification.');
-      return;
-    }
-    if (images.length === 0) {
-      setFormError('Please upload at least 1 photo of the accommodation.');
-      return;
-    }
-    if (formattedPhone.length < 11) {
-      setFormError('Please enter a valid WhatsApp phone number.');
-      return;
-    }
-
     const extraAmenities = customAmenities
       .split(',')
       .map((s) => s.trim())
@@ -166,6 +84,28 @@ export function AccommodationCreate() {
     const mergedAmenities = Array.from(
       new Set([...selectedAmenities, ...extraAmenities])
     );
+
+    const formattedPhone = formatNigerianWhatsAppDigits(whatsappNumber);
+
+    const validationError = validateAccommodationCreateInput({
+      type,
+      title,
+      description,
+      rentPrice,
+      amenitiesCount: mergedAmenities.length,
+      generalLocation,
+      exactAddress,
+      imagesCount: images.length,
+      whatsappDigits: formattedPhone,
+      latitude,
+      longitude,
+    });
+
+    if (validationError) {
+      setFormError(validationError);
+      showToast(validationError, 'error');
+      return;
+    }
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -177,11 +117,14 @@ export function AccommodationCreate() {
       await createAccommodation({
         ownerId: user.uid,
         type,
-        title: trimmedTitle,
-        description: trimmedDesc,
-        rentPrice: Math.round(parsedRent),
-        generalLocation: trimmedGeneralLoc,
-        exactAddress: trimmedExactAddress,
+        title: title.trim(),
+        description: description.trim(),
+        rentPrice: Math.round(Number(rentPrice)),
+        generalLocation: generalLocation.trim(),
+        exactAddress: exactAddress.trim(),
+        locationType: 'physical',
+        latitude: latitude as number,
+        longitude: longitude as number,
         amenities: mergedAmenities,
         images,
         whatsappNumber: formattedPhone,
@@ -232,12 +175,12 @@ export function AccommodationCreate() {
           List Accommodation
         </h1>
         <p className="text-sm text-slate-600">
-          Post a verified student room, self-contain, or shared flat around Epe.
+          Post a verified student room, self-contain, or shared flat around Epe. Physical location GPS pin and 1–{MAX_LISTING_IMAGES} photos are required.
         </p>
       </div>
 
       <Card hoverable={false}>
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
+        <form onSubmit={(e) => void handleSubmit(e)} noValidate className="space-y-6">
           {formError && (
             <div
               role="alert"
@@ -254,7 +197,7 @@ export function AccommodationCreate() {
                 htmlFor="accommodation-type"
                 className="block text-sm font-medium text-slate-700"
               >
-                Accommodation Type
+                Accommodation Type <span className="text-red-500">*</span>
               </label>
               <select
                 id="accommodation-type"
@@ -289,6 +232,7 @@ export function AccommodationCreate() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Spacious Self Contain at Epe"
+            helperText="Minimum 5 characters."
           />
 
           <div className="space-y-1.5">
@@ -296,7 +240,7 @@ export function AccommodationCreate() {
               htmlFor="accommodation-description"
               className="block text-sm font-medium text-slate-700"
             >
-              Description
+              Description <span className="text-red-500">*</span>
             </label>
             <textarea
               id="accommodation-description"
@@ -307,6 +251,7 @@ export function AccommodationCreate() {
               placeholder="Describe room size, proximity to campus, compound environment, light/water situation, and inspection rules..."
               className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            <p className="text-xs text-slate-500">Minimum 5 characters.</p>
           </div>
 
           {/* Public General Location vs Private Exact Address */}
@@ -335,9 +280,28 @@ export function AccommodationCreate() {
             </div>
           </div>
 
+          {/* Mandatory Physical GPS Pin */}
+          <LocationPinField
+            latitude={latitude}
+            longitude={longitude}
+            onPin={({ latitude: lat, longitude: lng }) => {
+              setLatitude(lat);
+              setLongitude(lng);
+              setFormError(null);
+            }}
+            onClear={() => {
+              setLatitude(undefined);
+              setLongitude(undefined);
+            }}
+            label="Property GPS Location"
+            helperText="Rooms cannot be online-only — pin the exact physical location of the house/hostel."
+          />
+
           {/* Amenities */}
           <div className="space-y-3">
-            <p className="text-sm font-medium text-slate-700">Amenities</p>
+            <p className="text-sm font-medium text-slate-700">
+              Amenities <span className="text-red-500">*</span>
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {COMMON_AMENITIES.map((amenity) => {
                 const checked = selectedAmenities.includes(amenity);
@@ -376,69 +340,19 @@ export function AccommodationCreate() {
             />
           </div>
 
-          {/* Images (Base64 Compression) */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-slate-700">
-                Photos (Up to {MAX_IMAGES})
-              </label>
-              <span className="text-xs text-slate-500">
-                {images.length}/{MAX_IMAGES} added
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {images.map((imgUrl, idx) => (
-                <div
-                  key={`${imgUrl.slice(0, 20)}-${idx}`}
-                  className="relative aspect-[4/3] rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
-                >
-                  <img
-                    src={imgUrl}
-                    alt={`Room preview ${idx + 1}`}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(idx)}
-                    aria-label={`Remove photo ${idx + 1}`}
-                    className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-slate-900/75 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-
-              {images.length < MAX_IMAGES && (
-                <button
-                  type="button"
-                  disabled={compressing}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-[4/3] rounded-lg border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-primary-50/40 flex flex-col items-center justify-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors disabled:opacity-60"
-                >
-                  {compressing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ImagePlus className="w-5 h-5" />
-                  )}
-                  <span className="text-xs font-medium">
-                    {compressing ? 'Compressing...' : 'Add Photo'}
-                  </span>
-                </button>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => void handleImageSelect(e)}
-              className="sr-only"
-            />
-          </div>
+          {/* Compulsory Photos (1-4, Base64 Compression) */}
+          <ImageUploadGrid
+            images={images}
+            onChange={(next) => {
+              setImages(next);
+              setFormError(null);
+            }}
+            label="Room & Compound Photos"
+            aspectClass="aspect-[4/3]"
+            maxImages={MAX_LISTING_IMAGES}
+            maxDocumentBytes={MAX_DOCUMENT_IMAGE_BYTES}
+            inputId="accommodation-images"
+          />
 
           <Input
             label="WhatsApp Number"
@@ -459,7 +373,7 @@ export function AccommodationCreate() {
             <Button
               type="submit"
               variant="primary"
-              disabled={submitting || compressing}
+              disabled={submitting}
             >
               {submitting ? 'Submitting Listing...' : 'Submit Accommodation'}
             </Button>

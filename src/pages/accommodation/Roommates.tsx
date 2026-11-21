@@ -1,5 +1,4 @@
 import {
-  ChangeEvent,
   FormEvent,
   MouseEvent,
   useCallback,
@@ -10,7 +9,7 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ImagePlus,
+  ExternalLink,
   MapPin,
   MessageCircle,
   Plus,
@@ -33,7 +32,10 @@ import {
 } from '../../lib/accommodationService';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
-import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
+import {
+  MAX_LISTING_IMAGES,
+  validateRoommateCreateInput,
+} from '../../lib/listingValidation';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { shareListing } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
@@ -51,14 +53,8 @@ import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
 import { ProductImage } from '../../components/marketplace/ProductImage';
-
-interface LocalImageItem {
-  id: string;
-  file: File;
-  previewUrl: string;
-}
-
-const MAX_ROOMMATE_IMAGES = 3;
+import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
+import { LocationPinField } from '../../components/forms/LocationPinField';
 
 export function Roommates() {
   const navigate = useNavigate();
@@ -89,13 +85,13 @@ export function Roommates() {
   const [description, setDescription] = useState('');
   const [budget, setBudget] = useState('');
   const [generalLocation, setGeneralLocation] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [preferences, setPreferences] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [selectedImages, setSelectedImages] = useState<LocalImageItem[]>([]);
+  const [images, setImages] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const previewUrlsRef = useRef<string[]>([]);
   const submittingRef = useRef(false);
 
   const loadRequests = useCallback(async () => {
@@ -130,18 +126,6 @@ export function Roommates() {
       setWhatsappNumber(profile.phone);
     }
   }, [profile?.phone, whatsappNumber]);
-
-  useEffect(() => {
-    previewUrlsRef.current = selectedImages.map((img) => img.previewUrl);
-  }, [selectedImages]);
-
-  useEffect(() => {
-    return () => {
-      for (const url of previewUrlsRef.current) {
-        URL.revokeObjectURL(url);
-      }
-    };
-  }, []);
 
   const filteredRequests = useMemo(
     () => filterRoommateRequests(requests, typeFilter, searchQuery),
@@ -213,63 +197,16 @@ export function Roommates() {
   };
 
   const resetCreateForm = () => {
-    for (const item of selectedImages) {
-      URL.revokeObjectURL(item.previewUrl);
-    }
     setReqType('need_roommate');
     setTitle('');
     setDescription('');
     setBudget('');
     setGeneralLocation('');
+    setLatitude(undefined);
+    setLongitude(undefined);
     setPreferences('');
-    setSelectedImages([]);
+    setImages([]);
     setFormError(null);
-  };
-
-  const handleImageSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    e.target.value = '';
-    if (!files || files.length === 0) return;
-
-    const remaining = MAX_ROOMMATE_IMAGES - selectedImages.length;
-    if (remaining <= 0) {
-      showToast(`You can upload up to ${MAX_ROOMMATE_IMAGES} photos.`, 'info');
-      return;
-    }
-
-    const incoming: LocalImageItem[] = [];
-    for (const file of Array.from(files)) {
-      if (incoming.length >= remaining) {
-        showToast(
-          `Maximum of ${MAX_ROOMMATE_IMAGES} photos allowed per request.`,
-          'info'
-        );
-        break;
-      }
-      if (!isImageFile(file)) {
-        showToast(`"${file.name}" is not a valid image file.`, 'error');
-        continue;
-      }
-      incoming.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      });
-    }
-
-    if (incoming.length > 0) {
-      setSelectedImages((prev) => [...prev, ...incoming]);
-    }
-  };
-
-  const handleRemoveImage = (imageId: string) => {
-    setSelectedImages((prev) => {
-      const target = prev.find((img) => img.id === imageId);
-      if (target) {
-        URL.revokeObjectURL(target.previewUrl);
-      }
-      return prev.filter((img) => img.id !== imageId);
-    });
   };
 
   const handleCreateSubmit = async (e: FormEvent) => {
@@ -282,38 +219,24 @@ export function Roommates() {
       return;
     }
 
-    const trimmedTitle = title.trim();
-    const trimmedDesc = description.trim();
-    const trimmedLoc = generalLocation.trim();
-    const trimmedPrefs = preferences.trim();
     const formattedPhone = formatNigerianWhatsAppDigits(whatsappNumber);
-    const parsedBudget = budget.trim() ? Number(budget) : undefined;
 
-    if (!trimmedTitle) {
-      setFormError('Please enter a short headline for your request.');
-      return;
-    }
-    if (!trimmedDesc || trimmedDesc.length < 10) {
-      setFormError('Please provide details (at least 10 characters).');
-      return;
-    }
-    if (
-      parsedBudget !== undefined &&
-      (!Number.isFinite(parsedBudget) || parsedBudget <= 0)
-    ) {
-      setFormError('Please enter a valid positive budget or leave it blank.');
-      return;
-    }
-    if (!trimmedLoc) {
-      setFormError('Please enter your preferred area (e.g. Igbogbo, Epe).');
-      return;
-    }
-    if (!trimmedPrefs) {
-      setFormError('Please state your roommate preferences.');
-      return;
-    }
-    if (formattedPhone.length < 11) {
-      setFormError('Please enter a valid WhatsApp phone number.');
+    const validationError = validateRoommateCreateInput({
+      type: reqType,
+      title,
+      description,
+      budget,
+      generalLocation,
+      preferences,
+      imagesCount: images.length,
+      whatsappDigits: formattedPhone,
+      latitude,
+      longitude,
+    });
+
+    if (validationError) {
+      setFormError(validationError);
+      showToast(validationError, 'error');
       return;
     }
 
@@ -321,13 +244,8 @@ export function Roommates() {
     setSubmitting(true);
 
     try {
-      const compressedImages: string[] = [];
-      for (const item of selectedImages) {
-        compressedImages.push(await compressImageToBase64(item.file));
-      }
-
       const estimatedBytes = new TextEncoder().encode(
-        JSON.stringify(compressedImages)
+        JSON.stringify(images)
       ).length;
       if (estimatedBytes > 850_000) {
         throw new Error(
@@ -339,12 +257,15 @@ export function Roommates() {
       await createRoommateRequest({
         userId: user.uid,
         type: reqType,
-        title: trimmedTitle,
-        description: trimmedDesc,
-        budget: parsedBudget ? Math.round(parsedBudget) : undefined,
-        generalLocation: trimmedLoc,
-        preferences: trimmedPrefs,
-        images: compressedImages,
+        title: title.trim(),
+        description: description.trim(),
+        budget: Math.round(Number(budget)),
+        generalLocation: generalLocation.trim(),
+        locationType: 'physical',
+        latitude: latitude as number,
+        longitude: longitude as number,
+        preferences: preferences.trim(),
+        images,
         whatsappNumber: formattedPhone,
         userSnapshot: {
           fullName:
@@ -659,12 +580,24 @@ export function Roommates() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <div>
+              <div className="space-y-1">
                 <p className="text-xs font-medium text-slate-500">Location</p>
-                <p className="font-semibold text-slate-900 flex items-center gap-1 mt-0.5">
+                <p className="font-semibold text-slate-900 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-primary-500 shrink-0" />
                   <span>{selectedRequest.generalLocation}</span>
                 </p>
+                {typeof selectedRequest.latitude === 'number' &&
+                  typeof selectedRequest.longitude === 'number' && (
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedRequest.latitude},${selectedRequest.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span>View on Map</span>
+                    </a>
+                  )}
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500">
@@ -780,7 +713,7 @@ export function Roommates() {
                   Post Roommate Request
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Requests go live once reviewed by an admin.
+                  Requests require 1–{MAX_LISTING_IMAGES} photos, budget, and a pinned physical location.
                 </p>
               </div>
               <button
@@ -796,6 +729,7 @@ export function Roommates() {
 
             <form
               onSubmit={(e) => void handleCreateSubmit(e)}
+              noValidate
               className="space-y-4"
             >
               {formError && (
@@ -809,7 +743,7 @@ export function Roommates() {
 
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-slate-700">
-                  Request Type
+                  Request Type <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2.5">
                   {ROOMMATE_TYPE_OPTIONS.map((opt) => (
@@ -836,11 +770,12 @@ export function Roommates() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Looking for a female roommate at Igbogbo"
+                helperText="Minimum 5 characters."
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
-                  label="General Location"
+                  label="Physical Area / Location"
                   required
                   value={generalLocation}
                   onChange={(e) => setGeneralLocation(e.target.value)}
@@ -849,11 +784,12 @@ export function Roommates() {
                 <Input
                   label="Annual Budget Share (₦)"
                   type="number"
+                  required
                   min={1000}
                   step={500}
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
-                  placeholder="Optional, e.g. 120000"
+                  placeholder="e.g. 120000"
                 />
               </div>
 
@@ -870,7 +806,7 @@ export function Roommates() {
                   htmlFor="roommate-description"
                   className="block text-sm font-medium text-slate-700"
                 >
-                  Description
+                  Description <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="roommate-description"
@@ -881,6 +817,7 @@ export function Roommates() {
                   placeholder="Describe the apartment/room arrangement, move-in timeline, and expectations..."
                   className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <p className="text-xs text-slate-500">Minimum 5 characters.</p>
               </div>
 
               <Input
@@ -892,62 +829,34 @@ export function Roommates() {
                 placeholder="e.g. 08012345678"
               />
 
-              {/* Room / Personal Photos (Up to 3) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Room or Flat Photos{' '}
-                    <span className="text-xs font-normal text-slate-500">
-                      (Optional, up to {MAX_ROOMMATE_IMAGES})
-                    </span>
-                  </label>
-                  <span className="text-xs text-slate-500 tabular-nums">
-                    {selectedImages.length}/{MAX_ROOMMATE_IMAGES}
-                  </span>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="hidden"
-                />
-                <div className="grid grid-cols-3 gap-2.5">
-                  {selectedImages.map((img, idx) => (
-                    <div
-                      key={img.id}
-                      className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
-                    >
-                      <img
-                        src={img.previewUrl}
-                        alt={`Roommate photo ${idx + 1}`}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(img.id)}
-                        aria-label={`Remove photo ${idx + 1}`}
-                        className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/75 hover:bg-slate-900 text-white"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {selectedImages.length < MAX_ROOMMATE_IMAGES && (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/40 flex flex-col items-center justify-center gap-1 text-slate-500 hover:text-blue-600 transition-colors p-2 text-center"
-                    >
-                      <ImagePlus className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Add Photo</span>
-                    </button>
-                  )}
-                </div>
-              </div>
+              {/* Mandatory Physical GPS Pin */}
+              <LocationPinField
+                latitude={latitude}
+                longitude={longitude}
+                onPin={({ latitude: lat, longitude: lng }) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                  setFormError(null);
+                }}
+                onClear={() => {
+                  setLatitude(undefined);
+                  setLongitude(undefined);
+                }}
+                label="Room / Area GPS Location"
+                helperText="Roommate requests cannot be online-only — pin the exact physical location."
+              />
+
+              {/* Compulsory 1-4 Photos */}
+              <ImageUploadGrid
+                images={images}
+                onChange={(next) => {
+                  setImages(next);
+                  setFormError(null);
+                }}
+                label="Room or Flat Photos"
+                maxImages={MAX_LISTING_IMAGES}
+                inputId="roommate-images"
+              />
 
               <div className="pt-2 flex items-center justify-end gap-2.5">
                 <Button

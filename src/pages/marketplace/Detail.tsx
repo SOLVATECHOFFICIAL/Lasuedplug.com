@@ -131,7 +131,7 @@ export function MarketplaceDetail() {
         getCategoryName(product.categoryId) ||
         product.categoryName ||
         'Campus Listing',
-      priceLabel: adType === 'service' ? 'Contact for Price' : priceInfo.text,
+      priceLabel: priceInfo.text,
       imageUrl: product.images?.[0],
       href: `/marketplace/${productId}`,
       isVerified: Boolean(product.sellerSnapshot?.isVerified),
@@ -498,16 +498,14 @@ export function MarketplaceDetail() {
               <div className="flex flex-wrap items-baseline gap-2">
                 <p
                   className={`text-2xl tabular-nums ${
-                    isServiceListing || priceInfo.isContact
+                    priceInfo.isContact
                       ? 'font-bold text-blue-600'
                       : 'font-extrabold text-slate-900'
                   }`}
                 >
-                  {isServiceListing
-                    ? 'Contact for Price'
-                    : priceInfo.isContact && priceInfo.unitSuffix
-                      ? `${priceInfo.text} (${getPriceUnitLabel(product.priceUnit)})`
-                      : priceInfo.text}
+                  {priceInfo.isContact && priceInfo.unitSuffix
+                    ? `${priceInfo.text} (${getPriceUnitLabel(product.priceUnit)})`
+                    : priceInfo.text}
                 </p>
               </div>
 

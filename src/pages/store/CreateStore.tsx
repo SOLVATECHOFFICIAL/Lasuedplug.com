@@ -1,33 +1,29 @@
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  CheckCircle2,
-  ImagePlus,
+  Clock,
   Loader2,
   MapPin,
   Store as StoreIcon,
-  X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ALL_MARKETPLACE_CATEGORIES } from '../../lib/categories';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
-import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
+import {
+  formatOpeningHoursRange,
+  StoreCreateValidationErrors,
+  validateStoreCreateInput,
+} from '../../lib/listingValidation';
 import { createStore } from '../../lib/storeService';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
-
-interface StoreFormErrors {
-  name?: string;
-  description?: string;
-  category?: string;
-  whatsappNumber?: string;
-  locationName?: string;
-}
+import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
+import { LocationPinField } from '../../components/forms/LocationPinField';
 
 const STORE_CATEGORY_OPTIONS = [
   { value: 'General Campus Store', label: 'General Campus Store' },
@@ -45,23 +41,18 @@ export function CreateStore() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('General Campus Store');
-  const [openingHours, setOpeningHours] = useState('');
+  const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
+  const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
 
-  const [pinningLocation, setPinningLocation] = useState(false);
-  const [locationPinnedMessage, setLocationPinnedMessage] = useState<string | null>(
-    null
-  );
-  const [fieldErrors, setFieldErrors] = useState<StoreFormErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<StoreCreateValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const phonePrefilledRef = useRef(false);
   const redirectedRef = useRef(false);
   const submittingRef = useRef(false);
@@ -79,20 +70,9 @@ export function CreateStore() {
       setWhatsappNumber(profile.phone);
       phonePrefilledRef.current = true;
     }
-    if (!openingHours && profile?.openingHours) {
-      setOpeningHours(profile.openingHours);
-    }
-  }, [profile?.phone, profile?.openingHours, openingHours]);
+  }, [profile?.phone]);
 
-  useEffect(() => {
-    return () => {
-      if (logoPreviewUrl) {
-        URL.revokeObjectURL(logoPreviewUrl);
-      }
-    };
-  }, [logoPreviewUrl]);
-
-  const clearFieldError = (key: keyof StoreFormErrors) => {
+  const clearFieldError = (key: keyof StoreCreateValidationErrors) => {
     setFieldErrors((prev) => {
       if (!prev[key]) return prev;
       const next = { ...prev };
@@ -101,83 +81,10 @@ export function CreateStore() {
     });
   };
 
-  const handleLogoSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    if (!isImageFile(file)) {
-      showToast('Please select a valid image file for your store logo.', 'error');
-      return;
-    }
-
-    if (logoPreviewUrl) {
-      URL.revokeObjectURL(logoPreviewUrl);
-    }
-
-    setLogoFile(file);
-    setLogoPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const handleRemoveLogo = () => {
-    if (logoPreviewUrl) {
-      URL.revokeObjectURL(logoPreviewUrl);
-    }
-    setLogoFile(null);
-    setLogoPreviewUrl(null);
-  };
-
-  const handlePinLocation = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser.', 'error');
-      return;
-    }
-
-    setPinningLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude);
-        setLongitude(position.coords.longitude);
-        setLocationPinnedMessage('Location pinned successfully!');
-        showToast('Location pinned successfully!', 'success');
-        setPinningLocation(false);
-      },
-      (geoErr) => {
-        const msg =
-          geoErr.code === geoErr.PERMISSION_DENIED
-            ? 'Location permission denied. Please allow location access or enter your landmark manually.'
-            : 'Unable to get your current GPS location right now.';
-        showToast(msg, 'error');
-        setPinningLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      }
-    );
-  };
-
-  const validateForm = (): StoreFormErrors => {
-    const errors: StoreFormErrors = {};
-    if (!name.trim() || name.trim().length < 2) {
-      errors.name = 'Store name must be at least 2 characters.';
-    }
-    if (!description.trim() || description.trim().length < 10) {
-      errors.description = 'Please describe your store (at least 10 characters).';
-    }
-    if (!category.trim()) {
-      errors.category = 'Please choose a primary store category.';
-    }
-    const digits = whatsappNumber.replace(/[^\d]/g, '');
-    if (!whatsappNumber.trim() || digits.length < 7) {
-      errors.whatsappNumber = 'A valid WhatsApp number is required.';
-    }
-    if (!locationName.trim()) {
-      errors.locationName = 'Location landmark is required (e.g. LASUED Main Gate).';
-    }
-    return errors;
-  };
+  const formattedHoursPreview = formatOpeningHoursRange(
+    openingTimeStart,
+    openingTimeEnd
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -190,7 +97,19 @@ export function CreateStore() {
       return;
     }
 
-    const errors = validateForm();
+    const errors = validateStoreCreateInput({
+      name,
+      description,
+      category,
+      openingTimeStart,
+      openingTimeEnd,
+      imagesCount: images.length,
+      whatsappNumber,
+      locationName,
+      latitude,
+      longitude,
+    });
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       const firstError = Object.values(errors)[0];
@@ -202,9 +121,11 @@ export function CreateStore() {
     setSubmitting(true);
 
     try {
-      let logoUrl: string | undefined;
-      if (logoFile) {
-        logoUrl = await compressImageToBase64(logoFile);
+      const totalImagesLength = images.reduce((sum, img) => sum + img.length, 0);
+      if (totalImagesLength > 850_000) {
+        throw new Error(
+          'Selected photos exceed Firestore document limits. Please use fewer or smaller photos.'
+        );
       }
 
       const ownerAvatar = getUserAvatarUrl(profile);
@@ -213,18 +134,21 @@ export function CreateStore() {
         name: name.trim(),
         description: description.trim(),
         category: category.trim(),
-        ...(openingHours.trim() ? { openingHours: openingHours.trim() } : {}),
-        ...(logoUrl ? { logoUrl } : {}),
+        openingHours: formattedHoursPreview,
+        openingTimeStart: openingTimeStart.trim(),
+        openingTimeEnd: openingTimeEnd.trim(),
+        images,
+        logoUrl: images[0],
+        locationType: 'physical',
         whatsappNumber: whatsappNumber.trim(),
         locationName: locationName.trim(),
-        ...(typeof latitude === 'number' && typeof longitude === 'number'
-          ? { latitude, longitude }
-          : {}),
+        latitude: latitude as number,
+        longitude: longitude as number,
         ownerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
           isVerified: Boolean(profile?.isVerified),
           ...(ownerAvatar &&
-          (logoUrl?.length || 0) + ownerAvatar.length <= 850_000
+          totalImagesLength + ownerAvatar.length <= 850_000
             ? { profilePic: ownerAvatar }
             : {}),
         },
@@ -262,7 +186,7 @@ export function CreateStore() {
           Open a Campus Store
         </h1>
         <p className="text-sm text-slate-600">
-          Create a storefront profile so you can link your products and services under one brand on LASUEDPLUG. New stores appear publicly once approved by an Admin.
+          Create a verified physical storefront profile on LASUEDPLUG. Stores require 1–4 photos, opening hours, and an exact GPS pin.
         </p>
       </div>
 
@@ -296,6 +220,7 @@ export function CreateStore() {
               clearFieldError('name');
             }}
             error={fieldErrors.name}
+            helperText="Minimum 5 characters."
             required
           />
 
@@ -312,15 +237,65 @@ export function CreateStore() {
             required
           />
 
-          <Input
-            label="Opening Hours"
-            name="openingHours"
-            type="text"
-            placeholder="e.g. 8am - 6pm (Mon - Sat)"
-            value={openingHours}
-            onChange={(e) => setOpeningHours(e.target.value)}
-            helperText="Optional. Let students know when your store is open."
-          />
+          {/* Opening Hours: Start & End Time Pickers */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <span>
+                Opening Hours <span className="text-red-500">*</span>
+              </span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label
+                  htmlFor="opening-time-start"
+                  className="block text-xs font-medium text-slate-600"
+                >
+                  Opening Time
+                </label>
+                <input
+                  id="opening-time-start"
+                  type="time"
+                  required
+                  value={openingTimeStart}
+                  onChange={(e) => {
+                    setOpeningTimeStart(e.target.value);
+                    clearFieldError('openingHours');
+                  }}
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="opening-time-end"
+                  className="block text-xs font-medium text-slate-600"
+                >
+                  Closing Time
+                </label>
+                <input
+                  id="opening-time-end"
+                  type="time"
+                  required
+                  value={openingTimeEnd}
+                  onChange={(e) => {
+                    setOpeningTimeEnd(e.target.value);
+                    clearFieldError('openingHours');
+                  }}
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {formattedHoursPreview && !fieldErrors.openingHours && (
+              <p className="text-xs font-medium text-slate-600">
+                Displayed as: <span className="text-slate-900">{formattedHoursPreview}</span>
+              </p>
+            )}
+            {fieldErrors.openingHours && (
+              <p className="text-xs font-medium text-red-600" role="alert">
+                {fieldErrors.openingHours}
+              </p>
+            )}
+          </div>
 
           <div className="w-full space-y-1.5">
             <label
@@ -338,7 +313,7 @@ export function CreateStore() {
                 setDescription(e.target.value);
                 clearFieldError('description');
               }}
-              placeholder="Tell students what your store offers, opening hours, and delivery options..."
+              placeholder="Tell students what your store offers and what makes your shop unique..."
               className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 ${
                 fieldErrors.description
                   ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
@@ -346,64 +321,34 @@ export function CreateStore() {
               }`}
               required
             />
-            {fieldErrors.description && (
+            {fieldErrors.description ? (
               <p className="text-xs font-medium text-red-600" role="alert">
                 {fieldErrors.description}
               </p>
+            ) : (
+              <p className="text-xs text-slate-500">Minimum 5 characters.</p>
             )}
           </div>
 
-          {/* Optional Store Logo */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">
-              Store Logo{' '}
-              <span className="text-xs font-normal text-slate-500">
-                (Optional, auto-compressed)
-              </span>
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleLogoSelect}
-              className="hidden"
-            />
-            {logoPreviewUrl ? (
-              <div className="relative w-28 h-28 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-                <img
-                  src={logoPreviewUrl}
-                  alt="Store logo preview"
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={handleRemoveLogo}
-                  aria-label="Remove store logo"
-                  className="absolute top-1.5 right-1.5 p-1 rounded-full bg-slate-900/75 hover:bg-slate-900 text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-28 h-28 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/40 flex flex-col items-center justify-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors p-3 text-center"
-              >
-                <ImagePlus className="w-6 h-6" />
-                <span className="text-xs font-medium">Add Logo</span>
-              </button>
-            )}
-          </div>
+          {/* Compulsory 1-4 Store Images */}
+          <ImageUploadGrid
+            images={images}
+            onChange={(next) => {
+              setImages(next);
+              clearFieldError('images');
+            }}
+            label="Storefront / Brand Photos"
+            helperText="First photo is used as your store logo cover."
+            error={fieldErrors.images}
+            inputId="store-images"
+          />
         </Card>
 
         <Card hoverable={false} className="space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <MapPin className="w-4 h-4 text-primary-600" />
             <h2 className="text-base font-bold text-slate-900">
-              Contact &amp; Location
+              Contact &amp; Physical Location
             </h2>
           </div>
 
@@ -422,7 +367,7 @@ export function CreateStore() {
           />
 
           <Input
-            label="Location Landmark"
+            label="Physical Store Address"
             name="locationName"
             type="text"
             placeholder="e.g. Shop 4, Opposite LASUED Main Gate"
@@ -435,42 +380,21 @@ export function CreateStore() {
             required
           />
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={handlePinLocation}
-                disabled={pinningLocation}
-              >
-                {pinningLocation ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Pinning GPS location...</span>
-                  </>
-                ) : (
-                  <span>📍 Pin My Location</span>
-                )}
-              </Button>
-
-              {typeof latitude === 'number' && typeof longitude === 'number' && (
-                <span className="text-xs font-medium text-slate-600 tabular-nums">
-                  GPS: {latitude.toFixed(5)}, {longitude.toFixed(5)}
-                </span>
-              )}
-            </div>
-
-            {locationPinnedMessage && (
-              <p
-                role="status"
-                className="text-xs font-medium text-emerald-700 inline-flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{locationPinnedMessage}</span>
-              </p>
-            )}
-          </div>
+          <LocationPinField
+            latitude={latitude}
+            longitude={longitude}
+            onPin={({ latitude: lat, longitude: lng }) => {
+              setLatitude(lat);
+              setLongitude(lng);
+              clearFieldError('gps');
+            }}
+            onClear={() => {
+              setLatitude(undefined);
+              setLongitude(undefined);
+            }}
+            helperText="All Campus Stores must have a pinned physical GPS location."
+            error={fieldErrors.gps}
+          />
         </Card>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">

@@ -99,8 +99,12 @@ export interface Store {
   description: string;
   category: string;
   logoUrl?: string;
+  images?: string[];
   openingHours?: string;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
   whatsappNumber: string;
+  locationType?: 'physical';
   locationName: string;
   latitude?: number;
   longitude?: number;
@@ -162,6 +166,9 @@ export interface Accommodation {
   rentPrice: number;
   generalLocation: string;
   exactAddress?: string;
+  locationType?: 'physical';
+  latitude?: number;
+  longitude?: number;
   amenities: string[];
   images: string[];
   whatsappNumber: string;
@@ -184,6 +191,9 @@ export interface RoommateRequest {
   description: string;
   budget?: number;
   generalLocation: string;
+  locationType?: 'physical';
+  latitude?: number;
+  longitude?: number;
   preferences: string;
   images: string[];
   whatsappNumber: string;

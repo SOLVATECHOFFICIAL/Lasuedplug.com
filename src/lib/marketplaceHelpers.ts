@@ -117,16 +117,11 @@ export function getProductPriceDisplay(
 ): ProductPriceDisplay {
   const unitSuffix = getPriceUnitSuffix(product.priceUnit);
 
-  if (getListingAdType(product) === 'service' || product.priceType === 'contact') {
-    return {
-      text: 'Contact for Price',
-      unitSuffix,
-      isContact: true,
-      isNegotiable: false,
-    };
-  }
-
-  if (typeof product.price !== 'number' || !Number.isFinite(product.price)) {
+  if (
+    product.priceType === 'contact' ||
+    typeof product.price !== 'number' ||
+    !Number.isFinite(product.price)
+  ) {
     return {
       text: 'Contact for Price',
       unitSuffix,

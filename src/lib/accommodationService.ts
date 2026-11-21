@@ -29,10 +29,17 @@ export interface CreateAccommodationInput {
   rentPrice: number;
   generalLocation: string;
   exactAddress?: string;
+  locationType?: 'physical';
+  latitude: number;
+  longitude: number;
   amenities: string[];
   images: string[];
   whatsappNumber: string;
-  ownerSnapshot: { fullName: string; isVerified: boolean };
+  ownerSnapshot: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+  };
 }
 
 export interface CreateRoommateRequestInput {
@@ -40,12 +47,19 @@ export interface CreateRoommateRequestInput {
   type: RoommateRequestType;
   title: string;
   description: string;
-  budget?: number;
+  budget: number;
   generalLocation: string;
+  locationType?: 'physical';
+  latitude: number;
+  longitude: number;
   preferences: string;
-  images?: string[];
+  images: string[];
   whatsappNumber: string;
-  userSnapshot: { fullName: string; isVerified: boolean };
+  userSnapshot: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+  };
 }
 
 export async function fetchApprovedAccommodations(): Promise<
@@ -146,6 +160,9 @@ export async function createAccommodation(
     description: input.description.trim(),
     rentPrice: input.rentPrice,
     generalLocation: input.generalLocation.trim(),
+    locationType: 'physical',
+    latitude: input.latitude,
+    longitude: input.longitude,
     amenities: input.amenities,
     images: input.images,
     whatsappNumber: input.whatsappNumber.trim(),
@@ -250,7 +267,11 @@ export async function createRoommateRequest(
     type: input.type,
     title: input.title.trim(),
     description: input.description.trim(),
+    budget: input.budget,
     generalLocation: input.generalLocation.trim(),
+    locationType: 'physical',
+    latitude: input.latitude,
+    longitude: input.longitude,
     preferences: input.preferences.trim(),
     images: Array.isArray(input.images) ? input.images : [],
     whatsappNumber: input.whatsappNumber.trim(),
@@ -259,14 +280,6 @@ export async function createRoommateRequest(
     isActive: true,
     createdAt: serverTimestamp(),
   };
-
-  if (
-    typeof input.budget === 'number' &&
-    Number.isFinite(input.budget) &&
-    input.budget > 0
-  ) {
-    payload.budget = input.budget;
-  }
 
   try {
     await setDoc(newDocRef, payload);

@@ -53,7 +53,7 @@ export const ProductCard = memo(function ProductCard({
       _type: isServiceListing ? 'service' : 'item',
       title: product.title,
       subtitle: categoryLabel || sellerName || 'Campus Listing',
-      priceLabel: isServiceListing ? 'Contact for Price' : priceInfo.text,
+      priceLabel: priceInfo.text,
       imageUrl: product.images?.[0],
       href: `/marketplace/${product.id}`,
       isVerified: isSellerVerified,
@@ -189,11 +189,9 @@ export const ProductCard = memo(function ProductCard({
                   : 'font-bold text-slate-900'
               }`}
             >
-              {isServiceListing
-                ? 'Contact for Price'
-                : priceInfo.isContact && priceInfo.unitSuffix
-                  ? `${priceInfo.text} ${priceInfo.unitSuffix}`
-                  : priceInfo.text}
+              {priceInfo.isContact && priceInfo.unitSuffix
+                ? `${priceInfo.text} ${priceInfo.unitSuffix}`
+                : priceInfo.text}
             </p>
             {!isServiceListing && (
               <span

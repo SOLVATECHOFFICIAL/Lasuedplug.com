@@ -342,6 +342,15 @@ export async function updateSellerListing(
   if (payload.priceType === 'contact') {
     payload.price = deleteField();
   }
+  // Remove physical location coordinates if switched to 'online'
+  if (payload.locationType === 'online') {
+    payload.latitude = deleteField();
+    payload.longitude = deleteField();
+    payload.landmark = deleteField();
+    if (input.adType === 'item') {
+      payload.locationName = 'Online / Delivery';
+    }
+  }
   // Enforce Auto-Hide on Edit security rule
   payload.isApproved = false;
 

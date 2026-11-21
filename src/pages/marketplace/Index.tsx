@@ -120,6 +120,9 @@ export function MarketplaceIndex() {
     () => getFastCache<Store[]>('approved_stores') || []
   );
   const [storesLoading, setStoresLoading] = useState(false);
+  const [storesLoaded, setStoresLoaded] = useState(
+    () => (getFastCache<Store[]>('approved_stores') || []).length > 0
+  );
   const [storesError, setStoresError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(() =>
@@ -182,14 +185,15 @@ export function MarketplaceIndex() {
       }
     } finally {
       setStoresLoading(false);
+      setStoresLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    if (activeBrowseTab === 'stores' && stores.length === 0 && !storesLoading && !storesError) {
+    if (activeBrowseTab === 'stores' && !storesLoaded && !storesLoading && !storesError) {
       void loadStores();
     }
-  }, [activeBrowseTab, stores.length, storesLoading, storesError, loadStores]);
+  }, [activeBrowseTab, storesLoaded, storesLoading, storesError, loadStores]);
 
   const filtersActive = useMemo(
     () =>

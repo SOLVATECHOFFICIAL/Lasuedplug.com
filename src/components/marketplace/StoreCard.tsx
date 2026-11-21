@@ -24,6 +24,8 @@ export const StoreCard = memo(function StoreCard({
   const storeHref = store.id ? `/store/${store.id}` : '/marketplace?tab=stores';
   const verified = Boolean(isVerifiedOwner ?? store.ownerSnapshot?.isVerified);
 
+  const storePrimaryImage = store.images?.[0] || store.logoUrl;
+
   const handleTrackClick = () => {
     if (!store.id) return;
     saveRecentlyViewed({
@@ -32,7 +34,7 @@ export const StoreCard = memo(function StoreCard({
       title: store.name,
       subtitle: store.category || 'Campus Store',
       priceLabel: store.openingHours?.trim() || store.locationName || 'Storefront',
-      imageUrl: store.logoUrl,
+      imageUrl: storePrimaryImage,
       href: `/store/${store.id}`,
       isVerified: verified,
     });
@@ -62,7 +64,7 @@ export const StoreCard = memo(function StoreCard({
         >
         <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
           <ProductImage
-            src={store.logoUrl}
+            src={storePrimaryImage}
             alt={store.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             iconClassName="w-10 h-10 text-slate-400"

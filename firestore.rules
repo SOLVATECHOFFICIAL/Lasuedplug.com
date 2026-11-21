@@ -65,6 +65,28 @@ service cloud.firestore {
         && request.resource.data.reviewCount >= 0;
     }
 
+    function hasValidImagesArray(data) {
+      return data.get('images', []) is list
+        && data.images.size() >= 1
+        && data.images.size() <= 4
+        && data.images[0] is string
+        && data.images[0].size() > 0;
+    }
+
+    function hasValidGpsCoordinates(data) {
+      return data.get('latitude', null) is number
+        && data.get('longitude', null) is number
+        && data.latitude >= -90
+        && data.latitude <= 90
+        && data.longitude >= -180
+        && data.longitude <= 180;
+    }
+
+    function hasValidPhysicalLocationRule(data) {
+      return data.get('locationType', 'online') != 'physical'
+        || hasValidGpsCoordinates(data);
+    }
+
     // =========================================================================
     // USERS & LEGACY USER SUBCOLLECTIONS
     // =========================================================================
@@ -161,8 +183,12 @@ service cloud.firestore {
         && request.resource.data.sellerId == request.auth.uid
         && request.resource.data.isApproved == false
         && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() >= 5
         && request.resource.data.title.size() <= 200
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 5
+        && hasValidImagesArray(request.resource.data)
+        && hasValidPhysicalLocationRule(request.resource.data)
       );
 
       allow update: if isAdmin()
@@ -171,7 +197,11 @@ service cloud.firestore {
           && isOwner(resource.data.sellerId)
           && request.resource.data.sellerId == resource.data.sellerId
           && (
-            request.resource.data.isApproved == false
+            (
+              request.resource.data.isApproved == false
+              && hasValidImagesArray(request.resource.data)
+              && hasValidPhysicalLocationRule(request.resource.data)
+            )
             || (
               request.resource.data.isApproved == resource.data.isApproved
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'status', 'isActive'])
@@ -202,6 +232,8 @@ service cloud.firestore {
         && isNotSuspended()
         && request.resource.data.providerId == request.auth.uid
         && request.resource.data.isApproved == false
+        && hasValidImagesArray(request.resource.data)
+        && hasValidPhysicalLocationRule(request.resource.data)
       );
 
       allow update: if isAdmin()
@@ -242,7 +274,11 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.isApproved == false
         && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() >= 5
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 5
+        && hasValidImagesArray(request.resource.data)
+        && hasValidGpsCoordinates(request.resource.data)
       );
 
       allow update: if isAdmin()
@@ -283,7 +319,11 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.isApproved == false
         && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() >= 5
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 5
+        && hasValidImagesArray(request.resource.data)
+        && hasValidGpsCoordinates(request.resource.data)
       );
 
       allow update: if isAdmin()
@@ -324,7 +364,11 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.isApproved == false
         && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() >= 5
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 5
+        && hasValidImagesArray(request.resource.data)
+        && hasValidGpsCoordinates(request.resource.data)
       );
 
       allow update: if isAdmin()
