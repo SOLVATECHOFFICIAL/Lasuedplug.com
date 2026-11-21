@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // =========================================================================
     // HELPER FUNCTIONS
     // =========================================================================
@@ -201,6 +205,7 @@ service cloud.firestore {
         && request.resource.data.title.size() <= 200
         && request.resource.data.description is string
         && request.resource.data.description.size() >= 5
+        && request.resource.data.description.size() <= 5000
         && hasValidImagesArray(request.resource.data)
         && hasValidPhysicalLocationRule(request.resource.data)
       );
@@ -213,6 +218,12 @@ service cloud.firestore {
           && (
             (
               request.resource.data.isApproved == false
+              && request.resource.data.title is string
+              && request.resource.data.title.size() >= 5
+              && request.resource.data.title.size() <= 200
+              && request.resource.data.description is string
+              && request.resource.data.description.size() >= 5
+              && request.resource.data.description.size() <= 5000
               && hasValidImagesArray(request.resource.data)
               && hasValidPhysicalLocationRule(request.resource.data)
             )
@@ -289,8 +300,10 @@ service cloud.firestore {
         && request.resource.data.isApproved == false
         && request.resource.data.title is string
         && request.resource.data.title.size() >= 5
+        && request.resource.data.title.size() <= 200
         && request.resource.data.description is string
         && request.resource.data.description.size() >= 5
+        && request.resource.data.description.size() <= 5000
         && hasValidImagesArray(request.resource.data)
         && hasValidGpsCoordinates(request.resource.data)
       );
@@ -301,7 +314,17 @@ service cloud.firestore {
           && isOwner(resource.data.ownerId)
           && request.resource.data.ownerId == resource.data.ownerId
           && (
-            request.resource.data.isApproved == false
+            (
+              request.resource.data.isApproved == false
+              && request.resource.data.title is string
+              && request.resource.data.title.size() >= 5
+              && request.resource.data.title.size() <= 200
+              && request.resource.data.description is string
+              && request.resource.data.description.size() >= 5
+              && request.resource.data.description.size() <= 5000
+              && hasValidImagesArray(request.resource.data)
+              && hasValidGpsCoordinates(request.resource.data)
+            )
             || (
               request.resource.data.isApproved == resource.data.isApproved
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status', 'updatedAt'])
@@ -334,8 +357,10 @@ service cloud.firestore {
         && request.resource.data.isApproved == false
         && request.resource.data.title is string
         && request.resource.data.title.size() >= 5
+        && request.resource.data.title.size() <= 200
         && request.resource.data.description is string
         && request.resource.data.description.size() >= 5
+        && request.resource.data.description.size() <= 5000
         && hasValidImagesArray(request.resource.data)
         && hasValidGpsCoordinates(request.resource.data)
       );
@@ -346,7 +371,17 @@ service cloud.firestore {
           && isOwner(resource.data.userId)
           && request.resource.data.userId == resource.data.userId
           && (
-            request.resource.data.isApproved == false
+            (
+              request.resource.data.isApproved == false
+              && request.resource.data.title is string
+              && request.resource.data.title.size() >= 5
+              && request.resource.data.title.size() <= 200
+              && request.resource.data.description is string
+              && request.resource.data.description.size() >= 5
+              && request.resource.data.description.size() <= 5000
+              && hasValidImagesArray(request.resource.data)
+              && hasValidGpsCoordinates(request.resource.data)
+            )
             || (
               request.resource.data.isApproved == resource.data.isApproved
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status', 'updatedAt'])
@@ -379,8 +414,10 @@ service cloud.firestore {
         && request.resource.data.isApproved == false
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 5
+        && request.resource.data.name.size() <= 200
         && request.resource.data.description is string
         && request.resource.data.description.size() >= 5
+        && request.resource.data.description.size() <= 5000
         && hasValidImagesArray(request.resource.data)
         && hasValidGpsCoordinates(request.resource.data)
       );
@@ -391,7 +428,17 @@ service cloud.firestore {
           && isOwner(resource.data.ownerId)
           && request.resource.data.ownerId == resource.data.ownerId
           && (
-            request.resource.data.isApproved == false
+            (
+              request.resource.data.isApproved == false
+              && request.resource.data.name is string
+              && request.resource.data.name.size() >= 5
+              && request.resource.data.name.size() <= 200
+              && request.resource.data.description is string
+              && request.resource.data.description.size() >= 5
+              && request.resource.data.description.size() <= 5000
+              && hasValidImagesArray(request.resource.data)
+              && hasValidGpsCoordinates(request.resource.data)
+            )
             || (
               request.resource.data.isApproved == resource.data.isApproved
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status', 'updatedAt'])
@@ -423,7 +470,8 @@ service cloud.firestore {
         && isNotSuspended()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.listingId is string
-        && request.resource.data.listingId.size() > 0;
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.listingId.size() <= 128;
 
       allow update, delete: if isAdmin()
         || (isNotSuspended() && resource.data.userId == request.auth.uid);
@@ -443,10 +491,25 @@ service cloud.firestore {
         && isNotSuspended()
         && request.resource.data.userId is string
         && request.resource.data.userId.size() > 0
+        && request.resource.data.userId.size() <= 128
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 1000
         && request.resource.data.get('isRead', false) == false
       );
 
-      allow update, delete: if isAdmin()
+      allow update: if isAdmin()
+        || (
+          isNotSuspended()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])
+          && request.resource.data.isRead is bool
+        );
+
+      allow delete: if isAdmin()
         || (isNotSuspended() && resource.data.userId == request.auth.uid);
     }
 
@@ -474,7 +537,10 @@ service cloud.firestore {
         && isNotSuspended()
         && request.resource.data.buyerId == request.auth.uid
         && request.resource.data.listingId is string
-        && request.resource.data.listingId.size() > 0;
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.listingId.size() <= 128
+        && request.resource.data.get('listingTitle', '') is string
+        && request.resource.data.get('listingTitle', '').size() <= 250;
 
       allow update, delete: if isAdmin();
     }
@@ -491,6 +557,7 @@ service cloud.firestore {
         && request.resource.data.targetType in ['user', 'store']
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() > 0
+        && request.resource.data.targetId.size() <= 128
         && request.resource.data.rating is number
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5
@@ -502,7 +569,22 @@ service cloud.firestore {
           || request.resource.data.targetId != request.auth.uid
         );
 
-      allow update, delete: if isAdmin()
+      allow update: if isAdmin()
+        || (
+          isNotSuspended()
+          && resource.data.reviewerId == request.auth.uid
+          && request.resource.data.reviewerId == resource.data.reviewerId
+          && request.resource.data.targetId == resource.data.targetId
+          && request.resource.data.targetType == resource.data.targetType
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5
+          && request.resource.data.comment is string
+          && request.resource.data.comment.size() >= 3
+          && request.resource.data.comment.size() <= 1500
+        );
+
+      allow delete: if isAdmin()
         || (isNotSuspended() && resource.data.reviewerId == request.auth.uid);
     }
 
@@ -523,8 +605,10 @@ service cloud.firestore {
         ]
         && request.resource.data.targetId is string
         && request.resource.data.targetId.size() > 0
+        && request.resource.data.targetId.size() <= 128
         && request.resource.data.reason is string
-        && request.resource.data.reason.size() > 0
+        && request.resource.data.reason.size() >= 5
+        && request.resource.data.reason.size() <= 2000
         && request.resource.data.get('status', 'open') == 'open';
 
       allow read, update, delete: if isAdmin();
@@ -562,6 +646,10 @@ service cloud.firestore {
 
       allow create: if isValidId(id)
         && (!isSignedIn() || !isSuspendedUser())
+        && (
+          !('userId' in request.resource.data)
+          || (isSignedIn() && request.resource.data.userId == request.auth.uid)
+        )
         && request.resource.data.title is string
         && request.resource.data.title.size() >= 4
         && request.resource.data.title.size() <= 120
