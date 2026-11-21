@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Building2,
@@ -30,6 +30,7 @@ import {
   primeAccommodationIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
+import { hasInAppBackHistory } from '../../lib/feedScrollState';
 import { formatNaira } from '../../lib/utils';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -44,6 +45,12 @@ import { SeoHead } from '../../components/seo/SeoHead';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const canGoBack = hasInAppBackHistory(
+    typeof window !== 'undefined' ? window.history.state : null,
+    location.key
+  );
 
   const initialCached = id
     ? getFastCache<Omit<Accommodation, 'exactAddress'>>(`accommodation:${id}`)
@@ -189,11 +196,16 @@ export function AccommodationDetail() {
             </p>
           </div>
           <div>
-            <Link to="/accommodation">
-              <Button variant="primary" size="sm">
-                Back to Accommodation
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                canGoBack ? navigate(-1) : navigate('/accommodation')
+              }
+            >
+              {canGoBack ? 'Go Back' : 'Back to Accommodation'}
+            </Button>
           </div>
         </Card>
       </div>
@@ -238,13 +250,20 @@ export function AccommodationDetail() {
         }
       />
       <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/accommodation"
+        <button
+          type="button"
+          onClick={() => {
+            if (canGoBack) {
+              navigate(-1);
+            } else {
+              navigate('/accommodation');
+            }
+          }}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Accommodation</span>
-        </Link>
+          <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
+        </button>
 
         <Button
           type="button"

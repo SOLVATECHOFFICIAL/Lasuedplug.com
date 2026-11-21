@@ -30,6 +30,7 @@ import {
   getNewestCreatedAtMs,
   mergeMixedFeedDelta,
   primeAccommodationIntoCache,
+  primeLegacyServiceIntoCache,
   primeProductIntoCache,
   primeStoreIntoCache,
 } from './syncCache';
@@ -299,6 +300,7 @@ export function primeMixedFeedEntities(
       primeAccommodationIntoCache(item.accommodation, { isFull, idbOnly: true });
       coverUrls.push(item.accommodation.images?.[0]);
     } else if (item.service) {
+      primeLegacyServiceIntoCache(item.service, { isFull, idbOnly: true });
       coverUrls.push(item.service.images?.[0]);
     }
   }

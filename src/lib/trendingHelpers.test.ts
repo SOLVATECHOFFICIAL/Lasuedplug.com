@@ -163,6 +163,10 @@ test('filterMixedFeedItems filters by type, verifiedOnly, and searchQuery', () =
     's1'
   );
   assert.equal(
+    filterMixedFeedItems(items, { typeFilter: 'service' }).map((x) => x.id).join(','),
+    's1'
+  );
+  assert.equal(
     filterMixedFeedItems(items, { searchQuery: 'laptop' }).map((x) => x.id).join(','),
     'p1'
   );

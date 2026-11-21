@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Clock,
@@ -53,6 +53,7 @@ import {
   primeProductIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
+import { hasInAppBackHistory } from '../../lib/feedScrollState';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Product } from '../../types';
@@ -69,8 +70,14 @@ import { SeoHead } from '../../components/seo/SeoHead';
 export function MarketplaceDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { showToast } = useToast();
+
+  const canGoBack = hasInAppBackHistory(
+    typeof window !== 'undefined' ? window.history.state : null,
+    location.key
+  );
 
   const initialProduct = id ? getFastCache<Product>(`product:${id}`) : null;
   const [product, setProduct] = useState<Product | null>(initialProduct);
@@ -262,11 +269,16 @@ export function MarketplaceDetail() {
             </p>
           </div>
           <div>
-            <Link to="/marketplace">
-              <Button variant="primary" size="sm">
-                Back to Marketplace
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() =>
+                canGoBack ? navigate(-1) : navigate('/marketplace')
+              }
+            >
+              {canGoBack ? 'Go Back' : 'Back to Marketplace'}
+            </Button>
           </div>
         </Card>
       </div>
@@ -436,13 +448,26 @@ export function MarketplaceDetail() {
       />
       {/* Back link & Share */}
       <div className="flex items-center justify-between gap-3">
-        <Link
-          to={isServiceListing ? '/services' : '/marketplace'}
+        <button
+          type="button"
+          onClick={() => {
+            if (canGoBack) {
+              navigate(-1);
+            } else {
+              navigate(isServiceListing ? '/services' : '/marketplace');
+            }
+          }}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>{isServiceListing ? 'Back to Services' : 'Back to Marketplace'}</span>
-        </Link>
+          <span>
+            {canGoBack
+              ? 'Go Back'
+              : isServiceListing
+                ? 'Back to Services'
+                : 'Back to Marketplace'}
+          </span>
+        </button>
 
         <Button
           type="button"

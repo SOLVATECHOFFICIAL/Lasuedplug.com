@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import {
   ExternalLink,
   MapPin,
@@ -48,6 +48,11 @@ import {
   resolveSyncStrategy,
 } from '../../lib/syncCache';
 import {
+  buildRouteKey,
+  getSavedRouteViewState,
+  saveRouteViewState,
+} from '../../lib/feedScrollState';
+import {
   MAX_LISTING_IMAGES,
   validateRoommateCreateInput,
 } from '../../lib/listingValidation';
@@ -71,12 +76,28 @@ import { ProductImage } from '../../components/marketplace/ProductImage';
 import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
 import { LocationPinField } from '../../components/forms/LocationPinField';
 
+interface RoommatesViewState {
+  typeFilter: 'all' | RoommateRequestType;
+  searchQuery: string;
+}
+
 export function Roommates() {
   const navigate = useNavigate();
   const location = useLocation();
+  const navigationType = useNavigationType();
   const [searchParams, setSearchParams] = useSearchParams();
+  const routeKey = buildRouteKey(location.pathname, location.search);
   const { user, profile } = useAuth();
   const { showToast } = useToast();
+
+  const restoredView = useMemo(
+    () =>
+      navigationType === 'POP'
+        ? getSavedRouteViewState<RoommatesViewState>(location.key, routeKey)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.key]
+  );
 
   const [requests, setRequests] = useState<RoommateRequest[]>(
     () => getFastCache<RoommateRequest[]>('roommates_feed') || []
@@ -87,11 +108,20 @@ export function Roommates() {
   const [error, setError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<'all' | RoommateRequestType>(
-    'all'
+    () => restoredView?.typeFilter ?? 'all'
   );
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(
+    () => restoredView?.searchQuery ?? ''
+  );
   const [selectedRequest, setSelectedRequest] =
     useState<RoommateRequest | null>(null);
+
+  useEffect(() => {
+    saveRouteViewState<RoommatesViewState>(location.key, routeKey, {
+      typeFilter,
+      searchQuery,
+    });
+  }, [location.key, routeKey, typeFilter, searchQuery]);
 
   // Create request modal state
   const [createOpen, setCreateOpen] = useState(false);

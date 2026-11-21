@@ -30,6 +30,7 @@ import {
 } from '../../lib/sellerService';
 import { getApprovedStoresByOwner } from '../../lib/storeService';
 import { DETAIL_FRESH_MS } from '../../lib/syncCache';
+import { hasInAppBackHistory } from '../../lib/feedScrollState';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -52,6 +53,10 @@ export function SellerProfile() {
   const location = useLocation();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const canGoBack = hasInAppBackHistory(
+    typeof window !== 'undefined' ? window.history.state : null,
+    location.key
+  );
 
   interface CachedSellerProfile {
     seller: UserProfile;
@@ -259,16 +264,16 @@ export function SellerProfile() {
         <button
           type="button"
           onClick={() => {
-            if (window.history.length > 1) {
+            if (canGoBack) {
               navigate(-1);
             } else {
               navigate('/marketplace');
             }
           }}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
+          <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
         </button>
       </div>
 

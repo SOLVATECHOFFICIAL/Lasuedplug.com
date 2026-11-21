@@ -346,7 +346,7 @@ test('extractListingOwnerId, getReportListingRoute, and getAdminUserFilterUrl re
   );
   assert.equal(
     getReportListingRoute('store', 'st-1', { name: 'Plug Store' }),
-    '/marketplace?tab=stores&q=Plug%20Store'
+    '/services?tab=stores&q=Plug%20Store'
   );
   assert.equal(getReportListingRoute('user', 'u-1'), null);
 

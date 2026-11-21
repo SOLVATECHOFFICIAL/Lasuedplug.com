@@ -5,7 +5,7 @@ import {
 } from './fastCache';
 import { getTimestampMillis } from './homeHelpers';
 import { MixedFeedItem } from './trendingHelpers';
-import { Accommodation, Product, Store } from '../types';
+import { Accommodation, Product, Service, Store } from '../types';
 
 export const FEED_FRESH_MS = 4 * 60_000; // 4 minutes: skip Firestore reads completely on repeat visits
 export const FEED_FULL_RECONCILE_MS = 30 * 60_000; // 30 minutes: delta sync between 4m and 30m
@@ -186,15 +186,50 @@ export function primeProductIntoCache(
   product: Product | null | undefined,
   options?: { isFull?: boolean; idbOnly?: boolean }
 ): void {
-  if (!product?.id || isSyntheticSeedId(product.id)) return;
+  if (!product?.id) return;
   primeEntityRecord(`product:${product.id}`, product, options);
+}
+
+export function primeLegacyServiceIntoCache(
+  service: Service | null | undefined,
+  options?: { isFull?: boolean; idbOnly?: boolean }
+): void {
+  if (!service?.id) return;
+  const normalizedProduct: Product = {
+    id: service.id,
+    sellerId: service.providerId,
+    adType: 'service',
+    title: service.title,
+    description: service.description,
+    categoryId: service.categoryId,
+    subcategory: service.subcategory,
+    priceType: service.priceType,
+    price: service.price,
+    priceUnit: service.priceUnit,
+    images: service.images || [],
+    whatsappNumber: service.whatsappNumber,
+    landmark: service.landmark,
+    latitude: service.latitude,
+    longitude: service.longitude,
+    locationName: service.locationName,
+    shopName: service.shopName,
+    hasDelivery: service.hasDelivery,
+    viewCount: service.viewCount ?? 0,
+    contactCount: service.contactCount ?? 0,
+    status: service.status,
+    isApproved: service.isApproved,
+    isActive: service.isActive,
+    createdAt: service.createdAt,
+    sellerSnapshot: service.sellerSnapshot,
+  };
+  primeEntityRecord(`product:${service.id}`, normalizedProduct, options);
 }
 
 export function primeStoreIntoCache(
   store: Store | null | undefined,
   options?: { isFull?: boolean; idbOnly?: boolean }
 ): void {
-  if (!store?.id || isSyntheticSeedId(store.id)) return;
+  if (!store?.id) return;
   primeEntityRecord(`store:${store.id}`, store, options);
 }
 
@@ -202,7 +237,7 @@ export function primeAccommodationIntoCache(
   accommodation: Omit<Accommodation, 'exactAddress'> | null | undefined,
   options?: { isFull?: boolean; idbOnly?: boolean }
 ): void {
-  if (!accommodation?.id || isSyntheticSeedId(accommodation.id)) return;
+  if (!accommodation?.id) return;
   primeEntityRecord(`accommodation:${accommodation.id}`, accommodation, options);
 }
 

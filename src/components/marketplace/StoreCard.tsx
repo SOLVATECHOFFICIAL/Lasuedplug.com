@@ -25,7 +25,7 @@ export const StoreCard = memo(function StoreCard({
   priority = false,
   className = '',
 }: StoreCardProps) {
-  const storeHref = store.id ? `/store/${store.id}` : '/marketplace?tab=stores';
+  const storeHref = store.id ? `/store/${store.id}` : '/services?tab=stores';
   const verified = Boolean(isVerifiedOwner ?? store.ownerSnapshot?.isVerified);
 
   const storePrimaryImage = store.images?.[0] || store.logoUrl;

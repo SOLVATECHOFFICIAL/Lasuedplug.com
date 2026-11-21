@@ -243,7 +243,11 @@ export function filterMixedFeedItems(
 
   return items.filter((item) => {
     if (options.typeFilter && options.typeFilter !== 'all') {
-      if (item._type !== options.typeFilter) return false;
+      if (options.typeFilter === 'service') {
+        if (item._type !== 'service' && item._type !== 'store') return false;
+      } else if (item._type !== options.typeFilter) {
+        return false;
+      }
     }
     if (options.verifiedOnly && !item.isVerified) {
       return false;

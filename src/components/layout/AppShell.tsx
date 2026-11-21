@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigationType } from 'react-router-dom';
 import { AlertTriangle, Wrench } from 'lucide-react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
@@ -7,6 +7,12 @@ import { MobileNav } from './MobileNav';
 import { InstallPWA } from './InstallPWA';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthorizedAdminSession } from '../../lib/adminHelpers';
+import {
+  buildRouteKey,
+  getSavedRouteScroll,
+  getScrollActionForNavigation,
+  saveRouteScroll,
+} from '../../lib/feedScrollState';
 import { shouldShowMaintenanceScreen } from '../../lib/platformSettingsHelpers';
 import { subscribeToPlatformSettings } from '../../lib/platformSettingsService';
 
@@ -17,7 +23,29 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const { user, loading, isProfileComplete, isSuspended } = useAuth();
   const location = useLocation();
+  const navigationType = useNavigationType();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  const prevPathnameRef = useRef<string>(location.pathname);
+  const currentLocationRef = useRef({
+    key: location.key,
+    routeKey: buildRouteKey(location.pathname, location.search),
+  });
+  const isRestoringScrollRef = useRef(false);
+
+  currentLocationRef.current = {
+    key: location.key,
+    routeKey: buildRouteKey(location.pathname, location.search),
+  };
+
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      'scrollRestoration' in window.history
+    ) {
+      window.history.scrollRestoration = 'manual';
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToPlatformSettings((settings) => {
@@ -27,10 +55,103 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    if (typeof window === 'undefined') return;
+    let rafId: number | null = null;
+
+    const handleScroll = () => {
+      if (isRestoringScrollRef.current) return;
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        if (isRestoringScrollRef.current) return;
+        const { key, routeKey } = currentLocationRef.current;
+        saveRouteScroll(key, routeKey, window.scrollY);
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pathnameChanged = prevPathnameRef.current !== location.pathname;
+    prevPathnameRef.current = location.pathname;
+
+    const action = getScrollActionForNavigation({
+      navigationType,
+      pathnameChanged,
+    });
+
+    if (action === 'none') {
+      return;
     }
-  }, [location.pathname, location.search]);
+
+    if (action === 'reset-top') {
+      isRestoringScrollRef.current = false;
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      const raf = window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      });
+      return () => window.cancelAnimationFrame(raf);
+    }
+
+    const routeKey = buildRouteKey(location.pathname, location.search);
+    const savedY = getSavedRouteScroll(location.key, routeKey);
+
+    if (typeof savedY !== 'number' || savedY <= 0) {
+      isRestoringScrollRef.current = false;
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    let rafId: number | null = null;
+    isRestoringScrollRef.current = true;
+
+    const tryRestore = () => {
+      if (cancelled) return;
+      window.scrollTo({
+        top: savedY,
+        left: 0,
+        behavior: 'instant' as ScrollBehavior,
+      });
+      const maxReachableY = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
+      const settled =
+        Math.abs(window.scrollY - savedY) <= 4 && maxReachableY >= savedY - 4;
+      attempts += 1;
+
+      if (settled || attempts >= 24) {
+        isRestoringScrollRef.current = false;
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(tryRestore);
+    };
+
+    tryRestore();
+
+    return () => {
+      cancelled = true;
+      isRestoringScrollRef.current = false;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [location.key, location.pathname, location.search, navigationType]);
+
+  const handleCaptureScrollBeforeNavigation = () => {
+    if (typeof window === 'undefined') return;
+    const { key, routeKey } = currentLocationRef.current;
+    saveRouteScroll(key, routeKey, window.scrollY);
+  };
 
   const isAdminSession = isAuthorizedAdminSession(user);
   const showMaintenanceGate = shouldShowMaintenanceScreen({
@@ -72,7 +193,10 @@ export function AppShell({ children }: AppShellProps) {
     !loading && Boolean(user) && !isSuspended && !isProfileComplete;
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased overflow-x-clip">
+    <div
+      onClickCapture={handleCaptureScrollBeforeNavigation}
+      className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased overflow-x-clip"
+    >
       <Navbar />
         {maintenanceMode && isAdminSession && (
           <div

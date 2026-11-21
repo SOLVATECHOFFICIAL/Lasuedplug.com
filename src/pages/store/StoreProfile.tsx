@@ -32,6 +32,7 @@ import {
   getStoreById,
 } from '../../lib/storeService';
 import { DETAIL_FRESH_MS, primeStoreIntoCache } from '../../lib/syncCache';
+import { hasInAppBackHistory } from '../../lib/feedScrollState';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -54,6 +55,10 @@ export function StoreProfile() {
   const location = useLocation();
   const { user, profile: currentUserProfile } = useAuth();
   const { showToast } = useToast();
+  const canGoBack = hasInAppBackHistory(
+    typeof window !== 'undefined' ? window.history.state : null,
+    location.key
+  );
 
   interface CachedStoreProfile {
     store: Store;
@@ -265,8 +270,8 @@ export function StoreProfile() {
           icon={StoreIcon}
           title="Store not found"
           description="This campus storefront may have been removed or is awaiting admin approval."
-          actionLabel="Browse Campus Stores"
-          actionTo="/marketplace?tab=stores"
+          actionLabel="Browse Services & Stores"
+          actionTo="/services?tab=stores"
         />
       </div>
     );
@@ -324,13 +329,20 @@ export function StoreProfile() {
         }
       />
       <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/marketplace?tab=stores"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+        <button
+          type="button"
+          onClick={() => {
+            if (canGoBack) {
+              navigate(-1);
+            } else {
+              navigate('/services?tab=stores');
+            }
+          }}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Campus Stores</span>
-        </Link>
+          <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
+        </button>
       </div>
 
       {!store.isApproved && (

@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import {
   ArrowDown,
   ArrowRight,
@@ -50,6 +50,11 @@ import {
   getRecentlyViewed,
   RecentlyViewedItem,
 } from '../lib/recentlyViewed';
+import {
+  buildRouteKey,
+  getSavedRouteViewState,
+  saveRouteViewState,
+} from '../lib/feedScrollState';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { CardSkeleton } from '../components/feedback/Loading';
@@ -74,7 +79,7 @@ const CATEGORIES = [
   {
     title: 'Services',
     description:
-      'Tutoring, graphic design, laundry, catering, hairstyling, and device repairs on campus.',
+      'Campus stores, tutoring, repairs, printing, tailoring, catering, and student skills.',
     path: '/services',
     icon: Wrench,
     iconBg: 'bg-orange-50 text-accent-500',
@@ -129,20 +134,50 @@ const TYPE_FILTERS: Array<{ id: MixedFeedType | 'all'; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'item', label: 'Items' },
   { id: 'service', label: 'Services' },
-  { id: 'store', label: 'Stores' },
   { id: 'accommodation', label: 'Rooms' },
 ];
 
+interface HomeViewState {
+  sortMode: HomeSortMode;
+  typeFilter: MixedFeedType | 'all';
+  verifiedOnly: boolean;
+  visibleCount: number;
+}
+
 export function Home() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [searchParams, setSearchParams] = useSearchParams();
+  const routeKey = buildRouteKey(location.pathname, location.search);
+
+  const restoredView = useMemo(
+    () =>
+      navigationType === 'POP'
+        ? getSavedRouteViewState<HomeViewState>(location.key, routeKey)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.key]
+  );
+
   const initialQuery = searchParams.get('q') || '';
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeSearch, setActiveSearch] = useState(initialQuery.trim());
 
-  const [sortMode, setSortMode] = useState<HomeSortMode>('newest');
-  const [typeFilter, setTypeFilter] = useState<MixedFeedType | 'all'>('all');
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<HomeSortMode>(
+    () => restoredView?.sortMode ?? 'newest'
+  );
+  const [typeFilter, setTypeFilter] = useState<MixedFeedType | 'all'>(() => {
+    if (restoredView?.typeFilter) {
+      return restoredView.typeFilter === 'store'
+        ? 'service'
+        : restoredView.typeFilter;
+    }
+    return 'all';
+  });
+  const [verifiedOnly, setVerifiedOnly] = useState(
+    () => restoredView?.verifiedOnly ?? false
+  );
 
   const [mixedItems, setMixedItems] = useState<MixedFeedItem[]>(
     () => getFastCache<MixedFeedItem[]>('home_mixed_feed') || []
@@ -160,7 +195,25 @@ export function Home() {
   const [trendingLoading, setTrendingLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(PAGE_BATCH_SIZE);
+  const [visibleCount, setVisibleCount] = useState(
+    () => restoredView?.visibleCount ?? PAGE_BATCH_SIZE
+  );
+
+  const filterDepsRef = useRef({
+    activeSearch,
+    verifiedOnly,
+    typeFilter,
+    sortMode,
+  });
+
+  useEffect(() => {
+    saveRouteViewState<HomeViewState>(location.key, routeKey, {
+      sortMode,
+      typeFilter,
+      verifiedOnly,
+      visibleCount,
+    });
+  }, [location.key, routeKey, sortMode, typeFilter, verifiedOnly, visibleCount]);
 
   // Pull-to-refresh & trending lazy-fetch state
   const touchStartYRef = useRef<number | null>(null);
@@ -354,8 +407,23 @@ export function Home() {
     }
   };
 
-  // Reset pagination batch when filters/search change
+  // Reset pagination batch only when filters/search actually change
   useEffect(() => {
+    const prev = filterDepsRef.current;
+    if (
+      prev.activeSearch === activeSearch &&
+      prev.verifiedOnly === verifiedOnly &&
+      prev.typeFilter === typeFilter &&
+      prev.sortMode === sortMode
+    ) {
+      return;
+    }
+    filterDepsRef.current = {
+      activeSearch,
+      verifiedOnly,
+      typeFilter,
+      sortMode,
+    };
     setVisibleCount(PAGE_BATCH_SIZE);
   }, [activeSearch, verifiedOnly, typeFilter, sortMode]);
 
@@ -623,7 +691,7 @@ export function Home() {
             <p className="text-sm text-slate-600">
               {sortMode === 'trending'
                 ? 'Hot items and services rotated automatically every 2 hours.'
-                : 'Latest products, student services, campus stores, and rooms.'}
+                : 'Latest items, campus services, stores, and rooms.'}
             </p>
           </div>
 

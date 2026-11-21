@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import {
   ChevronRight,
-  Clock,
   Info,
   Loader2,
-  MapPin,
   PackageOpen,
   Plus,
   Search,
   SearchX,
-  ShoppingBag,
-  Store as StoreIcon,
   TrendingUp,
   X,
 } from 'lucide-react';
@@ -25,10 +21,10 @@ import {
   primeProductsListIntoCache,
 } from '../../lib/marketplaceService';
 import {
-  getApprovedStores,
-  getApprovedStoresDelta,
-  primeStoresIntoCache,
-} from '../../lib/storeService';
+  buildRouteKey,
+  getSavedRouteViewState,
+  saveRouteViewState,
+} from '../../lib/feedScrollState';
 import {
   buildCatalogSummaryForAi,
   expandSearchQuery,
@@ -55,14 +51,12 @@ import {
   hasActiveMarketplaceFilters,
   MarketplaceSortOption,
 } from '../../lib/marketplaceHelpers';
-import { Product, Store } from '../../types';
-import { Card } from '../../components/ui/Card';
+import { Product } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
-import { StoreCard } from '../../components/marketplace/StoreCard';
 
 const SEARCH_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest to Oldest' },
@@ -93,9 +87,35 @@ function sortSearchResults(
   return sorted;
 }
 
+interface MarketplaceViewState {
+  browseProducts: Product[];
+  rawSearchProducts: Product[];
+  lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+  selectedCategory: string;
+  searchQuery: string;
+  sortBy: SearchSortValue;
+}
+
 export function MarketplaceIndex() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [searchParams, setSearchParams] = useSearchParams();
+  const routeKey = buildRouteKey(location.pathname, location.search);
+
+  const isLegacyStoresTab = searchParams.get('tab') === 'stores';
+  const legacyStoreQuery = searchParams.get('q') || '';
+
+  const restoredView = useMemo(
+    () =>
+      navigationType === 'POP'
+        ? getSavedRouteViewState<MarketplaceViewState>(location.key, routeKey)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.key]
+  );
+
   const initialQuery = searchParams.get('q') || '';
   const initialCategoryParam = searchParams.get('category') || '';
   const initialCategory = PRODUCT_CATEGORIES.some(
@@ -114,50 +134,88 @@ export function MarketplaceIndex() {
     () => (getFastCache<Product[]>('mkt_trending') || []).length === 0
   );
 
-  const [rawSearchProducts, setRawSearchProducts] = useState<Product[]>([]);
+  const [rawSearchProducts, setRawSearchProducts] = useState<Product[]>(
+    () => restoredView?.rawSearchProducts || []
+  );
   const [browseProducts, setBrowseProducts] = useState<Product[]>(() =>
-    !initialQuery && !initialCategory
-      ? getFastCache<Product[]>('mkt_browse_default') || []
-      : []
+    restoredView?.browseProducts?.length
+      ? restoredView.browseProducts
+      : !initialQuery && !initialCategory
+        ? getFastCache<Product[]>('mkt_browse_default') || []
+        : []
   );
   const [lastVisibleDoc, setLastVisibleDoc] =
-    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(false);
+    useState<QueryDocumentSnapshot<DocumentData> | null>(
+      () => restoredView?.lastVisibleDoc ?? null
+    );
+  const [hasMore, setHasMore] = useState(() => restoredView?.hasMore ?? false);
 
-  const [searchQuery, setSearchQuery] = useState(initialQuery);
-  const [debouncedSearch, setDebouncedSearch] = useState(initialQuery);
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [sortBy, setSortBy] = useState<SearchSortValue>(initialSort);
+  const [searchQuery, setSearchQuery] = useState(
+    () => restoredView?.searchQuery ?? initialQuery
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => restoredView?.searchQuery ?? initialQuery
+  );
+  const [selectedCategory, setSelectedCategory] = useState(
+    () => restoredView?.selectedCategory ?? initialCategory
+  );
+  const [sortBy, setSortBy] = useState<SearchSortValue>(
+    () => restoredView?.sortBy ?? initialSort
+  );
 
   const [usedRelatedFallback, setUsedRelatedFallback] = useState(false);
   const [aiSearching, setAiSearching] = useState(false);
 
-  const [activeBrowseTab, setActiveBrowseTab] = useState<'items' | 'stores'>(() =>
-    searchParams.get('tab') === 'stores' ? 'stores' : 'items'
-  );
-  const [stores, setStores] = useState<Store[]>(
-    () => getFastCache<Store[]>('approved_stores') || []
-  );
-  const [storesLoading, setStoresLoading] = useState(false);
-  const [storesLoaded, setStoresLoaded] = useState(
-    () => (getFastCache<Store[]>('approved_stores') || []).length > 0
-  );
-  const [storesError, setStoresError] = useState<string | null>(null);
-
-  const [loading, setLoading] = useState(() =>
-    !initialQuery && !initialCategory
+  const [loading, setLoading] = useState(() => {
+    if (
+      restoredView &&
+      (restoredView.browseProducts.length > 0 ||
+        restoredView.rawSearchProducts.length > 0)
+    ) {
+      return false;
+    }
+    return !initialQuery && !initialCategory
       ? (getFastCache<Product[]>('mkt_browse_default') || []).length === 0
-      : true
-  );
+      : true;
+  });
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const restoredSliceOnMountRef = useRef(
+    Boolean(
+      restoredView &&
+        (restoredView.browseProducts.length > 0 ||
+          restoredView.rawSearchProducts.length > 0)
+    )
+  );
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const requestIdRef = useRef(0);
   const searchAbortRef = useRef<AbortController | null>(null);
 
   const isTypingSearch = searchQuery.trim().length > 0;
   const isSearchActive = debouncedSearch.trim().length > 0;
+
+  useEffect(() => {
+    saveRouteViewState<MarketplaceViewState>(location.key, routeKey, {
+      browseProducts,
+      rawSearchProducts,
+      lastVisibleDoc,
+      hasMore,
+      selectedCategory,
+      searchQuery,
+      sortBy,
+    });
+  }, [
+    location.key,
+    routeKey,
+    browseProducts,
+    rawSearchProducts,
+    lastVisibleDoc,
+    hasMore,
+    selectedCategory,
+    searchQuery,
+    sortBy,
+  ]);
 
   // Debounce search input so AI search waits briefly after user pauses typing
   useEffect(() => {
@@ -169,10 +227,8 @@ export function MarketplaceIndex() {
 
   // Sync URL params cleanly only when serialized query actually changes
   useEffect(() => {
+    if (isLegacyStoresTab) return;
     const nextParams: Record<string, string> = {};
-    if (activeBrowseTab === 'stores') {
-      nextParams.tab = 'stores';
-    }
     if (selectedCategory) {
       nextParams.category = selectedCategory;
     }
@@ -184,7 +240,7 @@ export function MarketplaceIndex() {
     if (nextQueryString !== searchParams.toString()) {
       setSearchParams(nextParams, { replace: true });
     }
-  }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, searchParams, setSearchParams]);
+  }, [isLegacyStoresTab, debouncedSearch, selectedCategory, sortBy, searchParams, setSearchParams]);
 
   useEffect(() => {
     const handleHydrated = () => {
@@ -206,9 +262,11 @@ export function MarketplaceIndex() {
         const hydratedBrowse = getFastCacheEnvelope<Product[]>('mkt_browse_default');
         if (hydratedBrowse && hydratedBrowse.data.length > 0) {
           setBrowseProducts((prev) =>
-            hydratedBrowse.isFull !== false || prev.length === 0
-              ? hydratedBrowse.data
-              : prev
+            prev.length > hydratedBrowse.data.length
+              ? prev
+              : hydratedBrowse.isFull !== false || prev.length === 0
+                ? hydratedBrowse.data
+                : prev
           );
           setLoading(false);
           primeProductsListIntoCache(
@@ -217,21 +275,6 @@ export function MarketplaceIndex() {
           );
         }
       }
-
-      const hydratedStores = getFastCacheEnvelope<Store[]>('approved_stores');
-      if (hydratedStores && hydratedStores.data.length > 0) {
-        setStores((prev) =>
-          hydratedStores.isFull !== false || prev.length === 0
-            ? hydratedStores.data
-            : prev
-        );
-        setStoresLoaded(true);
-        setStoresLoading(false);
-        primeStoresIntoCache(
-          hydratedStores.data,
-          hydratedStores.isFull !== false
-        );
-      }
     };
 
     window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
@@ -239,79 +282,6 @@ export function MarketplaceIndex() {
       window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
     };
   }, [debouncedSearch, selectedCategory]);
-
-  const loadStores = useCallback(async (forceRefresh = false) => {
-    const env = getFastCacheEnvelope<Store[]>('approved_stores');
-    const cachedStores = env?.data || [];
-    const hasCached = cachedStores.length > 0;
-
-    if (hasCached) {
-      setStores(cachedStores);
-      setStoresLoading(false);
-      primeStoresIntoCache(cachedStores, env?.isFull !== false);
-    } else {
-      setStoresLoading(true);
-    }
-    setStoresError(null);
-
-    const strategy = resolveSyncStrategy({
-      hasCached,
-      lastSyncedAt: env?.syncedAt,
-      lastFullSyncAt: env?.fullSyncAt,
-      forceRefresh,
-    });
-
-    if (strategy === 'fresh-skip') {
-      setStoresLoading(false);
-      setStoresLoaded(true);
-      return;
-    }
-
-    try {
-      if (strategy === 'delta-sync' && hasCached) {
-        const newestMs = getNewestCreatedAtMs(cachedStores);
-        const delta = await getApprovedStoresDelta(newestMs);
-        if (delta.length === 0) {
-          touchFastCache('approved_stores');
-        } else {
-          const merged = mergeDeltaEntities(
-            cachedStores,
-            delta,
-            (item) => item.id,
-            (item) => getTimestampMillis(item.createdAt),
-            60
-          );
-          setStores(merged);
-          setFastCache('approved_stores', merged, {
-            localData: compactListingsForCache(merged, 24),
-            isFull: true,
-          });
-        }
-      } else {
-        const list = await getApprovedStores();
-        setStores(list);
-        setFastCache('approved_stores', list, {
-          localData: compactListingsForCache(list, 24),
-          isFull: true,
-        });
-      }
-    } catch (err) {
-      if (!hasCached) {
-        setStoresError(
-          err instanceof Error ? err.message : 'Unable to load campus stores.'
-        );
-      }
-    } finally {
-      setStoresLoading(false);
-      setStoresLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeBrowseTab === 'stores' && !storesLoaded && !storesLoading && !storesError) {
-      void loadStores();
-    }
-  }, [activeBrowseTab, storesLoaded, storesLoading, storesError, loadStores]);
 
   const filtersActive = useMemo(
     () =>
@@ -382,6 +352,12 @@ export function MarketplaceIndex() {
 
   // Load main grid: AI Search mode when searching, otherwise paginated browse mode (with PRODUCT_CATEGORIES filter)
   const loadInitialProducts = useCallback(async () => {
+    if (isLegacyStoresTab) return;
+    if (restoredSliceOnMountRef.current) {
+      restoredSliceOnMountRef.current = false;
+      setLoading(false);
+      return;
+    }
     const reqId = ++requestIdRef.current;
     const trimmedQuery = debouncedSearch.trim();
     const isDefaultBrowse = !trimmedQuery && !selectedCategory;
@@ -562,7 +538,7 @@ export function MarketplaceIndex() {
         setLoading(false);
       }
     }
-  }, [debouncedSearch, selectedCategory]);
+  }, [debouncedSearch, selectedCategory, isLegacyStoresTab]);
 
   useEffect(() => {
     void loadInitialProducts();
@@ -578,18 +554,6 @@ export function MarketplaceIndex() {
       : rawSearchProducts;
     return sortSearchResults(categoryFiltered, sortBy);
   }, [isSearchActive, browseProducts, rawSearchProducts, selectedCategory, sortBy]);
-
-  const filteredStores = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return stores;
-    return stores.filter((s) =>
-      [s.name, s.description, s.category, s.locationName]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [stores, searchQuery]);
 
   // Load next 12 items for infinite scroll (browse mode)
   const loadMoreProducts = useCallback(async () => {
@@ -667,6 +631,13 @@ export function MarketplaceIndex() {
     setSortBy('newest');
   };
 
+  if (isLegacyStoresTab) {
+    const redirectTarget = legacyStoreQuery
+      ? `/services?tab=stores&q=${encodeURIComponent(legacyStoreQuery)}`
+      : '/services?tab=stores';
+    return <Navigate to={redirectTarget} replace />;
+  }
+
   return (
     <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-6">
       {/* Header Row */}
@@ -680,13 +651,7 @@ export function MarketplaceIndex() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:flex items-center gap-2.5 shrink-0">
-          <Link to="/store/create" className="w-full sm:w-auto">
-            <Button variant="outline" size="md" fullWidth className="sm:w-auto">
-              <StoreIcon className="w-4 h-4" />
-              <span>Open Store</span>
-            </Button>
-          </Link>
+        <div className="flex shrink-0">
           <Link to="/marketplace/create" className="w-full sm:w-auto">
             <Button variant="primary" size="md" fullWidth className="sm:w-auto">
               <Plus className="w-4 h-4" />
@@ -697,7 +662,7 @@ export function MarketplaceIndex() {
       </div>
 
       {/* Top Section: Trending Carousel (Top 8 by viewCount) */}
-      {activeBrowseTab === 'items' && !trendingLoading && trendingProducts.length > 0 && (
+      {!trendingLoading && trendingProducts.length > 0 && (
         <section aria-labelledby="trending-heading" className="space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -731,69 +696,32 @@ export function MarketplaceIndex() {
         </section>
       )}
 
-      {/* Sticky Search Bar & Filter Tabs */}
+      {/* Sticky Search Bar & Category Filters */}
       <section
         aria-label="Search marketplace"
         className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-1.5 bg-slate-50/95 backdrop-blur-sm"
       >
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2 sm:p-3.5 space-y-2">
-          {/* Top Mode Tabs + Category Quick Row */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div
-              role="tablist"
-              aria-label="Marketplace browse mode"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg max-w-full"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeBrowseTab === 'items'}
-                onClick={() => setActiveBrowseTab('items')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 ${
-                  activeBrowseTab === 'items'
-                    ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
-                <span>Items</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeBrowseTab === 'stores'}
-                onClick={() => setActiveBrowseTab('stores')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 ${
-                  activeBrowseTab === 'stores'
-                    ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <StoreIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>Campus Stores</span>
-              </button>
-            </div>
-
-            {activeBrowseTab === 'items' && filtersActive && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-all duration-200"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-
           <div className="flex flex-col md:flex-row md:items-end gap-2 sm:gap-3">
-            {/* Search Input + Visual Photo Scan Button */}
+            {/* Search Input */}
             <div className="flex-1 min-w-0 space-y-1">
-              <label
-                htmlFor="marketplace-search"
-                className="hidden sm:block text-xs font-medium text-slate-600"
-              >
-                {activeBrowseTab === 'stores' ? 'Search Campus Stores' : 'Search Marketplace'}
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  htmlFor="marketplace-search"
+                  className="hidden sm:block text-xs font-medium text-slate-600"
+                >
+                  Search Marketplace
+                </label>
+                {filtersActive && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="hidden sm:inline-block text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-0.5 rounded hover:bg-blue-50 transition-all duration-200"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 min-w-0">
                 <div className="relative flex-1 min-w-0">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -803,11 +731,7 @@ export function MarketplaceIndex() {
                     role="searchbox"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={
-                      activeBrowseTab === 'stores'
-                        ? 'Search stores by name or category...'
-                        : 'Search items, food, books, electronics...'
-                    }
+                    placeholder="Search items, food, books, electronics..."
                     aria-label="Search marketplace products"
                     className="w-full min-w-0 pl-9 pr-10 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
@@ -828,33 +752,31 @@ export function MarketplaceIndex() {
             </div>
 
             {/* Category Filter (Strictly PRODUCT_CATEGORIES only) */}
-            {activeBrowseTab === 'items' && (
-              <div className="w-full md:w-56 space-y-1 shrink-0">
-                <label
-                  htmlFor="marketplace-category-filter"
-                  className="hidden sm:block text-xs font-medium text-slate-600"
-                >
-                  Product Category
-                </label>
-                <select
-                  id="marketplace-category-filter"
-                  aria-label="Filter by product category"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
-                >
-                  <option value="">All Categories</option>
-                  {PRODUCT_CATEGORIES.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="w-full md:w-56 space-y-1 shrink-0">
+              <label
+                htmlFor="marketplace-category-filter"
+                className="hidden sm:block text-xs font-medium text-slate-600"
+              >
+                Product Category
+              </label>
+              <select
+                id="marketplace-category-filter"
+                aria-label="Filter by product category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+              >
+                <option value="">All Categories</option>
+                {PRODUCT_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Sort Results (Search mode) */}
-            {activeBrowseTab === 'items' && isTypingSearch && (
+            {isTypingSearch && (
               <div className="w-full md:w-44 space-y-1 shrink-0">
                 <label
                   htmlFor="marketplace-search-sort"
@@ -880,7 +802,7 @@ export function MarketplaceIndex() {
           </div>
 
           {/* Stealth Smart Search Status */}
-          {activeBrowseTab === 'items' && isTypingSearch && aiSearching && (
+          {isTypingSearch && aiSearching && (
             <div
               role="status"
               className="flex items-center gap-2 text-sm font-medium text-slate-600 pt-1"
@@ -890,7 +812,7 @@ export function MarketplaceIndex() {
             </div>
           )}
 
-          {activeBrowseTab === 'items' && isSearchActive && !aiSearching && usedRelatedFallback && (
+          {isSearchActive && !aiSearching && usedRelatedFallback && (
             <div
               role="status"
               className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700"
@@ -905,47 +827,8 @@ export function MarketplaceIndex() {
         </div>
       </section>
 
-      {/* Main Content Grid: Campus Stores OR Marketplace Products */}
-      {activeBrowseTab === 'stores' ? (
-        storesLoading ? (
-          <CardSkeletonGrid
-            count={6}
-            columns={3}
-            label="Loading campus stores..."
-          />
-        ) : storesError ? (
-          <ErrorState message={storesError} onRetry={() => void loadStores()} />
-        ) : filteredStores.length === 0 ? (
-          <EmptyState
-            icon={searchQuery.trim() ? SearchX : StoreIcon}
-            title={searchQuery.trim() ? 'No stores found' : 'Nothing here yet'}
-            description={
-              searchQuery.trim()
-                ? `No approved campus store matched "${searchQuery.trim()}".`
-                : 'Be the first student entrepreneur to open a storefront on LASUEDPLUG.'
-            }
-            actionLabel={searchQuery.trim() ? 'Clear Search' : 'Open a Store'}
-            actionTo={searchQuery.trim() ? undefined : '/store/create'}
-            onAction={searchQuery.trim() ? () => setSearchQuery('') : undefined}
-          />
-        ) : (
-          <div className="space-y-4">
-            <p className="text-xs font-medium text-slate-500 tabular-nums">
-              Showing {filteredStores.length}{' '}
-              {filteredStores.length === 1 ? 'campus store' : 'campus stores'}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-              {filteredStores.map((store, index) => (
-                <StoreCard
-                  key={store.id || store.name}
-                  store={store}
-                  priority={index < 3}
-                />
-              ))}
-            </div>
-          </div>
-        )
-      ) : loading ? (
+      {/* Main Marketplace Products Grid */}
+      {loading ? (
         <CardSkeletonGrid
           count={8}
           columns={4}

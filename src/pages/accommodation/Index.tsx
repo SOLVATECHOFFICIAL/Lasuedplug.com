@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigationType } from 'react-router-dom';
 import {
   Building2,
   Plus,
@@ -33,6 +33,11 @@ import {
   mergeDeltaEntities,
   resolveSyncStrategy,
 } from '../../lib/syncCache';
+import {
+  buildRouteKey,
+  getSavedRouteViewState,
+  saveRouteViewState,
+} from '../../lib/feedScrollState';
 import { Accommodation } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
@@ -41,7 +46,26 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 import { AccommodationCard } from '../../components/marketplace/AccommodationCard';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
 
+interface AccommodationViewState {
+  selectedType: string;
+  selectedPriceRange: AccommodationPriceRange;
+  locationQuery: string;
+}
+
 export function AccommodationIndex() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const routeKey = buildRouteKey(location.pathname, location.search);
+
+  const restoredView = useMemo(
+    () =>
+      navigationType === 'POP'
+        ? getSavedRouteViewState<AccommodationViewState>(location.key, routeKey)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [location.key]
+  );
+
   const [accommodations, setAccommodations] = useState<Accommodation[]>(
     () => getFastCache<Accommodation[]>('accommodations_feed') || []
   );
@@ -50,10 +74,24 @@ export function AccommodationIndex() {
   );
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>(
+    () => restoredView?.selectedType ?? 'all'
+  );
   const [selectedPriceRange, setSelectedPriceRange] =
-    useState<AccommodationPriceRange>('all');
-  const [locationQuery, setLocationQuery] = useState<string>('');
+    useState<AccommodationPriceRange>(
+      () => restoredView?.selectedPriceRange ?? 'all'
+    );
+  const [locationQuery, setLocationQuery] = useState<string>(
+    () => restoredView?.locationQuery ?? ''
+  );
+
+  useEffect(() => {
+    saveRouteViewState<AccommodationViewState>(location.key, routeKey, {
+      selectedType,
+      selectedPriceRange,
+      locationQuery,
+    });
+  }, [location.key, routeKey, selectedType, selectedPriceRange, locationQuery]);
 
   useEffect(() => {
     const handleHydrated = () => {

@@ -438,8 +438,8 @@ export function getReportListingRoute(
       const storeName =
         typeof targetData?.name === 'string' ? targetData.name.trim() : '';
       return storeName
-        ? `/marketplace?tab=stores&q=${encodeURIComponent(storeName)}`
-        : '/marketplace?tab=stores';
+        ? `/services?tab=stores&q=${encodeURIComponent(storeName)}`
+        : '/services?tab=stores';
     }
     case 'user':
     default:
