@@ -10,7 +10,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { ALL_MARKETPLACE_CATEGORIES } from '../../lib/categories';
+import {
+  ALL_MARKETPLACE_CATEGORIES,
+  getStoreSubcategoriesForCategory,
+} from '../../lib/categories';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
 import {
   formatOpeningHoursRange,
@@ -41,6 +44,7 @@ export function CreateStore() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('General Campus Store');
+  const [subcategory, setSubcategory] = useState('');
   const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
   const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
   const [whatsappNumber, setWhatsappNumber] = useState('');
@@ -54,6 +58,7 @@ export function CreateStore() {
   const [submitting, setSubmitting] = useState(false);
 
   const phonePrefilledRef = useRef(false);
+  const profileLocationPrefilledRef = useRef(false);
   const redirectedRef = useRef(false);
   const submittingRef = useRef(false);
 
@@ -71,6 +76,36 @@ export function CreateStore() {
       phonePrefilledRef.current = true;
     }
   }, [profile?.phone]);
+
+  useEffect(() => {
+    if (
+      !profileLocationPrefilledRef.current &&
+      profile?.accountType === 'business' &&
+      !profile.isOnlineOnly
+    ) {
+      profileLocationPrefilledRef.current = true;
+      if (profile.shopAddress?.trim() && !locationName.trim()) {
+        setLocationName(profile.shopAddress.trim());
+      }
+      if (
+        typeof profile.latitude === 'number' &&
+        typeof profile.longitude === 'number' &&
+        latitude === undefined &&
+        longitude === undefined
+      ) {
+        setLatitude(profile.latitude);
+        setLongitude(profile.longitude);
+      }
+      if (profile.openingTimeStart?.trim()) {
+        setOpeningTimeStart(profile.openingTimeStart.trim());
+      }
+      if (profile.openingTimeEnd?.trim()) {
+        setOpeningTimeEnd(profile.openingTimeEnd.trim());
+      }
+    }
+  }, [profile, locationName, latitude, longitude]);
+
+  const subcategoryOptions = getStoreSubcategoriesForCategory(category);
 
   const clearFieldError = (key: keyof StoreCreateValidationErrors) => {
     setFieldErrors((prev) => {
@@ -101,6 +136,7 @@ export function CreateStore() {
       name,
       description,
       category,
+      subcategory,
       openingTimeStart,
       openingTimeEnd,
       imagesCount: images.length,
@@ -134,6 +170,7 @@ export function CreateStore() {
         name: name.trim(),
         description: description.trim(),
         category: category.trim(),
+        subcategory: subcategory.trim(),
         openingHours: formattedHoursPreview,
         openingTimeStart: openingTimeStart.trim(),
         openingTimeEnd: openingTimeEnd.trim(),
@@ -224,18 +261,36 @@ export function CreateStore() {
             required
           />
 
-          <Select
-            label="Store Category"
-            name="category"
-            options={STORE_CATEGORY_OPTIONS}
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              clearFieldError('category');
-            }}
-            error={fieldErrors.category}
-            required
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Store Category"
+              name="category"
+              options={STORE_CATEGORY_OPTIONS}
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setSubcategory('');
+                clearFieldError('category');
+                clearFieldError('subcategory');
+              }}
+              error={fieldErrors.category}
+              required
+            />
+
+            <Select
+              label="Store Subcategory"
+              name="subcategory"
+              placeholder="Select subcategory"
+              options={subcategoryOptions}
+              value={subcategory}
+              onChange={(e) => {
+                setSubcategory(e.target.value);
+                clearFieldError('subcategory');
+              }}
+              error={fieldErrors.subcategory}
+              required
+            />
+          </div>
 
           {/* Opening Hours: Start & End Time Pickers */}
           <div className="space-y-2">

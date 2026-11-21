@@ -55,10 +55,43 @@ export function SignupPage() {
 
     setSubmitting(true);
     try {
-      await signUp(email, password, fullName, accountType);
-      showToast('Account created! Welcome to LASUEDPLUG.', 'success');
-      navigate('/');
+      const result = await signUp(email, password, fullName, accountType);
+      if (result.status === 'unverified_resumed') {
+        showToast(
+          'You are not done verifying your email! Check your Inbox or Spam folder to activate your account.',
+          'info'
+        );
+      } else {
+        showToast(
+          'Account created! Check your Gmail Inbox or Spam folder to verify and activate your account.',
+          'success'
+        );
+      }
+      navigate('/verify-email', {
+        state: {
+          email: email.trim().toLowerCase(),
+          resumed: result.status === 'unverified_resumed',
+        },
+      });
     } catch (err) {
+      const code =
+        err && typeof err === 'object' && 'code' in err
+          ? String((err as { code?: unknown }).code || '')
+          : '';
+      if (code === 'auth/email-unverified-resume') {
+        const normalizedEmail = email.trim().toLowerCase();
+        showToast(
+          'You are not done with email verification. Taking you to verify and activate your account.',
+          'info'
+        );
+        navigate(
+          `/verify-email?email=${encodeURIComponent(normalizedEmail)}&pending=1`,
+          {
+            state: { email: normalizedEmail, resumed: true },
+          }
+        );
+        return;
+      }
       setFormError(formatFirebaseAuthError(err));
     } finally {
       setSubmitting(false);
@@ -112,7 +145,7 @@ export function SignupPage() {
             required
           />
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <span className="block text-sm font-medium text-slate-700">
               Account Type
             </span>
@@ -147,9 +180,14 @@ export function SignupPage() {
                 }`}
               >
                 <Building2 className="w-4 h-4 shrink-0" />
-                <span>I am a Business / Landlord</span>
+                <span>I am a Marketer</span>
               </button>
             </div>
+            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200/80 rounded-lg px-3 py-2 leading-relaxed">
+              {accountType === 'business'
+                ? 'Marketer account: Physical shops set opening/closing hours, address & GPS pin (online marketers can be contacted anytime). Verify identity with NIN, Driver’s License, Voter’s Card, or Passport.'
+                : 'Student account: Complete your campus academic details and verify with your Student ID Card or School Fee Receipt.'}
+            </p>
           </div>
 
           <Input

@@ -23,6 +23,8 @@ export function AdminIndex() {
     () =>
       initialCached ?? {
         totalUsers: 0,
+        studentUsers: 0,
+        marketerUsers: 0,
         totalListings: 0,
         pendingApprovals: 0,
         openReports: 0,
@@ -106,6 +108,10 @@ export function AdminIndex() {
                 </p>
                 <p className="text-2xl sm:text-3xl font-bold text-slate-900 tabular-nums">
                   {stats.totalUsers.toLocaleString()}
+                </p>
+                <p className="text-[11px] text-slate-500 tabular-nums">
+                  {(stats.studentUsers ?? stats.totalUsers).toLocaleString()} Students ·{' '}
+                  {(stats.marketerUsers ?? 0).toLocaleString()} Marketers
                 </p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
@@ -191,10 +197,10 @@ export function AdminIndex() {
                   <BadgeCheck className="w-5 h-5" aria-hidden="true" />
                 </div>
                 <h2 className="text-base font-bold text-slate-900">
-                  Student Verifications
+                  Identity Verifications
                 </h2>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Review uploaded Student ID cards and School Fee receipts to grant the Verified Student badge.
+                  Review Student IDs &amp; Fee Receipts for Students, and NIN / Driver’s License / Valid IDs for Marketers.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 group-hover:translate-x-0.5 transition-transform">
@@ -233,10 +239,10 @@ export function AdminIndex() {
                   <Users className="w-5 h-5" aria-hidden="true" />
                 </div>
                 <h2 className="text-base font-bold text-slate-900">
-                  Manage Campus Users
+                  Students &amp; Marketers
                 </h2>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Search student accounts, check role assignments, and suspend or restore access.
+                  View Marketers separately from Student sellers, inspect shop details, and suspend or restore accounts.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 group-hover:translate-x-0.5 transition-transform">

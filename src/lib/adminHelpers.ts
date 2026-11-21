@@ -1,10 +1,12 @@
 import {
   Accommodation,
+  AccountType,
   Product,
   Report,
   RoommateRequest,
   Store,
   UserProfile,
+  VerificationRequest,
 } from '../types';
 import { getTimestampMillis } from './homeHelpers';
 import { isServiceAd } from './sellerHelpers';
@@ -39,10 +41,14 @@ export interface PendingAdminItem {
 
 export interface AdminDashboardStats {
   totalUsers: number;
+  studentUsers?: number;
+  marketerUsers?: number;
   totalListings: number;
   pendingApprovals: number;
   openReports: number;
 }
+
+export type AdminAccountTypeFilter = 'all' | AccountType;
 
 export const PRIMARY_ADMIN_EMAIL = 'awoyinfasolomon1@gmail.com';
 
@@ -182,16 +188,28 @@ export function filterPendingAdminItems(
 
 export function filterAdminUsers(
   users: UserProfile[],
-  rawQuery: string
+  rawQuery: string,
+  accountTypeFilter: AdminAccountTypeFilter = 'all'
 ): UserProfile[] {
+  const byType =
+    accountTypeFilter === 'all'
+      ? users
+      : users.filter((user) =>
+          accountTypeFilter === 'business'
+            ? user.accountType === 'business'
+            : user.accountType !== 'business'
+        );
+
   const q = rawQuery.trim().toLowerCase();
   if (!q) {
-    return users;
+    return byType;
   }
   const normalizedPhoneQuery = q.replace(/[\s\-()]/g, '');
-  return users.filter((user) => {
+  return byType.filter((user) => {
     const uidMatch = (user.uid || '').toLowerCase().includes(q);
     const nameMatch = (user.fullName || '').toLowerCase().includes(q);
+    const businessMatch = (user.businessName || '').toLowerCase().includes(q);
+    const shopAddressMatch = (user.shopAddress || '').toLowerCase().includes(q);
     const emailMatch = (user.email || '').toLowerCase().includes(q);
     const phoneRaw = (user.phone || '').toLowerCase();
     const phoneMatch =
@@ -204,12 +222,28 @@ export function filterAdminUsers(
     return (
       uidMatch ||
       nameMatch ||
+      businessMatch ||
+      shopAddressMatch ||
       emailMatch ||
       phoneMatch ||
       campusMatch ||
       departmentMatch
     );
   });
+}
+
+export function filterVerificationRequestsByAccountType(
+  requests: VerificationRequest[],
+  accountTypeFilter: AdminAccountTypeFilter
+): VerificationRequest[] {
+  if (accountTypeFilter === 'all') {
+    return requests;
+  }
+  return requests.filter((req) =>
+    accountTypeFilter === 'business'
+      ? req.accountType === 'business'
+      : req.accountType !== 'business'
+  );
 }
 
 export interface AdminAlertCounts {
@@ -354,11 +388,14 @@ export interface EnrichedReport {
   listingUrl: string | null;
 }
 
-export function getPrimaryUserRoleBadge(user: Pick<UserProfile, 'roles'>): string {
+export function getPrimaryUserRoleBadge(
+  user: Pick<UserProfile, 'roles'> & Partial<Pick<UserProfile, 'accountType'>>
+): string {
   if (user.roles?.admin) return 'Admin';
-  if (user.roles?.landlord) return 'Landlord';
+  if (user.accountType === 'business') return 'Marketer';
+  if (user.roles?.landlord) return 'Marketer';
   if (user.roles?.serviceProvider) return 'Service Provider';
-  if (user.roles?.seller) return 'Seller';
+  if (user.roles?.seller) return 'Student Seller';
   if (user.roles?.roommateSeeker) return 'Roommate Seeker';
   return 'Student';
 }

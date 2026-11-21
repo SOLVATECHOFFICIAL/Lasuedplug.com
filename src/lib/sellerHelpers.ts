@@ -192,6 +192,9 @@ export interface EditListingInput {
   priceUnit?: Product['priceUnit'];
   quantity?: number;
   serviceLocation?: Product['serviceLocation'];
+  openingHours?: string;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
   locationType?: 'physical' | 'online';
   latitude?: number;
   longitude?: number;
@@ -256,6 +259,11 @@ export function buildEditedListingUpdatePayload(
           : 'Online / Delivery';
     if (effectiveLocationType === 'physical' && trimmedLocation) {
       payload.landmark = trimmedLocation;
+    }
+    if (effectiveLocationType === 'physical') {
+      if (input.openingHours?.trim()) payload.openingHours = input.openingHours.trim();
+      if (input.openingTimeStart?.trim()) payload.openingTimeStart = input.openingTimeStart.trim();
+      if (input.openingTimeEnd?.trim()) payload.openingTimeEnd = input.openingTimeEnd.trim();
     }
   } else {
     const qty =

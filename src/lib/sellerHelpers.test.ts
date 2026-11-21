@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Product } from '../types';
 import {
+  buildEditedListingUpdatePayload,
   calculateSellerStats,
   canMarkOneAsSold,
   computeNextSoldOneUpdate,
@@ -123,4 +124,52 @@ test('computeNextToggleActiveUpdate guards against reactivating a 0-stock produc
     ),
     { isActive: true, status: 'active' }
   );
+});
+
+test('buildEditedListingUpdatePayload includes openingHours only for physical shop services and resets isApproved', () => {
+  const physicalPayload = buildEditedListingUpdatePayload({
+    adType: 'service',
+    title: 'Phone Screen Repair',
+    description: 'Same-day iPhone and Android repairs.',
+    categoryId: 'tech_repairs',
+    subcategory: 'Phone Repairs',
+    categoryName: 'Tech & Repairs',
+    images: ['https://example.com/1.jpg'],
+    priceType: 'fixed',
+    price: 5000,
+    serviceLocation: 'shop',
+    locationType: 'physical',
+    locationName: 'Shop 4, Main Gate',
+    latitude: 6.5812,
+    longitude: 3.9821,
+    openingHours: '8:00 AM - 6:00 PM',
+    openingTimeStart: '08:00',
+    openingTimeEnd: '18:00',
+    whatsappNumber: '08012345678',
+  });
+  assert.equal(physicalPayload.isApproved, false);
+  assert.equal(physicalPayload.openingHours, '8:00 AM - 6:00 PM');
+  assert.equal(physicalPayload.openingTimeStart, '08:00');
+  assert.equal(physicalPayload.openingTimeEnd, '18:00');
+
+  const onlinePayload = buildEditedListingUpdatePayload({
+    adType: 'service',
+    title: 'Mobile Braiding',
+    description: 'Neat knotless braids at your hostel.',
+    categoryId: 'beauty',
+    subcategory: 'Hair Styling & Braiding',
+    categoryName: 'Beauty & Personal Care',
+    images: ['https://example.com/2.jpg'],
+    priceType: 'contact',
+    serviceLocation: 'mobile',
+    locationType: 'online',
+    openingHours: '8:00 AM - 6:00 PM',
+    openingTimeStart: '08:00',
+    openingTimeEnd: '18:00',
+    whatsappNumber: '08012345678',
+  });
+  assert.equal(onlinePayload.isApproved, false);
+  assert.equal(onlinePayload.openingHours, undefined);
+  assert.equal(onlinePayload.openingTimeStart, undefined);
+  assert.equal(onlinePayload.openingTimeEnd, undefined);
 });

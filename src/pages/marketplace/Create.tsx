@@ -4,6 +4,7 @@ import { collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/fires
 import {
   AlertCircle,
   ArrowLeft,
+  Clock,
   Globe,
   Loader2,
   MapPin,
@@ -25,6 +26,7 @@ import {
 } from '../../lib/categories';
 import { suggestCategory } from '../../lib/aiCategoryService';
 import {
+  formatOpeningHoursRange,
   MarketplaceCreateValidationErrors,
   validateMarketplaceCreateInput,
 } from '../../lib/listingValidation';
@@ -95,6 +97,8 @@ export function MarketplaceCreate() {
     useState<ServiceLocation>('online');
 
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
+  const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
@@ -122,13 +126,39 @@ export function MarketplaceCreate() {
     }
   }, [loading, user, isProfileComplete, navigate, showToast]);
 
-  // Pre-fill WhatsApp number from profile phone once available
+  // Pre-fill WhatsApp number and physical shop defaults once profile loads
+  const shopPrefilledRef = useRef(false);
   useEffect(() => {
     if (!phonePrefilledRef.current && profile?.phone) {
       setWhatsappNumber(profile.phone);
       phonePrefilledRef.current = true;
     }
-  }, [profile?.phone]);
+    if (
+      !shopPrefilledRef.current &&
+      profile?.accountType === 'business' &&
+      !profile.isOnlineOnly
+    ) {
+      shopPrefilledRef.current = true;
+      if (profile.openingTimeStart?.trim()) {
+        setOpeningTimeStart(profile.openingTimeStart.trim());
+      }
+      if (profile.openingTimeEnd?.trim()) {
+        setOpeningTimeEnd(profile.openingTimeEnd.trim());
+      }
+      if (profile.shopAddress?.trim() && !locationName.trim()) {
+        setLocationName(profile.shopAddress.trim());
+      }
+      if (
+        typeof profile.latitude === 'number' &&
+        typeof profile.longitude === 'number' &&
+        latitude === undefined &&
+        longitude === undefined
+      ) {
+        setLatitude(profile.latitude);
+        setLongitude(profile.longitude);
+      }
+    }
+  }, [profile, locationName, latitude, longitude]);
 
   // Fetch user's stores to allow optional store linking
   useEffect(() => {
@@ -242,6 +272,25 @@ export function MarketplaceCreate() {
         setLocationName(matched.locationName);
         clearFieldError('locationName');
       }
+      if (
+        effectiveLocationType === 'physical' &&
+        typeof matched.latitude === 'number' &&
+        typeof matched.longitude === 'number' &&
+        latitude === undefined &&
+        longitude === undefined
+      ) {
+        setLatitude(matched.latitude);
+        setLongitude(matched.longitude);
+        clearFieldError('gps');
+      }
+      if (matched.openingTimeStart?.trim()) {
+        setOpeningTimeStart(matched.openingTimeStart.trim());
+        clearFieldError('openingHours');
+      }
+      if (matched.openingTimeEnd?.trim()) {
+        setOpeningTimeEnd(matched.openingTimeEnd.trim());
+        clearFieldError('openingHours');
+      }
       if (!whatsappNumber.trim() && matched.whatsappNumber) {
         setWhatsappNumber(matched.whatsappNumber);
         clearFieldError('whatsappNumber');
@@ -270,6 +319,7 @@ export function MarketplaceCreate() {
 
   const handleTogglePhysicalShop = (usesShop: boolean) => {
     setHasPhysicalShop(usesShop);
+    clearFieldError('openingHours');
     clearFieldError('locationName');
     clearFieldError('gps');
     if (!usesShop) {
@@ -386,6 +436,14 @@ export function MarketplaceCreate() {
         payload.quantity = Math.max(1, Math.floor(Number(quantity)));
       } else {
         payload.serviceLocation = effectiveServiceLocation;
+        if (effectiveLocationType === 'physical') {
+          payload.openingTimeStart = openingTimeStart.trim();
+          payload.openingTimeEnd = openingTimeEnd.trim();
+          payload.openingHours = formatOpeningHoursRange(
+            openingTimeStart,
+            openingTimeEnd
+          );
+        }
       }
 
       if (effectiveLocationType === 'physical') {
@@ -519,6 +577,14 @@ export function MarketplaceCreate() {
       locationType: effectiveLocationType,
       serviceLocation:
         adType === 'service' ? effectiveServiceLocation : undefined,
+      openingTimeStart:
+        adType === 'service' && effectiveLocationType === 'physical'
+          ? openingTimeStart
+          : undefined,
+      openingTimeEnd:
+        adType === 'service' && effectiveLocationType === 'physical'
+          ? openingTimeEnd
+          : undefined,
       locationName,
       latitude,
       longitude,
@@ -1038,6 +1104,73 @@ export function MarketplaceCreate() {
 
           {effectiveLocationType === 'physical' ? (
             <div className="space-y-4 pt-1">
+              {adType === 'service' && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    <span>
+                      Shop Opening &amp; Closing Hours{' '}
+                      <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="service-opening-time-start"
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Opening Time
+                      </label>
+                      <input
+                        id="service-opening-time-start"
+                        type="time"
+                        required
+                        value={openingTimeStart}
+                        onChange={(e) => {
+                          setOpeningTimeStart(e.target.value);
+                          clearFieldError('openingHours');
+                        }}
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="service-opening-time-end"
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Closing Time
+                      </label>
+                      <input
+                        id="service-opening-time-end"
+                        type="time"
+                        required
+                        value={openingTimeEnd}
+                        onChange={(e) => {
+                          setOpeningTimeEnd(e.target.value);
+                          clearFieldError('openingHours');
+                        }}
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  {openingTimeStart &&
+                    openingTimeEnd &&
+                    !fieldErrors.openingHours && (
+                      <p className="text-xs font-medium text-slate-600">
+                        Displayed as:{' '}
+                        <span className="text-slate-900">
+                          {formatOpeningHoursRange(openingTimeStart, openingTimeEnd)}
+                        </span>
+                      </p>
+                    )}
+                  {fieldErrors.openingHours && (
+                    <p className="text-xs font-medium text-red-600" role="alert">
+                      {fieldErrors.openingHours}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Input
                 label={
                   adType === 'service'
@@ -1097,8 +1230,8 @@ export function MarketplaceCreate() {
                 {adType === 'item'
                   ? 'Listed as Online / Delivery Only — physical address and GPS pin are not required.'
                   : effectiveServiceLocation === 'mobile'
-                    ? 'Listed as Mobile Service (I come to you) — shop address and GPS pin are hidden.'
-                    : 'Listed as Online / Delivery Service — shop address and GPS pin are hidden.'}
+                    ? 'Mobile Service (I come to you) — buyers can contact you anytime; no shop hours, address, or GPS pin required.'
+                    : 'Online / Delivery Service — buyers can contact you anytime; no shop hours, address, or GPS pin required.'}
               </span>
             </div>
           )}

@@ -30,6 +30,7 @@ import {
   getUserAvatarUrl,
   isAcademicFieldLocked,
   NAME_LOCK_MESSAGE,
+  parseOpeningHoursRange,
   PHONE_UPDATE_COOLDOWN_DAYS,
 } from '../../lib/authHelpers';
 import { SUPPORT_LINK } from '../../lib/constants';
@@ -39,7 +40,15 @@ import {
   handleCampusCascade,
 } from '../../lib/academicData';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
-import { getVerificationUiState } from '../../lib/verificationHelpers';
+import {
+  formatOpeningHoursRange,
+  isValidGpsCoordinates,
+} from '../../lib/listingValidation';
+import {
+  getVerificationDocOptions,
+  getVerificationUiState,
+  getVerifiedBadgeLabel,
+} from '../../lib/verificationHelpers';
 import {
   getUserVerificationRequests,
   submitVerificationRequest,
@@ -52,6 +61,7 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { StarRating } from '../../components/ui/StarRating';
 import { UserAvatar } from '../../components/ui/UserAvatar';
+import { LocationPinField } from '../../components/forms/LocationPinField';
 
 interface FieldErrors {
   fullName?: string;
@@ -60,6 +70,9 @@ interface FieldErrors {
   department?: string;
   level?: string;
   businessName?: string;
+  openingHours?: string;
+  shopAddress?: string;
+  gps?: string;
 }
 
 function formatUnlockDate(date: Date | null): string {
@@ -99,8 +112,12 @@ export function ProfilePage() {
   const [department, setDepartment] = useState('');
   const [level, setLevel] = useState('');
   const [businessName, setBusinessName] = useState('');
-  const [openingHours, setOpeningHours] = useState('');
+  const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
+  const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
   const [hasPhysicalShop, setHasPhysicalShop] = useState(true);
+  const [shopAddress, setShopAddress] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -112,12 +129,13 @@ export function ProfilePage() {
   const [picError, setPicError] = useState<string | null>(null);
   const dpFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Student Verification workflow state
+  // Identity Verification workflow state (Student ID for Students, NIN/Driver's License for Marketers)
   const [verificationRequests, setVerificationRequests] = useState<
     VerificationRequest[]
   >([]);
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [verifyDocType, setVerifyDocType] = useState<string>('');
   const [verifyImageBase64, setVerifyImageBase64] = useState<string | null>(
     null
   );
@@ -143,8 +161,15 @@ export function ProfilePage() {
     setDepartment(profile?.department || '');
     setLevel(profile?.level || '');
     setBusinessName(profile?.businessName || '');
-    setOpeningHours(profile?.openingHours || '');
+    const parsedTimes = parseOpeningHoursRange(profile?.openingHours);
+    setOpeningTimeStart(
+      profile?.openingTimeStart || parsedTimes.start || '08:00'
+    );
+    setOpeningTimeEnd(profile?.openingTimeEnd || parsedTimes.end || '18:00');
     setHasPhysicalShop(profile?.isOnlineOnly !== true);
+    setShopAddress(profile?.shopAddress || '');
+    setLatitude(profile?.latitude);
+    setLongitude(profile?.longitude);
   }, [profile, user]);
 
   const loadVerificationHistory = useCallback(async () => {
@@ -202,11 +227,20 @@ export function ProfilePage() {
     () => getProfilePicLockStatus(profile?.profilePicUpdatedAt),
     [profile?.profilePicUpdatedAt]
   );
-  const roleLabel = getPrimaryRoleLabel(profile?.roles);
+  const roleLabel = getPrimaryRoleLabel(profile?.roles, accountType);
   const isVerified = Boolean(profile?.isVerified);
+  const verifiedBadgeLabel = getVerifiedBadgeLabel(accountType);
+  const verificationDocOptions = useMemo(
+    () => getVerificationDocOptions(accountType),
+    [accountType]
+  );
   const verificationUiState = useMemo(
     () => getVerificationUiState(isVerified, verificationRequests),
     [isVerified, verificationRequests]
+  );
+  const formattedHoursPreview = formatOpeningHoursRange(
+    openingTimeStart,
+    openingTimeEnd
   );
 
   const allEditableFieldsLocked = isBusinessAccount
@@ -252,7 +286,23 @@ export function ProfilePage() {
 
     if (isBusinessAccount) {
       if (!businessName.trim() || businessName.trim().length < 2) {
-        errors.businessName = 'Business name is required (at least 2 characters).';
+        errors.businessName =
+          'Business / brand name is required (at least 2 characters).';
+      }
+      if (hasPhysicalShop) {
+        if (!openingTimeStart.trim() || !openingTimeEnd.trim()) {
+          errors.openingHours = 'Please choose both opening and closing times.';
+        } else if (openingTimeStart.trim() === openingTimeEnd.trim()) {
+          errors.openingHours = 'Opening and closing times cannot be the same.';
+        }
+        if (!shopAddress.trim() || shopAddress.trim().length < 3) {
+          errors.shopAddress =
+            'Physical shop address is required unless you operate Online Only.';
+        }
+        if (!isValidGpsCoordinates(latitude, longitude)) {
+          errors.gps =
+            'Please pin your physical shop GPS location before saving.';
+        }
       }
     } else {
       if (!campus.trim()) {
@@ -268,6 +318,8 @@ export function ProfilePage() {
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
+      const firstErr = Object.values(errors)[0];
+      if (firstErr) showToast(firstErr, 'error');
       return;
     }
 
@@ -280,8 +332,13 @@ export function ProfilePage() {
         ...(isBusinessAccount
           ? {
               businessName,
-              openingHours,
+              openingHours: hasPhysicalShop ? formattedHoursPreview : '',
+              openingTimeStart: hasPhysicalShop ? openingTimeStart : '',
+              openingTimeEnd: hasPhysicalShop ? openingTimeEnd : '',
               isOnlineOnly: !hasPhysicalShop,
+              shopAddress: hasPhysicalShop ? shopAddress : '',
+              latitude: hasPhysicalShop ? latitude : undefined,
+              longitude: hasPhysicalShop ? longitude : undefined,
             }
           : {
               campus,
@@ -344,6 +401,7 @@ export function ProfilePage() {
 
   const handleOpenVerifyModal = () => {
     setVerifyError(null);
+    setVerifyDocType(verificationDocOptions[0] || '');
     setVerifyImageBase64(null);
     setVerifyImageName('');
     setVerifyModalOpen(true);
@@ -380,8 +438,17 @@ export function ProfilePage() {
     e.preventDefault();
     if (!user?.uid || submittingVerify) return;
 
+    if (!verifyDocType.trim()) {
+      setVerifyError('Please choose your verification document type.');
+      return;
+    }
+
     if (!verifyImageBase64) {
-      setVerifyError('Please upload your Student ID card or School Fee receipt.');
+      setVerifyError(
+        isBusinessAccount
+          ? "Please upload a clear photo of your NIN, Driver's License, Voter's Card, or Passport."
+          : 'Please upload your Student ID card or School Fee receipt.'
+      );
       return;
     }
 
@@ -392,6 +459,8 @@ export function ProfilePage() {
         userId: user.uid,
         fullName: displayName,
         idCardImage: verifyImageBase64,
+        accountType,
+        documentType: verifyDocType,
       });
       setVerificationRequests((prev) => [created, ...prev]);
       setVerifyModalOpen(false);
@@ -420,7 +489,9 @@ export function ProfilePage() {
           My Profile
         </h1>
         <p className="text-sm text-slate-600">
-          Manage your personal details and sealed campus academic record.
+          {isBusinessAccount
+            ? 'Manage your marketer brand details, operating hours, shop location, and identity verification.'
+            : 'Manage your personal details and sealed campus academic record.'}
         </p>
       </div>
 
@@ -484,7 +555,7 @@ export function ProfilePage() {
                 {isVerified && (
                   <BadgeCheck
                     className="w-5 h-5 text-emerald-600 shrink-0"
-                    aria-label="Verified Student"
+                    aria-label={verifiedBadgeLabel}
                   />
                 )}
               </div>
@@ -494,12 +565,12 @@ export function ProfilePage() {
               </p>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Badge variant="role">
-                  {isBusinessAccount ? 'Business / Landlord' : roleLabel}
+                  {isBusinessAccount ? 'Marketer' : roleLabel}
                 </Badge>
                 {isVerified ? (
                   <Badge variant="verified">
                     <Check className="w-3.5 h-3.5 mr-1" />
-                    Verified Student
+                    {verifiedBadgeLabel}
                   </Badge>
                 ) : verificationUiState === 'pending' ? (
                   <Badge variant="pending">
@@ -530,7 +601,9 @@ export function ProfilePage() {
               )}
               {!isVerified && verificationUiState === 'rejected' && (
                 <p className="text-xs text-red-600 pt-0.5">
-                  Your previous submission was rejected. Upload a clearer ID or fee receipt to reapply.
+                  {isBusinessAccount
+                    ? "Your previous submission was rejected. Upload a clearer NIN, Driver's License, Voter's Card, or Passport to reapply."
+                    : 'Your previous submission was rejected. Upload a clearer Student ID or fee receipt to reapply.'}
                 </p>
               )}
             </div>
@@ -583,7 +656,7 @@ export function ProfilePage() {
           </div>
         ) : (
           <p className="text-xs text-slate-500">
-            Upload a clear profile photo (auto-compressed under 100KB). Once updated, your photo locks for 7 days.
+            Available for both Students and Marketers: upload a clear profile photo (auto-compressed under 100KB). Once updated, you can change it only once a week (7-day lock).
           </p>
         )}
 
@@ -677,42 +750,31 @@ export function ProfilePage() {
           </div>
 
           {isBusinessAccount ? (
-            <div className="pt-4 border-t border-slate-200 space-y-4">
+            <div className="pt-4 border-t border-slate-200 space-y-5">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-primary-600" />
                 <h4 className="text-base font-semibold text-slate-900">
-                  Business / Landlord Details
+                  Marketer Details
                 </h4>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Business Name"
-                  name="businessName"
-                  type="text"
-                  placeholder="e.g. Deji Tech Ventures or Ojo Estates"
-                  value={businessName}
-                  onChange={(e) => {
-                    setBusinessName(e.target.value);
-                    clearFieldError('businessName');
-                  }}
-                  error={fieldErrors.businessName}
-                  required
-                />
-
-                <Input
-                  label="Opening Hours"
-                  name="openingHours"
-                  type="text"
-                  placeholder="e.g. 8am - 6pm (Mon - Sat)"
-                  value={openingHours}
-                  onChange={(e) => setOpeningHours(e.target.value)}
-                />
-              </div>
+              <Input
+                label="Business / Brand Name"
+                name="businessName"
+                type="text"
+                placeholder="e.g. Deji Tech Ventures or Kemi Thrift Store"
+                value={businessName}
+                onChange={(e) => {
+                  setBusinessName(e.target.value);
+                  clearFieldError('businessName');
+                }}
+                error={fieldErrors.businessName}
+                required
+              />
 
               <div className="space-y-2">
                 <span className="block text-sm font-medium text-slate-700">
-                  Do you have a physical shop?
+                  Do you have a physical shop? <span className="text-red-500">*</span>
                 </span>
                 <div
                   role="radiogroup"
@@ -723,7 +785,12 @@ export function ProfilePage() {
                     type="button"
                     role="radio"
                     aria-checked={hasPhysicalShop}
-                    onClick={() => setHasPhysicalShop(true)}
+                    onClick={() => {
+                      setHasPhysicalShop(true);
+                      clearFieldError('openingHours');
+                      clearFieldError('shopAddress');
+                      clearFieldError('gps');
+                    }}
                     className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
                       hasPhysicalShop
                         ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
@@ -737,7 +804,12 @@ export function ProfilePage() {
                     type="button"
                     role="radio"
                     aria-checked={!hasPhysicalShop}
-                    onClick={() => setHasPhysicalShop(false)}
+                    onClick={() => {
+                      setHasPhysicalShop(false);
+                      clearFieldError('openingHours');
+                      clearFieldError('shopAddress');
+                      clearFieldError('gps');
+                    }}
                     className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
                       !hasPhysicalShop
                         ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
@@ -748,9 +820,107 @@ export function ProfilePage() {
                     <span>No, Online Only</span>
                   </button>
                 </div>
-                {!hasPhysicalShop && (
-                  <p className="text-xs text-slate-500">
-                    Your profile will be marked as Online Only (delivery / virtual appointments).
+
+                {hasPhysicalShop ? (
+                  <div className="pt-3 space-y-5">
+                    {/* Opening & Closing Time Pickers (Physical Shop Only) */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                        <Clock className="w-4 h-4 text-slate-500" />
+                        <span>
+                          Opening &amp; Closing Hours <span className="text-red-500">*</span>
+                        </span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="profile-opening-time-start"
+                            className="block text-xs font-medium text-slate-600"
+                          >
+                            Opening Time
+                          </label>
+                          <input
+                            id="profile-opening-time-start"
+                            name="openingTimeStart"
+                            type="time"
+                            required
+                            value={openingTimeStart}
+                            onChange={(e) => {
+                              setOpeningTimeStart(e.target.value);
+                              clearFieldError('openingHours');
+                            }}
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="profile-opening-time-end"
+                            className="block text-xs font-medium text-slate-600"
+                          >
+                            Closing Time
+                          </label>
+                          <input
+                            id="profile-opening-time-end"
+                            name="openingTimeEnd"
+                            type="time"
+                            required
+                            value={openingTimeEnd}
+                            onChange={(e) => {
+                              setOpeningTimeEnd(e.target.value);
+                              clearFieldError('openingHours');
+                            }}
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                      {formattedHoursPreview && !fieldErrors.openingHours && (
+                        <p className="text-xs font-medium text-slate-600">
+                          Displayed as:{' '}
+                          <span className="text-slate-900">{formattedHoursPreview}</span>
+                        </p>
+                      )}
+                      {fieldErrors.openingHours && (
+                        <p className="text-xs font-medium text-red-600" role="alert">
+                          {fieldErrors.openingHours}
+                        </p>
+                      )}
+                    </div>
+
+                    <Input
+                      label="Physical Shop Address"
+                      name="shopAddress"
+                      type="text"
+                      placeholder="e.g. Shop 12, LASUED Main Gate Complex, Epe"
+                      value={shopAddress}
+                      onChange={(e) => {
+                        setShopAddress(e.target.value);
+                        clearFieldError('shopAddress');
+                      }}
+                      error={fieldErrors.shopAddress}
+                      helperText="Required for marketers with a physical shop."
+                      required
+                    />
+
+                    <LocationPinField
+                      latitude={latitude}
+                      longitude={longitude}
+                      onPin={({ latitude: lat, longitude: lng }) => {
+                        setLatitude(lat);
+                        setLongitude(lng);
+                        clearFieldError('gps');
+                      }}
+                      onClear={() => {
+                        setLatitude(undefined);
+                        setLongitude(undefined);
+                      }}
+                      label="Physical Shop GPS Pin"
+                      helperText="Stand at your shop and tap to pin exact GPS coordinates."
+                      error={fieldErrors.gps}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5">
+                    Online Only: Buyers can contact you anytime. Opening/closing hours, physical shop address, and GPS pin are not required.
                   </p>
                 )}
               </div>
@@ -865,7 +1035,7 @@ export function ProfilePage() {
         </form>
       </Card>
 
-      {/* Student Verification Modal */}
+      {/* Identity Verification Modal */}
       {verifyModalOpen && (
         <div
           role="dialog"
@@ -875,7 +1045,7 @@ export function ProfilePage() {
           onClick={() => !submittingVerify && setVerifyModalOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -888,10 +1058,10 @@ export function ProfilePage() {
                     id="verify-student-modal-title"
                     className="text-lg font-bold text-slate-900"
                   >
-                    Apply for Verification
+                    Apply for {isBusinessAccount ? 'Marketer' : 'Student'} Verification
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Earn the Verified Student green badge on your profile and listings.
+                    Earn the {verifiedBadgeLabel} green badge on your profile and listings.
                   </p>
                 </div>
               </div>
@@ -910,14 +1080,31 @@ export function ProfilePage() {
               onSubmit={(e) => void handleSubmitVerification(e)}
               className="space-y-4"
             >
+              <Select
+                label={
+                  isBusinessAccount
+                    ? 'Select Government / Tangible ID'
+                    : 'Select Student Document Type'
+                }
+                name="verifyDocType"
+                options={verificationDocOptions}
+                value={verifyDocType}
+                onChange={(e) => {
+                  setVerifyDocType(e.target.value);
+                  setVerifyError(null);
+                }}
+                required
+              />
+
               <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs text-slate-600 space-y-1">
                 <p className="font-semibold text-slate-800">
-                  Upload 1 clear photo of your:
+                  Upload 1 clear photo of your {verifyDocType || 'selected ID'}:
                 </p>
                 <p>
-                  Student ID Card or current School Fee Receipt showing your name (
-                  <span className="font-semibold text-slate-800">{displayName}</span>
-                  ).
+                  {isBusinessAccount
+                    ? 'Marketers must upload a valid NIN Slip/Card, Driver’s License, Voter’s Card, or International Passport matching '
+                    : 'Students must upload a Student ID Card or current School Fee Receipt matching '}
+                  <span className="font-semibold text-slate-800">{displayName}</span>.
                 </p>
               </div>
 
@@ -944,7 +1131,7 @@ export function ProfilePage() {
                   <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
                     <img
                       src={verifyImageBase64}
-                      alt="Uploaded student ID or fee receipt preview"
+                      alt={`Uploaded ${verifyDocType || 'verification document'} preview`}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-contain"
@@ -986,7 +1173,9 @@ export function ProfilePage() {
                     <>
                       <ImagePlus className="w-7 h-7" />
                       <span className="text-sm font-semibold">
-                        Upload Student ID or School Fee Receipt
+                        {isBusinessAccount
+                          ? `Upload ${verifyDocType || "NIN / Driver's License"}`
+                          : `Upload ${verifyDocType || 'Student ID or Fee Receipt'}`}
                       </span>
                       <span className="text-xs text-slate-400">
                         JPG or PNG, automatically compressed for fast review

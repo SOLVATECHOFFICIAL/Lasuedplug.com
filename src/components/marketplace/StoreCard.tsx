@@ -81,7 +81,9 @@ export const StoreCard = memo(function StoreCard({
         <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5">
           <div className="space-y-1 min-w-0">
             <p className="text-xs font-medium text-slate-500 truncate">
-              {store.category || 'Campus Store'}
+              {store.subcategory
+                ? `${store.category || 'Campus Store'} · ${store.subcategory}`
+                : store.category || 'Campus Store'}
             </p>
             <div className="flex items-center gap-1.5 min-w-0">
               <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">

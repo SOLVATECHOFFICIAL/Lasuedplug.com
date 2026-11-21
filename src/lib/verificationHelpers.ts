@@ -1,5 +1,5 @@
 import { getTimestampMillis } from './homeHelpers';
-import { VerificationRequest } from '../types';
+import { AccountType, VerificationRequest } from '../types';
 
 export type VerificationUiState =
   | 'verified'
@@ -8,6 +8,30 @@ export type VerificationUiState =
   | 'unverified';
 
 const MAX_ID_CARD_DATA_URL_LENGTH = 850_000;
+
+export const STUDENT_VERIFICATION_DOC_TYPES = [
+  'Student ID Card',
+  'School Fee Receipt',
+] as const;
+
+export const MARKETER_VERIFICATION_DOC_TYPES = [
+  'NIN Slip / Card',
+  "Driver's License",
+  "Voter's Card",
+  'International Passport',
+] as const;
+
+export function getVerificationDocOptions(
+  accountType?: AccountType | null
+): readonly string[] {
+  return accountType === 'business'
+    ? MARKETER_VERIFICATION_DOC_TYPES
+    : STUDENT_VERIFICATION_DOC_TYPES;
+}
+
+export function getVerifiedBadgeLabel(accountType?: AccountType | null): string {
+  return accountType === 'business' ? 'Verified Marketer' : 'Verified Student';
+}
 
 export function sortVerificationRequests(
   requests: VerificationRequest[]
@@ -45,12 +69,16 @@ export function getVerificationUiState(
 
 export function canSubmitVerificationRequest(
   isVerified: boolean,
-  requests: VerificationRequest[]
+  requests: VerificationRequest[],
+  accountType?: AccountType | null
 ): { allowed: boolean; reason?: string } {
   if (isVerified) {
     return {
       allowed: false,
-      reason: 'Your student account is already verified.',
+      reason:
+        accountType === 'business'
+          ? 'Your marketer account is already verified.'
+          : 'Your student account is already verified.',
     };
   }
   if (requests.some((req) => req.status === 'pending')) {
@@ -72,6 +100,8 @@ export function validateVerificationInput(input: {
   userId?: string;
   fullName?: string;
   idCardImage?: string;
+  accountType?: AccountType;
+  documentType?: string;
 }): string | null {
   if (!input.userId?.trim()) {
     return 'You must be signed in to apply for verification.';
@@ -79,8 +109,13 @@ export function validateVerificationInput(input: {
   if (!input.fullName?.trim() || input.fullName.trim().length < 2) {
     return 'Please save your full name on your profile before applying.';
   }
+  if (input.accountType === 'business' && input.documentType !== undefined && !input.documentType.trim()) {
+    return 'Please select an ID document type (NIN, Driver’s License, Voter’s Card, or Passport).';
+  }
   if (!input.idCardImage?.trim()) {
-    return 'Please upload your Student ID card or School Fee receipt.';
+    return input.accountType === 'business'
+      ? "Please upload a clear photo of your NIN, Driver's License, Voter's Card, or Passport."
+      : 'Please upload your Student ID card or School Fee receipt.';
   }
   if (!isValidVerificationImageDataUrl(input.idCardImage)) {
     return 'Uploaded document must be a valid compressed image.';

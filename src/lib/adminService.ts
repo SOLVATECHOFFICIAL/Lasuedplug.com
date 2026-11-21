@@ -91,6 +91,8 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   if (!db) {
     return {
       totalUsers: 0,
+      studentUsers: 0,
+      marketerUsers: 0,
       totalListings: 0,
       pendingApprovals: 0,
       openReports: 0,
@@ -100,6 +102,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   try {
     const [
       totalUsers,
+      marketerUsers,
       totalProducts,
       totalAccommodations,
       totalRoommates,
@@ -111,6 +114,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       openReports,
     ] = await Promise.all([
       safeCountCollection('users'),
+      safeCountCollection('users', 'accountType', 'business'),
       safeCountCollection('products'),
       safeCountCollection('accommodations'),
       safeCountCollection('roommate_requests'),
@@ -122,8 +126,12 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       safeCountCollection('reports', 'status', 'open'),
     ]);
 
+    const studentUsers = Math.max(0, totalUsers - marketerUsers);
+
     return {
       totalUsers,
+      studentUsers,
+      marketerUsers,
       totalListings:
         totalProducts + totalAccommodations + totalRoommates + totalStores,
       pendingApprovals:

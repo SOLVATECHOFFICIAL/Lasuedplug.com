@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Clock,
   ExternalLink,
   Flag,
   Heart,
@@ -547,7 +548,11 @@ export function MarketplaceDetail() {
                 {isOnlineListing ? (
                   <p className="text-sm font-medium text-emerald-700 flex items-center gap-1.5">
                     <Truck className="w-4 h-4 shrink-0" />
-                    <span>Online / Delivery</span>
+                    <span>
+                      {isServiceListing
+                        ? 'Online / Mobile · Available anytime'
+                        : 'Online / Delivery'}
+                    </span>
                   </p>
                 ) : (
                   <div className="space-y-1.5">
@@ -563,6 +568,14 @@ export function MarketplaceDetail() {
                           : locationLabel}
                       </span>
                     </p>
+                    {isServiceListing &&
+                      product.serviceLocation === 'shop' &&
+                      product.openingHours?.trim() && (
+                        <p className="text-sm text-slate-600 flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span>Shop Hours: {product.openingHours.trim()}</span>
+                        </p>
+                      )}
                     {hasGps && (
                       <a
                         href={`https://www.google.com/maps?q=${product.latitude},${product.longitude}`}

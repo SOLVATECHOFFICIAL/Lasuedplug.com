@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
+  AdminAccountTypeFilter,
   areAllVisibleSelected,
+  filterVerificationRequestsByAccountType,
   toggleBulkSelectionKey,
   toggleSelectAllVisibleKeys,
 } from '../../lib/adminHelpers';
@@ -33,6 +35,8 @@ export function AdminVerifications() {
   const { showToast } = useToast();
 
   const [requests, setRequests] = useState<VerificationRequest[]>([]);
+  const [accountFilter, setAccountFilter] =
+    useState<AdminAccountTypeFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function AdminVerifications() {
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to load pending student verification requests.'
+          : 'Unable to load pending verification requests.'
       );
     } finally {
       setLoading(false);
@@ -76,9 +80,23 @@ export function AdminVerifications() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewRequest, bulkRejectOpen, bulkAction]);
 
+  const filterCounts = useMemo(() => {
+    const marketers = requests.filter((r) => r.accountType === 'business').length;
+    const students = requests.length - marketers;
+    return { all: requests.length, student: students, business: marketers };
+  }, [requests]);
+
+  const filteredRequests = useMemo(
+    () => filterVerificationRequestsByAccountType(requests, accountFilter),
+    [requests, accountFilter]
+  );
+
   const visibleIds = useMemo(
-    () => requests.map((r) => r.id).filter((id): id is string => Boolean(id)),
-    [requests]
+    () =>
+      filteredRequests
+        .map((r) => r.id)
+        .filter((id): id is string => Boolean(id)),
+    [filteredRequests]
   );
 
   const allSelected = useMemo(
@@ -88,8 +106,10 @@ export function AdminVerifications() {
 
   const selectedRequests = useMemo(() => {
     const selectedSet = new Set(selectedIds);
-    return requests.filter((req) => Boolean(req.id && selectedSet.has(req.id)));
-  }, [requests, selectedIds]);
+    return filteredRequests.filter((req) =>
+      Boolean(req.id && selectedSet.has(req.id))
+    );
+  }, [filteredRequests, selectedIds]);
 
   const handleApprove = async (req: VerificationRequest) => {
     if (!req.id || busyId || bulkAction) return;
@@ -154,7 +174,7 @@ export function AdminVerifications() {
       }
       if (failedCount === 0) {
         showToast(
-          `Approved & verified ${succeeded.length} ${succeeded.length === 1 ? 'student' : 'students'}!`,
+          `Approved & verified ${succeeded.length} ${succeeded.length === 1 ? 'account' : 'accounts'}!`,
           'success'
         );
       } else {
@@ -202,8 +222,8 @@ export function AdminVerifications() {
 
   return (
     <AdminLayout
-      title="Student Verifications"
-      subtitle="Review uploaded Student ID cards and School Fee receipts to grant the Verified Student badge."
+      title="Identity Verifications"
+      subtitle="Review Student IDs & Fee Receipts (Students) and NIN / Driver’s Licenses / Valid IDs (Marketers)."
       actionSlot={
         <Button
           variant="outline"
@@ -245,48 +265,108 @@ export function AdminVerifications() {
             No pending verification requests
           </h2>
           <p className="text-sm text-slate-500 max-w-md mx-auto">
-            All student ID cards and school fee receipt submissions have been reviewed.
+            All student and marketer identity submissions have been reviewed.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Select All Header Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
-            <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                disabled={Boolean(busyId || bulkAction)}
-                onChange={() =>
-                  setSelectedIds((prev) =>
-                    toggleSelectAllVisibleKeys(prev, visibleIds)
-                  )
-                }
-                className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
-              />
-              <span>
-                Select All ({requests.length} pending{' '}
-                {requests.length === 1 ? 'request' : 'requests'})
-              </span>
-            </label>
-
-            {selectedRequests.length > 0 && (
-              <button
-                type="button"
-                disabled={Boolean(bulkAction)}
-                onClick={() => setSelectedIds([])}
-                className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
-              >
-                Clear selection
-              </button>
-            )}
+          {/* Account Type Filter Tabs */}
+          <div
+            role="tablist"
+            aria-label="Filter verification requests by account type"
+            className="inline-flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200"
+          >
+            {(
+              [
+                { id: 'all', label: 'All Requests', count: filterCounts.all },
+                { id: 'student', label: 'Students', count: filterCounts.student },
+                {
+                  id: 'business',
+                  label: 'Marketers',
+                  count: filterCounts.business,
+                },
+              ] as const
+            ).map((tab) => {
+              const active = accountFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    setAccountFilter(tab.id);
+                    setSelectedIds([]);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    active
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[11px] tabular-nums ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            {requests.map((req) => {
-              const reqId = req.id || '';
-              const isBusy = busyId === reqId;
-              const isSelected = Boolean(reqId && selectedIds.includes(reqId));
+          {filteredRequests.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+              No pending {accountFilter === 'business' ? 'marketer' : 'student'}{' '}
+              verification requests right now.
+            </div>
+          ) : (
+            <>
+              {/* Select All Header Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
+                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={Boolean(busyId || bulkAction)}
+                    onChange={() =>
+                      setSelectedIds((prev) =>
+                        toggleSelectAllVisibleKeys(prev, visibleIds)
+                      )
+                    }
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                  />
+                  <span>
+                    Select All ({filteredRequests.length} pending{' '}
+                    {filteredRequests.length === 1 ? 'request' : 'requests'})
+                  </span>
+                </label>
+
+                {selectedRequests.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={Boolean(bulkAction)}
+                    onClick={() => setSelectedIds([])}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {filteredRequests.map((req) => {
+                  const reqId = req.id || '';
+                  const isBusy = busyId === reqId;
+                  const isSelected = Boolean(reqId && selectedIds.includes(reqId));
+                  const isMarketer = req.accountType === 'business';
+                  const docLabel =
+                    req.documentType ||
+                    (isMarketer ? 'Government ID' : 'Student ID / Receipt');
 
               return (
                 <article
@@ -338,9 +418,18 @@ export function AdminVerifications() {
 
                         <div className="min-w-0 flex-1 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                isMarketer
+                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {isMarketer ? 'Marketer' : 'Student'}
+                            </span>
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                               <BadgeCheck className="w-3.5 h-3.5" aria-hidden="true" />
-                              <span>Pending Verification</span>
+                              <span>{docLabel}</span>
                             </span>
                             <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                               <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
@@ -363,7 +452,11 @@ export function AdminVerifications() {
                           </p>
 
                           <p className="text-xs text-slate-600">
-                            Confirm the name on the uploaded Student ID or School Fee Receipt matches{' '}
+                            Confirm the name on the uploaded{' '}
+                            <span className="font-semibold text-slate-800">
+                              {docLabel}
+                            </span>{' '}
+                            matches{' '}
                             <span className="font-semibold text-slate-800">
                               {req.fullName}
                             </span>
@@ -450,6 +543,8 @@ export function AdminVerifications() {
               </div>
             </div>
           )}
+            </>
+          )}
         </div>
       )}
 
@@ -472,10 +567,17 @@ export function AdminVerifications() {
                   id="id-preview-modal-title"
                   className="text-base font-bold text-slate-900"
                 >
-                  {previewRequest.fullName} — Verification Document
+                  {previewRequest.fullName} —{' '}
+                  {previewRequest.documentType ||
+                    (previewRequest.accountType === 'business'
+                      ? 'Marketer ID Document'
+                      : 'Student Verification Document')}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Submitted {formatVerificationDate(previewRequest.createdAt)}
+                  {previewRequest.accountType === 'business'
+                    ? 'Marketer Account'
+                    : 'Student Account'}{' '}
+                  · Submitted {formatVerificationDate(previewRequest.createdAt)}
                 </p>
               </div>
               <button
@@ -521,7 +623,11 @@ export function AdminVerifications() {
                 ) : (
                   <Check className="w-4 h-4" />
                 )}
-                <span>Approve &amp; Verify Student</span>
+                <span>
+                  {previewRequest.accountType === 'business'
+                    ? 'Approve & Verify Marketer'
+                    : 'Approve & Verify Student'}
+                </span>
               </Button>
             </div>
           </div>

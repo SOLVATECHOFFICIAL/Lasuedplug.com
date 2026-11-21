@@ -342,11 +342,14 @@ export async function updateSellerListing(
   if (payload.priceType === 'contact') {
     payload.price = deleteField();
   }
-  // Remove physical location coordinates if switched to 'online'
+  // Remove physical location coordinates and shop hours if switched to 'online'
   if (payload.locationType === 'online') {
     payload.latitude = deleteField();
     payload.longitude = deleteField();
     payload.landmark = deleteField();
+    payload.openingHours = deleteField();
+    payload.openingTimeStart = deleteField();
+    payload.openingTimeEnd = deleteField();
     if (input.adType === 'item') {
       payload.locationName = 'Online / Delivery';
     }

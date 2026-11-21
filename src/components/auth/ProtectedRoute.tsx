@@ -17,7 +17,8 @@ export function ProtectedRoute({
   children,
   requireCompleteProfile = false,
 }: ProtectedRouteProps) {
-  const { user, loading, isProfileComplete, isSuspended, signOut } = useAuth();
+  const { user, loading, isProfileComplete, isSuspended, isEmailVerified, signOut } =
+    useAuth();
   const { showToast } = useToast();
   const location = useLocation();
   const handledSuspensionRef = useRef(false);
@@ -37,6 +38,8 @@ export function ProtectedRoute({
     loading,
     isAuthenticated: Boolean(user),
     isSuspended,
+    isEmailVerified,
+    requireEmailVerified: true,
   });
 
   if (decision === 'loading') {
@@ -45,6 +48,16 @@ export function ProtectedRoute({
 
   if (decision === 'redirect') {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (decision === 'verify-email' && location.pathname !== '/verify-email') {
+    return (
+      <Navigate
+        to="/verify-email"
+        state={{ from: location, email: user?.email || '', resumed: true }}
+        replace
+      />
+    );
   }
 
   if (

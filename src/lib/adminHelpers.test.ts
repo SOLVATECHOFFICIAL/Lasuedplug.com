@@ -5,6 +5,7 @@ import {
   extractListingOwnerId,
   filterAdminUsers,
   filterPendingAdminItems,
+  filterVerificationRequestsByAccountType,
   getAdminModuleLabel,
   getAdminReportTargetCollection,
   getAdminUserFilterUrl,
@@ -31,7 +32,7 @@ import {
   roommateToUnifiedSellerListing,
   storeToUnifiedSellerListing,
 } from './sellerHelpers';
-import { UserProfile } from '../types';
+import { UserProfile, VerificationRequest } from '../types';
 
 test('isUserAdmin recognizes roles.admin or admin custom claim and rejects normal users', () => {
   assert.equal(isUserAdmin({ roles: { buyer: true, seller: true } }, false), false);
@@ -177,7 +178,7 @@ test('getAdminReportTargetCollection resolves all report target types cleanly', 
   assert.equal(getAdminReportTargetCollection('user'), null);
 });
 
-test('filterAdminUsers filters by name, email, phone, campus, or department and detects primary role badge', () => {
+test('filterAdminUsers filters by query and accountType and detects Marketer vs Student Seller badges', () => {
   const users: UserProfile[] = [
     {
       uid: '1',
@@ -186,6 +187,7 @@ test('filterAdminUsers filters by name, email, phone, campus, or department and 
       phone: '0801 234 5678',
       campus: 'LASUED',
       department: 'Computer Science',
+      accountType: 'student',
       roles: { buyer: true, admin: true },
       isVerified: true,
       status: 'active',
@@ -199,11 +201,28 @@ test('filterAdminUsers filters by name, email, phone, campus, or department and 
       phone: '08098765432',
       campus: 'LASU',
       department: 'Economics',
+      accountType: 'business',
+      businessName: 'Bello Campus Gadgets',
+      shopAddress: 'Shop 7, LASUED Gate',
       roles: { buyer: true, landlord: true },
       isVerified: false,
       status: 'suspended',
       createdAt: 2,
       updatedAt: 2,
+    },
+    {
+      uid: '3',
+      email: 'chioma@lasued.edu.ng',
+      fullName: 'Chioma Eze',
+      phone: '08055554444',
+      campus: 'LASUED',
+      department: 'Biology',
+      accountType: 'student',
+      roles: { buyer: true, seller: true },
+      isVerified: true,
+      status: 'active',
+      createdAt: 3,
+      updatedAt: 3,
     },
   ];
 
@@ -211,12 +230,51 @@ test('filterAdminUsers filters by name, email, phone, campus, or department and 
   assert.equal(filterAdminUsers(users, 'economics').length, 1);
   assert.equal(filterAdminUsers(users, '08012345678').length, 1);
   assert.equal(filterAdminUsers(users, '0809876').length, 1);
-  assert.equal(filterAdminUsers(users, 'lasu').length, 2);
-  assert.equal(filterAdminUsers(users, 'lasued').length, 1);
+  assert.equal(filterAdminUsers(users, 'lasu').length, 3);
+  assert.equal(filterAdminUsers(users, 'lasued').length, 3); // campus 'LASUED' or shopAddress 'LASUED Gate'
+  assert.equal(filterAdminUsers(users, 'bello campus').length, 1);
+  assert.equal(filterAdminUsers(users, 'shop 7').length, 1);
   assert.equal(filterAdminUsers(users, '2').length, 2); // uid '2' and phone '08098765432'
   assert.equal(filterAdminUsers(users, 'tunde@lasu').length, 1);
+
+  assert.equal(filterAdminUsers(users, '', 'all').length, 3);
+  assert.equal(filterAdminUsers(users, '', 'student').length, 2);
+  assert.equal(filterAdminUsers(users, '', 'business').length, 1);
+
   assert.equal(getPrimaryUserRoleBadge(users[0]), 'Admin');
-  assert.equal(getPrimaryUserRoleBadge(users[1]), 'Landlord');
+  assert.equal(getPrimaryUserRoleBadge(users[1]), 'Marketer');
+  assert.equal(getPrimaryUserRoleBadge(users[2]), 'Student Seller');
+});
+
+test('filterVerificationRequestsByAccountType separates Student and Marketer verification requests', () => {
+  const requests: VerificationRequest[] = [
+    {
+      id: 'v1',
+      userId: 'u1',
+      fullName: 'Student Ada',
+      accountType: 'student',
+      documentType: 'Student ID Card',
+      idCardImage: 'data:image/jpeg;base64,AAA',
+      status: 'pending',
+      createdAt: 100,
+    },
+    {
+      id: 'v2',
+      userId: 'u2',
+      fullName: 'Marketer Tunde',
+      accountType: 'business',
+      documentType: 'NIN Slip / Card',
+      idCardImage: 'data:image/jpeg;base64,BBB',
+      status: 'pending',
+      createdAt: 200,
+    },
+  ];
+
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'all').length, 2);
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'student').length, 1);
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'student')[0].id, 'v1');
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'business').length, 1);
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'business')[0].id, 'v2');
 });
 
 test('hasAnyAdminAlerts and bulk selection helpers behave deterministically', () => {

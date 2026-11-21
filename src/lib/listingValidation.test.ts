@@ -83,7 +83,7 @@ test('validateMarketplaceCreateInput validates items (physical vs online) and se
   });
   assert.deepEqual(validOnlineItem, {});
 
-  // Service with physical shop requires shop address + GPS + price if fixed
+  // Service with physical shop requires shop hours + shop address + GPS + price if fixed
   const invalidShopService = validateMarketplaceCreateInput({
     adType: 'service',
     title: 'Phone Repair',
@@ -99,10 +99,32 @@ test('validateMarketplaceCreateInput validates items (physical vs online) and se
     whatsappNumber: '08012345678',
   });
   assert.ok(invalidShopService.price);
+  assert.ok(invalidShopService.openingHours);
   assert.ok(invalidShopService.locationName);
   assert.ok(invalidShopService.gps);
 
-  // Mobile/online service with contact for price passes without GPS/address
+  // Physical shop service passes when opening/closing hours, address, and GPS pin are provided
+  const validShopService = validateMarketplaceCreateInput({
+    adType: 'service',
+    title: 'Phone Repair',
+    description: 'Fast iPhone and Android screen replacements',
+    categoryId: 'tech_repairs',
+    subcategory: 'Phone Repairs',
+    imagesCount: 2,
+    priceType: 'fixed',
+    priceAmount: '5000',
+    locationType: 'physical',
+    serviceLocation: 'shop',
+    openingTimeStart: '08:00',
+    openingTimeEnd: '18:00',
+    locationName: 'Shop 4, LASUED Main Gate',
+    latitude: 6.5812,
+    longitude: 3.9821,
+    whatsappNumber: '08012345678',
+  });
+  assert.deepEqual(validShopService, {});
+
+  // Mobile/online service with contact for price passes without hours/GPS/address
   const validMobileService = validateMarketplaceCreateInput({
     adType: 'service',
     title: 'Home Hair Braiding',
@@ -198,11 +220,12 @@ test('validateAccommodationCreateInput and validateRoommateCreateInput require i
   );
 });
 
-test('validateStoreCreateInput requires images, >=5 char name & desc, opening hours, address, and GPS pin', () => {
+test('validateStoreCreateInput requires images, >=5 char name & desc, subcategory, opening hours, address, and GPS pin', () => {
   const badStore = validateStoreCreateInput({
     name: 'Shop',
     description: 'Nice',
     category: 'General Campus Store',
+    subcategory: '',
     openingTimeStart: '',
     openingTimeEnd: '',
     imagesCount: 0,
@@ -212,6 +235,7 @@ test('validateStoreCreateInput requires images, >=5 char name & desc, opening ho
   assert.equal(badStore.images, NO_IMAGES_TOAST_MESSAGE);
   assert.ok(badStore.name);
   assert.ok(badStore.description);
+  assert.ok(badStore.subcategory);
   assert.ok(badStore.openingHours);
   assert.ok(badStore.locationName);
   assert.ok(badStore.gps);
@@ -220,6 +244,7 @@ test('validateStoreCreateInput requires images, >=5 char name & desc, opening ho
     name: 'Campus Gadgets Hub',
     description: 'Affordable phone accessories and repairs near gate.',
     category: 'Electronics & Gadgets',
+    subcategory: 'Phone Accessories',
     openingTimeStart: '08:00',
     openingTimeEnd: '18:00',
     imagesCount: 2,

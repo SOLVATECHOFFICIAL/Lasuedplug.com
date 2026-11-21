@@ -127,6 +127,29 @@ export function getCategoryName(categoryId?: string): string {
   return getCategoryById(categoryId)?.name || categoryId || '';
 }
 
+export const STORE_GENERAL_SUBCATEGORIES: readonly string[] = [
+  'Provisions & Everyday Needs',
+  'Electronics & Phone Accessories',
+  'Fashion & Thrift',
+  'Food, Snacks & Drinks',
+  'Books & Stationery',
+  'Multi-Category Campus Shop',
+];
+
 export function getSubcategoriesForCategory(categoryId?: string): readonly string[] {
   return getCategoryById(categoryId)?.subs || [];
+}
+
+export function getStoreSubcategoriesForCategory(
+  categoryName?: string
+): readonly string[] {
+  const clean = (categoryName || '').trim();
+  if (!clean) return [];
+  if (clean === 'General Campus Store') {
+    return STORE_GENERAL_SUBCATEGORIES;
+  }
+  const matched = ALL_MARKETPLACE_CATEGORIES.find(
+    (cat) => cat.name === clean || cat.id === clean
+  );
+  return matched?.subs || STORE_GENERAL_SUBCATEGORIES;
 }

@@ -7,6 +7,7 @@ import { NotFound } from './pages/NotFound';
 
 import { LoginPage } from './pages/auth/Login';
 import { SignupPage } from './pages/auth/Signup';
+import { VerifyEmailPage } from './pages/auth/VerifyEmail';
 import { ForgotPasswordPage } from './pages/auth/ForgotPassword';
 
 import { MarketplaceIndex } from './pages/marketplace/Index';
@@ -50,9 +51,11 @@ export function AppRouter() {
       {/* Auth */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/signup" element={<SignupPage />} />
+      <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
 
       {/* Marketplace */}

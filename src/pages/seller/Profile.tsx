@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Building2,
   Clock,
+  ExternalLink,
   Flag,
   Globe,
   GraduationCap,
@@ -189,7 +190,7 @@ export function SellerProfile() {
         ogTitle={displayName}
         description={
           seller.bio?.trim() ||
-          `${isBusiness ? 'Verified Campus Business' : seller.campus || 'Campus Seller'} on LASUEDPLUG (${products.length} active listings).`
+          `${isBusiness ? 'Campus Marketer' : seller.campus || 'Student Seller'} on LASUEDPLUG (${products.length} active listings).`
         }
         type="profile"
       />
@@ -225,10 +226,12 @@ export function SellerProfile() {
             <div className="space-y-2.5 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={isBusiness ? 'verified' : 'role'}>
-                  {isBusiness ? 'Business / Landlord' : 'Student Seller'}
+                  {isBusiness ? 'Marketer' : 'Student Seller'}
                 </Badge>
                 {seller.isVerified && (
-                  <Badge variant="verified">Verified Member</Badge>
+                  <Badge variant="verified">
+                    {isBusiness ? 'Verified Marketer' : 'Verified Student'}
+                  </Badge>
                 )}
               </div>
 
@@ -236,7 +239,12 @@ export function SellerProfile() {
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                   {displayName}
                 </h1>
-                {seller.isVerified && <VerifiedBadge size="sm" />}
+                {seller.isVerified && (
+                  <VerifiedBadge
+                    size="sm"
+                    label={isBusiness ? 'Verified Marketer' : 'Verified Student'}
+                  />
+                )}
               </div>
 
               {isBusiness &&
@@ -263,7 +271,7 @@ export function SellerProfile() {
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600">
                 {isBusiness ? (
                   <>
-                    {seller.openingHours?.trim() && (
+                    {!seller.isOnlineOnly && seller.openingHours?.trim() && (
                       <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
                         <Clock className="w-4 h-4 text-primary-500 shrink-0" />
                         <span>Hours: {seller.openingHours.trim()}</span>
@@ -273,15 +281,30 @@ export function SellerProfile() {
                       {seller.isOnlineOnly ? (
                         <>
                           <Globe className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Online Only / Delivery</span>
+                          <span>Online Only · Available anytime</span>
                         </>
                       ) : (
                         <>
                           <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span>Physical Shop Available</span>
+                          <span>
+                            {seller.shopAddress?.trim() || 'Physical Shop Available'}
+                          </span>
                         </>
                       )}
                     </span>
+                    {!seller.isOnlineOnly &&
+                      typeof seller.latitude === 'number' &&
+                      typeof seller.longitude === 'number' && (
+                        <a
+                          href={`https://www.google.com/maps?q=${seller.latitude},${seller.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          <span>View Shop on Map</span>
+                        </a>
+                      )}
                   </>
                 ) : (
                   <>

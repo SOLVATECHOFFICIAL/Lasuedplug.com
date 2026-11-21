@@ -95,6 +95,8 @@ export interface MarketplaceCreateValidationInput {
   priceAmount: string;
   locationType: 'physical' | 'online';
   serviceLocation?: ServiceLocation;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
   locationName: string;
   latitude?: number;
   longitude?: number;
@@ -110,6 +112,7 @@ export interface MarketplaceCreateValidationErrors {
   quantity?: string;
   price?: string;
   whatsappNumber?: string;
+  openingHours?: string;
   locationName?: string;
   gps?: string;
 }
@@ -177,6 +180,16 @@ export function validateMarketplaceCreateInput(
     if (!isValidGpsCoordinates(input.latitude, input.longitude)) {
       errors.gps =
         'Please pin your exact GPS location for a physical location.';
+    }
+    if (input.adType === 'service') {
+      const start = (input.openingTimeStart || '').trim();
+      const end = (input.openingTimeEnd || '').trim();
+      if (!start || !end) {
+        errors.openingHours =
+          'Please select opening and closing times for your physical shop.';
+      } else if (start === end) {
+        errors.openingHours = 'Opening and closing times cannot be the same.';
+      }
     }
   }
 
@@ -302,6 +315,7 @@ export interface StoreCreateValidationInput {
   name: string;
   description: string;
   category: string;
+  subcategory: string;
   openingTimeStart: string;
   openingTimeEnd: string;
   imagesCount: number;
@@ -316,6 +330,7 @@ export interface StoreCreateValidationErrors {
   name?: string;
   description?: string;
   category?: string;
+  subcategory?: string;
   openingHours?: string;
   whatsappNumber?: string;
   locationName?: string;
@@ -338,6 +353,10 @@ export function validateStoreCreateInput(
 
   if (!input.category.trim()) {
     errors.category = 'Please choose a primary store category.';
+  }
+
+  if (!input.subcategory.trim()) {
+    errors.subcategory = 'Please choose a store subcategory.';
   }
 
   if (!input.openingTimeStart.trim() || !input.openingTimeEnd.trim()) {

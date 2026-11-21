@@ -12,12 +12,15 @@ import {
   User as FirebaseUser,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
+  reload,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
 } from 'firebase/auth';
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -58,7 +61,17 @@ export interface ProfileUpdateFields {
   campus?: string;
   businessName?: string;
   openingHours?: string;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
   isOnlineOnly?: boolean;
+  shopAddress?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface SignUpResult {
+  status: 'created' | 'unverified_resumed';
+  verificationEmailSent: boolean;
 }
 
 export interface AuthContextValue {
@@ -66,6 +79,7 @@ export interface AuthContextValue {
   profile: UserProfile | null;
   status: UserProfile['status'] | null;
   isSuspended: boolean;
+  isEmailVerified: boolean;
   loading: boolean;
   isProfileComplete: boolean;
   signUp: (
@@ -73,10 +87,12 @@ export interface AuthContextValue {
     password: string,
     fullName?: string,
     accountType?: AccountType
-  ) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  ) => Promise<SignUpResult>;
+  signIn: (email: string, password: string) => Promise<{ emailVerified: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
+  reloadAuthUser: () => Promise<boolean>;
   updateUserProfile: (updates: ProfileUpdateFields) => Promise<void>;
   updateProfilePicture: (profilePic: string) => Promise<void>;
 }
@@ -102,9 +118,28 @@ async function isEmailBannedInFirestore(email: string): Promise<boolean> {
   }
 }
 
+async function findUserByEmailInFirestore(
+  email: string
+): Promise<Partial<UserProfile> | null> {
+  if (!db || !email.trim()) {
+    return null;
+  }
+  try {
+    const normalized = email.trim().toLowerCase();
+    const snap = await getDocs(
+      query(collection(db, 'users'), where('email', '==', normalized), limit(5))
+    );
+    if (snap.empty) return null;
+    return snap.docs[0].data() as Partial<UserProfile>;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const { showToast } = useToast();
   const suspensionToastUidRef = useRef<string | null>(null);
@@ -194,12 +229,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!firebaseUser) {
         setUser(null);
         setProfile(null);
+        setIsEmailVerified(false);
         setLoading(false);
         return;
       }
 
       suspensionToastUidRef.current = null;
       setUser(firebaseUser);
+      setIsEmailVerified(Boolean(firebaseUser.emailVerified));
 
       const cachedProfile = getFastCache<UserProfile>(`user_profile:${firebaseUser.uid}`);
       if (cachedProfile && !isAccountSuspended(cachedProfile)) {
@@ -209,6 +246,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let initialSnapshotHandled = false;
       if (db) {
+        if (firebaseUser.emailVerified) {
+          void setDoc(
+            doc(db, 'users', firebaseUser.uid),
+            { emailVerified: true },
+            { merge: true }
+          ).catch(() => {});
+        }
         unsubscribeProfile = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
           (snap) => {
@@ -271,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string,
       fullName?: string,
       accountType: AccountType = 'student'
-    ) => {
+    ): Promise<SignUpResult> => {
       if (!auth || !db) {
         throw new Error('Firebase is not configured. Check .env.local.');
       }
@@ -284,29 +328,117 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(BANNED_ACCOUNT_MESSAGE);
       }
 
-      const credential = await createUserWithEmailAndPassword(
-        auth,
-        trimmedEmail,
-        password
-      );
-      if (trimmedName) {
-        await updateProfile(credential.user, { displayName: trimmedName });
+      try {
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          trimmedEmail,
+          password
+        );
+        if (trimmedName) {
+          await updateProfile(credential.user, { displayName: trimmedName });
+        }
+        const newProfile = buildNewUserProfile({
+          uid: credential.user.uid,
+          email: credential.user.email || trimmedEmail,
+          fullName: trimmedName,
+          accountType,
+          timestamp: serverTimestamp(),
+        });
+        await setDoc(doc(db, 'users', credential.user.uid), newProfile);
+        setProfile(newProfile);
+        setIsEmailVerified(Boolean(credential.user.emailVerified));
+
+        let verificationEmailSent = false;
+        try {
+          await sendEmailVerification(credential.user);
+          verificationEmailSent = true;
+        } catch (verifyErr) {
+          console.warn('Initial sendEmailVerification failed:', verifyErr);
+        }
+
+        return { status: 'created', verificationEmailSent };
+      } catch (signupErr) {
+        const code =
+          signupErr && typeof signupErr === 'object' && 'code' in signupErr
+            ? String((signupErr as { code?: unknown }).code || '')
+            : '';
+
+        if (code !== 'auth/email-already-in-use') {
+          throw signupErr;
+        }
+
+        // If user closed the site before verifying and returns to Signup with this email:
+        try {
+          const existingCred = await signInWithEmailAndPassword(
+            auth,
+            trimmedEmail,
+            password
+          );
+          try {
+            await reload(existingCred.user);
+          } catch {
+            // Keep current user state if reload fails transiently
+          }
+
+          if (!existingCred.user.emailVerified) {
+            setIsEmailVerified(false);
+            let verificationEmailSent = false;
+            try {
+              await sendEmailVerification(existingCred.user);
+              verificationEmailSent = true;
+            } catch (resendErr) {
+              console.warn('Resend verification during signup resume failed:', resendErr);
+            }
+            return { status: 'unverified_resumed', verificationEmailSent };
+          }
+
+          // Already verified — do not leave them silently logged in from the Signup page
+          await firebaseSignOut(auth);
+          setUser(null);
+          setProfile(null);
+          setIsEmailVerified(false);
+          throw new Error(
+            'This email is already registered and verified. Please log in instead.'
+          );
+        } catch (signInAttemptErr) {
+          const attemptCode =
+            signInAttemptErr &&
+            typeof signInAttemptErr === 'object' &&
+            'code' in signInAttemptErr
+              ? String((signInAttemptErr as { code?: unknown }).code || '')
+              : '';
+
+          if (
+            signInAttemptErr instanceof Error &&
+            signInAttemptErr.message.includes('already registered and verified')
+          ) {
+            throw signInAttemptErr;
+          }
+
+          if (
+            attemptCode === 'auth/wrong-password' ||
+            attemptCode === 'auth/invalid-credential'
+          ) {
+            const existingDoc = await findUserByEmailInFirestore(trimmedEmail);
+            if (existingDoc && existingDoc.emailVerified === false) {
+              throw Object.assign(
+                new Error(
+                  'You are not done verifying your email yet. Taking you to the verification screen to activate your account.'
+                ),
+                { code: 'auth/email-unverified-resume' }
+              );
+            }
+          }
+
+          throw signupErr;
+        }
       }
-      const newProfile = buildNewUserProfile({
-        uid: credential.user.uid,
-        email: credential.user.email || trimmedEmail,
-        fullName: trimmedName,
-        accountType,
-        timestamp: serverTimestamp(),
-      });
-      await setDoc(doc(db, 'users', credential.user.uid), newProfile);
-      setProfile(newProfile);
     },
     [showToast]
   );
 
   const signIn = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<{ emailVerified: boolean }> => {
       if (!auth) {
         throw new Error('Firebase is not configured. Check .env.local.');
       }
@@ -316,6 +448,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         normalizedEmail,
         password
       );
+
+      try {
+        await reload(credential.user);
+      } catch {
+        // Ignore transient reload error
+      }
+
+      const verified = Boolean(credential.user.emailVerified);
+      setIsEmailVerified(verified);
 
       if (db) {
         const snap = await getDoc(doc(db, 'users', credential.user.uid));
@@ -334,10 +475,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await firebaseSignOut(auth);
           setUser(null);
           setProfile(null);
+          setIsEmailVerified(false);
           showToast(SUSPENDED_ACCOUNT_MESSAGE, 'error');
           throw new Error(SUSPENDED_ACCOUNT_MESSAGE);
         }
+
+        if (verified && profileData && profileData.emailVerified !== true) {
+          void setDoc(
+            doc(db, 'users', credential.user.uid),
+            { emailVerified: true, updatedAt: serverTimestamp() },
+            { merge: true }
+          ).catch(() => {});
+        }
       }
+
+      return { emailVerified: verified };
     },
     [showToast]
   );
@@ -350,11 +502,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) {
       setUser(null);
       setProfile(null);
+      setIsEmailVerified(false);
       return;
     }
     await firebaseSignOut(auth);
     setUser(null);
     setProfile(null);
+    setIsEmailVerified(false);
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -362,6 +516,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchUserProfile(user.uid, user.email);
     }
   }, [user, fetchUserProfile]);
+
+  const resendVerificationEmail = useCallback(async () => {
+    if (!auth?.currentUser) {
+      throw new Error('Please sign in first to resend the verification email.');
+    }
+    await sendEmailVerification(auth.currentUser);
+  }, []);
+
+  const reloadAuthUser = useCallback(async (): Promise<boolean> => {
+    if (!auth?.currentUser) {
+      setIsEmailVerified(false);
+      return false;
+    }
+    await reload(auth.currentUser);
+    const verified = Boolean(auth.currentUser.emailVerified);
+    setUser(auth.currentUser);
+    setIsEmailVerified(verified);
+    if (verified && db) {
+      await setDoc(
+        doc(db, 'users', auth.currentUser.uid),
+        { emailVerified: true, updatedAt: serverTimestamp() },
+        { merge: true }
+      ).catch(() => {});
+      setProfile((prev) =>
+        prev ? { ...prev, emailVerified: true } : prev
+      );
+    }
+    return verified;
+  }, []);
 
   const updateUserProfile = useCallback(
     async (updates: ProfileUpdateFields) => {
@@ -379,7 +562,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextLevel = (updates.level || '').trim();
       const nextBusinessName = (updates.businessName || '').trim();
       const nextOpeningHours = (updates.openingHours || '').trim();
+      const nextOpeningTimeStart = (updates.openingTimeStart || '').trim();
+      const nextOpeningTimeEnd = (updates.openingTimeEnd || '').trim();
       const nextIsOnlineOnly = Boolean(updates.isOnlineOnly);
+      const nextShopAddress = (updates.shopAddress || '').trim();
+      const nextLatitude = updates.latitude;
+      const nextLongitude = updates.longitude;
 
       const existingFullName = (profile?.fullName || '').trim();
       const existingPhone = (profile?.phone || '').trim();
@@ -444,12 +632,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (effectiveAccountType === 'business') {
         firestoreUpdates.businessName = nextBusinessName;
-        firestoreUpdates.openingHours = nextOpeningHours;
         firestoreUpdates.isOnlineOnly = nextIsOnlineOnly;
 
         localUpdates.businessName = nextBusinessName;
-        localUpdates.openingHours = nextOpeningHours;
         localUpdates.isOnlineOnly = nextIsOnlineOnly;
+
+        if (nextIsOnlineOnly) {
+          firestoreUpdates.openingHours = '';
+          firestoreUpdates.openingTimeStart = '';
+          firestoreUpdates.openingTimeEnd = '';
+          firestoreUpdates.shopAddress = '';
+          firestoreUpdates.latitude = deleteField();
+          firestoreUpdates.longitude = deleteField();
+          localUpdates.openingHours = '';
+          localUpdates.openingTimeStart = '';
+          localUpdates.openingTimeEnd = '';
+          localUpdates.shopAddress = '';
+          localUpdates.latitude = undefined;
+          localUpdates.longitude = undefined;
+        } else {
+          firestoreUpdates.openingHours = nextOpeningHours;
+          firestoreUpdates.openingTimeStart = nextOpeningTimeStart;
+          firestoreUpdates.openingTimeEnd = nextOpeningTimeEnd;
+          firestoreUpdates.shopAddress = nextShopAddress;
+          localUpdates.openingHours = nextOpeningHours;
+          localUpdates.openingTimeStart = nextOpeningTimeStart;
+          localUpdates.openingTimeEnd = nextOpeningTimeEnd;
+          localUpdates.shopAddress = nextShopAddress;
+          if (
+            typeof nextLatitude === 'number' &&
+            typeof nextLongitude === 'number'
+          ) {
+            firestoreUpdates.latitude = nextLatitude;
+            firestoreUpdates.longitude = nextLongitude;
+            localUpdates.latitude = nextLatitude;
+            localUpdates.longitude = nextLongitude;
+          }
+        }
       } else {
         const resolvedCampus = isAcademicFieldLocked(existingCampus)
           ? existingCampus
@@ -624,12 +843,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       status,
       isSuspended,
+      isEmailVerified,
       loading,
       isProfileComplete,
       signUp,
       signIn,
       signOut,
       refreshProfile,
+      resendVerificationEmail,
+      reloadAuthUser,
       updateUserProfile,
       updateProfilePicture,
     }),
@@ -638,12 +860,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       status,
       isSuspended,
+      isEmailVerified,
       loading,
       isProfileComplete,
       signUp,
       signIn,
       signOut,
       refreshProfile,
+      resendVerificationEmail,
+      reloadAuthUser,
       updateUserProfile,
       updateProfilePicture,
     ]

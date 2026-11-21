@@ -1,4 +1,5 @@
 import { AccountType, UserProfile, UserRoles } from '../types';
+import { isValidGpsCoordinates } from './listingValidation';
 
 export function buildNewUserProfile(params: {
   uid: string;
@@ -18,6 +19,7 @@ export function buildNewUserProfile(params: {
       buyer: true,
     },
     isVerified: false,
+    emailVerified: false,
     status: 'active',
     createdAt: params.timestamp,
     updatedAt: params.timestamp,
@@ -48,12 +50,17 @@ export function getProtectedRouteDecision(state: {
   loading: boolean;
   isAuthenticated: boolean;
   isSuspended?: boolean;
-}): 'loading' | 'redirect' | 'allow' {
+  isEmailVerified?: boolean;
+  requireEmailVerified?: boolean;
+}): 'loading' | 'redirect' | 'verify-email' | 'allow' {
   if (state.loading) {
     return 'loading';
   }
   if (!state.isAuthenticated || state.isSuspended) {
     return 'redirect';
+  }
+  if (state.requireEmailVerified && !state.isEmailVerified) {
+    return 'verify-email';
   }
   return 'allow';
 }
@@ -156,12 +163,22 @@ export function getInitials(fullName?: string | null, email?: string | null): st
   return 'U';
 }
 
-export function getPrimaryRoleLabel(roles?: UserRoles): string {
+export function getAccountTypeLabel(
+  accountType?: AccountType | null
+): 'Marketer' | 'Student' {
+  return accountType === 'business' ? 'Marketer' : 'Student';
+}
+
+export function getPrimaryRoleLabel(
+  roles?: UserRoles,
+  accountType?: AccountType | null
+): string {
+  if (roles?.admin) return 'Admin';
+  if (accountType === 'business') return 'Marketer';
   if (!roles) return 'Buyer';
-  if (roles.admin) return 'Admin';
   if (roles.seller) return 'Seller';
   if (roles.serviceProvider) return 'Service Provider';
-  if (roles.landlord) return 'Landlord';
+  if (roles.landlord) return 'Marketer';
   if (roles.roommateSeeker) return 'Roommate Seeker';
   return 'Buyer';
 }
@@ -205,6 +222,45 @@ export const NAME_LOCK_MESSAGE =
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+function to24HourTime(raw: string): string {
+  const clean = raw.trim().toUpperCase();
+  const twelveHour = /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/.exec(clean);
+  if (twelveHour) {
+    let hours = Number(twelveHour[1]);
+    const mins = Number(twelveHour[2] ?? '0');
+    const period = twelveHour[3];
+    if (hours < 1 || hours > 12 || mins < 0 || mins > 59) return '';
+    if (period === 'AM') {
+      hours = hours === 12 ? 0 : hours;
+    } else {
+      hours = hours === 12 ? 12 : hours + 12;
+    }
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  }
+  const twentyFour = /^(\d{1,2}):(\d{2})$/.exec(clean);
+  if (twentyFour) {
+    const hours = Number(twentyFour[1]);
+    const mins = Number(twentyFour[2]);
+    if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return '';
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+export function parseOpeningHoursRange(openingHours?: string | null): {
+  start: string;
+  end: string;
+} {
+  const raw = (openingHours || '').trim();
+  if (!raw) return { start: '', end: '' };
+  const parts = raw.split(/\s*(?:-|to|–|—)\s*/i);
+  if (parts.length < 2) return { start: '', end: '' };
+  const start = to24HourTime(parts[0]);
+  const end = to24HourTime(parts[1]);
+  if (!start || !end) return { start: '', end: '' };
+  return { start, end };
+}
+
 export function checkProfileCompleteness(
   profile: Partial<UserProfile> | null | undefined
 ): boolean {
@@ -217,7 +273,26 @@ export function checkProfileCompleteness(
     const hasBusinessName = Boolean(
       profile.businessName && profile.businessName.trim()
     );
-    return hasName && hasPhone && hasBusinessName;
+    if (!hasName || !hasPhone || !hasBusinessName) {
+      return false;
+    }
+    if (profile.isOnlineOnly === true) {
+      return true;
+    }
+    const hasStructuredTimes = Boolean(
+      profile.openingTimeStart &&
+        profile.openingTimeStart.trim() &&
+        profile.openingTimeEnd &&
+        profile.openingTimeEnd.trim()
+    );
+    const hasHours =
+      hasStructuredTimes ||
+      Boolean(profile.openingHours && profile.openingHours.trim());
+    const hasAddress = Boolean(
+      profile.shopAddress && profile.shopAddress.trim()
+    );
+    const hasGps = isValidGpsCoordinates(profile.latitude, profile.longitude);
+    return hasHours && hasAddress && hasGps;
   }
   const hasCampus = Boolean(profile.campus && profile.campus.trim());
   const hasDepartment = Boolean(profile.department && profile.department.trim());

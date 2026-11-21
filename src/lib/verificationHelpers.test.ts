@@ -4,9 +4,13 @@ import {
   canSubmitVerificationRequest,
   formatVerificationDate,
   getLatestVerificationRequest,
+  getVerificationDocOptions,
   getVerificationUiState,
+  getVerifiedBadgeLabel,
   isValidVerificationImageDataUrl,
+  MARKETER_VERIFICATION_DOC_TYPES,
   sortVerificationRequests,
+  STUDENT_VERIFICATION_DOC_TYPES,
   validateVerificationInput,
 } from './verificationHelpers';
 import { VerificationRequest } from '../types';
@@ -82,12 +86,30 @@ test('canSubmitVerificationRequest blocks verified users and pending duplicates'
   };
 
   assert.equal(canSubmitVerificationRequest(true, []).allowed, false);
+  const marketerBlocked = canSubmitVerificationRequest(true, [], 'business');
+  assert.equal(marketerBlocked.allowed, false);
+  assert.equal(marketerBlocked.reason, 'Your marketer account is already verified.');
   assert.equal(canSubmitVerificationRequest(false, [pendingReq]).allowed, false);
   assert.equal(canSubmitVerificationRequest(false, [rejectedReq]).allowed, true);
   assert.equal(canSubmitVerificationRequest(false, []).allowed, true);
 });
 
-test('validateVerificationInput validates userId, fullName, and Base64 image', () => {
+test('getVerificationDocOptions and getVerifiedBadgeLabel distinguish Students and Marketers', () => {
+  const marketerDocs = getVerificationDocOptions('business');
+  assert.deepEqual(marketerDocs, MARKETER_VERIFICATION_DOC_TYPES);
+  assert.ok(marketerDocs.includes('NIN Slip / Card'));
+  assert.ok(marketerDocs.includes("Driver's License"));
+  assert.ok(!marketerDocs.includes('Student ID Card'));
+
+  const studentDocs = getVerificationDocOptions('student');
+  assert.deepEqual(studentDocs, STUDENT_VERIFICATION_DOC_TYPES);
+  assert.ok(studentDocs.includes('Student ID Card'));
+
+  assert.equal(getVerifiedBadgeLabel('business'), 'Verified Marketer');
+  assert.equal(getVerifiedBadgeLabel('student'), 'Verified Student');
+});
+
+test('validateVerificationInput validates userId, fullName, documentType, and Base64 image', () => {
   assert.equal(isValidVerificationImageDataUrl(SAMPLE_IMAGE), true);
   assert.equal(isValidVerificationImageDataUrl('https://example.com/a.jpg'), false);
 
@@ -100,6 +122,25 @@ test('validateVerificationInput validates userId, fullName, and Base64 image', (
       fullName: 'Ada',
       idCardImage: 'not-a-data-url',
     })
+  );
+  assert.ok(
+    validateVerificationInput({
+      userId: 'u1',
+      fullName: 'Tunde Bello',
+      idCardImage: SAMPLE_IMAGE,
+      accountType: 'business',
+      documentType: '',
+    })
+  );
+  assert.equal(
+    validateVerificationInput({
+      userId: 'u1',
+      fullName: 'Tunde Bello',
+      idCardImage: SAMPLE_IMAGE,
+      accountType: 'business',
+      documentType: 'NIN Slip / Card',
+    }),
+    null
   );
   assert.equal(
     validateVerificationInput({

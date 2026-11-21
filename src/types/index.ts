@@ -16,7 +16,12 @@ export interface UserProfile {
   accountType: AccountType;
   businessName?: string;
   openingHours?: string;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
   isOnlineOnly?: boolean;
+  shopAddress?: string;
+  latitude?: number;
+  longitude?: number;
   trustScore: number;
   reviewCount: number;
   phone?: string;
@@ -30,6 +35,7 @@ export interface UserProfile {
   lastPhoneUpdate?: any;
   roles: UserRoles;
   isVerified: boolean;
+  emailVerified?: boolean;
   status: 'active' | 'suspended';
   isBanned?: boolean;
   createdAt: any;
@@ -67,6 +73,9 @@ export interface Product {
 
   // Service specific
   serviceLocation?: ServiceLocation;
+  openingHours?: string;
+  openingTimeStart?: string;
+  openingTimeEnd?: string;
 
   // Location & Contact
   whatsappNumber: string;
@@ -98,6 +107,7 @@ export interface Store {
   name: string;
   description: string;
   category: string;
+  subcategory?: string;
   logoUrl?: string;
   images?: string[];
   openingHours?: string;
@@ -270,6 +280,8 @@ export interface VerificationRequest {
   id?: string;
   userId: string;
   fullName: string;
+  accountType?: AccountType;
+  documentType?: string;
   idCardImage: string;
   status: VerificationStatus;
   createdAt: any;

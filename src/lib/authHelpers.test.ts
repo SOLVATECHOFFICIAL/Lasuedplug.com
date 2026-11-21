@@ -5,6 +5,7 @@ import {
   buildNewUserProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
+  getAccountTypeLabel,
   getFieldCooldownStatus,
   getInitials,
   getPrimaryRoleLabel,
@@ -14,6 +15,7 @@ import {
   isAcademicFieldLocked,
   isAccountBanned,
   isAccountSuspended,
+  parseOpeningHoursRange,
   PHONE_UPDATE_COOLDOWN_DAYS,
   PROFILE_PIC_COOLDOWN_DAYS,
   SUSPENDED_ACCOUNT_MESSAGE,
@@ -38,6 +40,7 @@ test('buildNewUserProfile sets safe unprivileged defaults', () => {
   assert.equal(profile.trustScore, 0);
   assert.equal(profile.reviewCount, 0);
   assert.equal(profile.isVerified, false);
+  assert.equal(profile.emailVerified, false);
   assert.equal(profile.status, 'active');
   assert.equal(profile.roles.buyer, true);
   assert.equal(profile.roles.admin, undefined);
@@ -81,6 +84,24 @@ test('getProtectedRouteDecision returns loading, redirect, or allow correctly', 
   );
   assert.equal(
     getProtectedRouteDecision({ loading: false, isAuthenticated: true }),
+    'allow'
+  );
+  assert.equal(
+    getProtectedRouteDecision({
+      loading: false,
+      isAuthenticated: true,
+      requireEmailVerified: true,
+      isEmailVerified: false,
+    }),
+    'verify-email'
+  );
+  assert.equal(
+    getProtectedRouteDecision({
+      loading: false,
+      isAuthenticated: true,
+      requireEmailVerified: true,
+      isEmailVerified: true,
+    }),
     'allow'
   );
 });
@@ -140,6 +161,22 @@ test('getInitials and getPrimaryRoleLabel compute clean display values', () => {
   assert.equal(getPrimaryRoleLabel({ buyer: true }), 'Buyer');
   assert.equal(getPrimaryRoleLabel({ buyer: true, seller: true }), 'Seller');
   assert.equal(getPrimaryRoleLabel({ buyer: true, admin: true }), 'Admin');
+  assert.equal(getPrimaryRoleLabel({ buyer: true }, 'business'), 'Marketer');
+  assert.equal(getPrimaryRoleLabel({ buyer: true, landlord: true }), 'Marketer');
+  assert.equal(getAccountTypeLabel('student'), 'Student');
+  assert.equal(getAccountTypeLabel('business'), 'Marketer');
+});
+
+test('parseOpeningHoursRange converts 12h and 24h strings into 24h time picker values', () => {
+  assert.deepEqual(parseOpeningHoursRange('8:00 AM - 6:00 PM'), {
+    start: '08:00',
+    end: '18:00',
+  });
+  assert.deepEqual(parseOpeningHoursRange('08:30 - 17:45'), {
+    start: '08:30',
+    end: '17:45',
+  });
+  assert.deepEqual(parseOpeningHoursRange(''), { start: '', end: '' });
 });
 
 test('formatFirebaseAuthError maps Firebase error codes cleanly', () => {
@@ -179,7 +216,7 @@ test('checkProfileCompleteness returns true only when all 5 required profile fie
     true
   );
 
-  // Business accounts require fullName, phone, and businessName without student academic fields
+  // Marketer accounts require fullName, phone, businessName; online-only marketers are exempt from opening hours & address
   assert.equal(
     checkProfileCompleteness({
       accountType: 'business',
@@ -188,12 +225,58 @@ test('checkProfileCompleteness returns true only when all 5 required profile fie
     }),
     false
   );
+  // Online-only marketer with businessName -> complete even without opening hours or address
   assert.equal(
     checkProfileCompleteness({
       accountType: 'business',
       fullName: 'Tunde Bello',
       phone: '08012345678',
       businessName: 'Tunde Gadgets & Repairs',
+      isOnlineOnly: true,
+    }),
+    true
+  );
+  // Physical shop missing opening hours -> incomplete even with shopAddress + GPS
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Gadgets & Repairs',
+      isOnlineOnly: false,
+      shopAddress: 'Shop 4, Main Gate',
+      latitude: 6.5812,
+      longitude: 3.9821,
+    }),
+    false
+  );
+  // Physical shop missing shopAddress or GPS -> incomplete
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Gadgets & Repairs',
+      openingTimeStart: '08:00',
+      openingTimeEnd: '18:00',
+      isOnlineOnly: false,
+      shopAddress: 'Shop 4, Main Gate',
+    }),
+    false
+  );
+  // Physical shop marketer with address + GPS + opening hours -> complete
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Gadgets & Repairs',
+      openingTimeStart: '08:00',
+      openingTimeEnd: '18:00',
+      isOnlineOnly: false,
+      shopAddress: 'Shop 4, LASUED Main Gate',
+      latitude: 6.5812,
+      longitude: 3.9821,
     }),
     true
   );

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  Clock,
   Globe,
   Loader2,
   MapPin,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getProductById } from '../../lib/marketplaceService';
 import { updateSellerListing } from '../../lib/sellerService';
+import { parseOpeningHoursRange } from '../../lib/authHelpers';
 import {
   getCategoriesForAdType,
   getCategoryName,
@@ -20,6 +22,7 @@ import {
 import { getListingAdType } from '../../lib/marketplaceHelpers';
 import { getFastCache, invalidateFastCache, invalidateFastCachePrefix } from '../../lib/fastCache';
 import {
+  formatOpeningHoursRange,
   MarketplaceCreateValidationErrors,
   validateMarketplaceCreateInput,
 } from '../../lib/listingValidation';
@@ -76,6 +79,8 @@ export function MarketplaceEdit() {
     useState<ServiceLocation>('online');
 
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
+  const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
@@ -142,6 +147,13 @@ export function MarketplaceEdit() {
           if (!isShop && record.serviceLocation) {
             setNonShopServiceMode(record.serviceLocation);
           }
+          const parsedTimes = parseOpeningHoursRange(record.openingHours);
+          setOpeningTimeStart(
+            record.openingTimeStart || parsedTimes.start || '08:00'
+          );
+          setOpeningTimeEnd(
+            record.openingTimeEnd || parsedTimes.end || '18:00'
+          );
         }
 
         setWhatsappNumber(record.whatsappNumber || '');
@@ -243,6 +255,14 @@ export function MarketplaceEdit() {
       locationType: effectiveLocationType,
       serviceLocation:
         adType === 'service' ? effectiveServiceLocation : undefined,
+      openingTimeStart:
+        adType === 'service' && effectiveLocationType === 'physical'
+          ? openingTimeStart
+          : undefined,
+      openingTimeEnd:
+        adType === 'service' && effectiveLocationType === 'physical'
+          ? openingTimeEnd
+          : undefined,
       locationName,
       latitude,
       longitude,
@@ -292,6 +312,18 @@ export function MarketplaceEdit() {
         quantity: parsedQuantity,
         serviceLocation:
           adType === 'service' ? effectiveServiceLocation : undefined,
+        openingHours:
+          adType === 'service' && effectiveLocationType === 'physical'
+            ? formatOpeningHoursRange(openingTimeStart, openingTimeEnd)
+            : undefined,
+        openingTimeStart:
+          adType === 'service' && effectiveLocationType === 'physical'
+            ? openingTimeStart.trim()
+            : undefined,
+        openingTimeEnd:
+          adType === 'service' && effectiveLocationType === 'physical'
+            ? openingTimeEnd.trim()
+            : undefined,
         locationType: effectiveLocationType,
         latitude: effectiveLocationType === 'physical' ? latitude : undefined,
         longitude: effectiveLocationType === 'physical' ? longitude : undefined,
@@ -681,6 +713,73 @@ export function MarketplaceEdit() {
 
           {effectiveLocationType === 'physical' ? (
             <div className="space-y-4">
+              {adType === 'service' && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    <span>
+                      Shop Opening &amp; Closing Hours{' '}
+                      <span className="text-red-500">*</span>
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="edit-service-opening-time-start"
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Opening Time
+                      </label>
+                      <input
+                        id="edit-service-opening-time-start"
+                        type="time"
+                        required
+                        value={openingTimeStart}
+                        onChange={(e) => {
+                          setOpeningTimeStart(e.target.value);
+                          clearFieldError('openingHours');
+                        }}
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="edit-service-opening-time-end"
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Closing Time
+                      </label>
+                      <input
+                        id="edit-service-opening-time-end"
+                        type="time"
+                        required
+                        value={openingTimeEnd}
+                        onChange={(e) => {
+                          setOpeningTimeEnd(e.target.value);
+                          clearFieldError('openingHours');
+                        }}
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  {openingTimeStart &&
+                    openingTimeEnd &&
+                    !fieldErrors.openingHours && (
+                      <p className="text-xs font-medium text-slate-600">
+                        Displayed as:{' '}
+                        <span className="text-slate-900">
+                          {formatOpeningHoursRange(openingTimeStart, openingTimeEnd)}
+                        </span>
+                      </p>
+                    )}
+                  {fieldErrors.openingHours && (
+                    <p className="text-xs font-medium text-red-600" role="alert">
+                      {fieldErrors.openingHours}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Input
                 label={
                   adType === 'service'

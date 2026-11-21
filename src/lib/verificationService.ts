@@ -13,10 +13,11 @@ import {
 import { db } from './firebase';
 import { createNotification } from './notificationService';
 import {
+  getVerifiedBadgeLabel,
   sortVerificationRequests,
   validateVerificationInput,
 } from './verificationHelpers';
-import { VerificationRequest } from '../types';
+import { AccountType, VerificationRequest } from '../types';
 
 function mapVerificationError(err: unknown, fallback: string): Error {
   const firestoreErr = err as FirestoreError;
@@ -61,12 +62,14 @@ export async function getUserVerificationRequests(
 }
 
 /**
- * Submits a new Student ID / Fee Receipt verification request for admin review.
+ * Submits a new verification request (Student ID / Fee Receipt for Students; NIN / Driver's License / Valid ID for Marketers).
  */
 export async function submitVerificationRequest(input: {
   userId: string;
   fullName: string;
   idCardImage: string;
+  accountType?: AccountType;
+  documentType?: string;
 }): Promise<VerificationRequest> {
   if (!db) {
     throw new Error('Firebase is not configured. Check .env.local.');
@@ -85,10 +88,17 @@ export async function submitVerificationRequest(input: {
 
     const trimmedUserId = input.userId.trim();
     const trimmedFullName = input.fullName.trim();
+    const resolvedAccountType: AccountType =
+      input.accountType === 'business' ? 'business' : 'student';
+    const resolvedDocumentType =
+      input.documentType?.trim() ||
+      (resolvedAccountType === 'business' ? 'NIN Slip / Card' : 'Student ID Card');
 
     const docRef = await addDoc(collection(db, 'verification_requests'), {
       userId: trimmedUserId,
       fullName: trimmedFullName,
+      accountType: resolvedAccountType,
+      documentType: resolvedDocumentType,
       idCardImage: input.idCardImage,
       status: 'pending',
       createdAt: serverTimestamp(),
@@ -99,6 +109,8 @@ export async function submitVerificationRequest(input: {
       id: docRef.id,
       userId: trimmedUserId,
       fullName: trimmedFullName,
+      accountType: resolvedAccountType,
+      documentType: resolvedDocumentType,
       idCardImage: input.idCardImage,
       status: 'pending',
       createdAt: new Date(),
@@ -219,11 +231,16 @@ export async function approveVerificationRequest(
     }
 
     try {
+      const isMarketer = request.accountType === 'business';
+      const badgeLabel = getVerifiedBadgeLabel(request.accountType);
       await createNotification({
         userId: request.userId,
-        title: 'Student Verification Approved!',
-        message:
-          'Your Student ID has been verified. The Verified Student badge is now active on your profile and listings.',
+        title: isMarketer
+          ? 'Marketer Verification Approved!'
+          : 'Student Verification Approved!',
+        message: isMarketer
+          ? `Your ${request.documentType || 'identity document'} has been verified. The ${badgeLabel} badge is now active on your profile and listings.`
+          : `Your Student ID has been verified. The ${badgeLabel} badge is now active on your profile and listings.`,
         type: 'system',
         link: '/dashboard/profile',
       });
@@ -236,7 +253,7 @@ export async function approveVerificationRequest(
 }
 
 /**
- * Admin: Rejects a pending verification request and notifies the student.
+ * Admin: Rejects a pending verification request and notifies the user.
  */
 export async function rejectVerificationRequest(
   request: VerificationRequest
@@ -256,11 +273,13 @@ export async function rejectVerificationRequest(
 
     if (request.userId) {
       try {
+        const isMarketer = request.accountType === 'business';
         await createNotification({
           userId: request.userId,
           title: 'Verification Request Not Approved',
-          message:
-            'Your uploaded ID document could not be verified. Please upload a clearer Student ID or School Fee Receipt on your profile.',
+          message: isMarketer
+            ? "Your uploaded identity document could not be verified. Please upload a clearer NIN, Driver's License, Voter's Card, or Passport on your profile."
+            : 'Your uploaded ID document could not be verified. Please upload a clearer Student ID or School Fee Receipt on your profile.',
           type: 'system',
           link: '/dashboard/profile',
         });

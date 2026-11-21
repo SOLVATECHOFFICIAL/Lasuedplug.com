@@ -42,7 +42,18 @@ export function LoginPage() {
 
     setSubmitting(true);
     try {
-      await signIn(email, password);
+      const { emailVerified } = await signIn(email, password);
+      if (!emailVerified) {
+        showToast(
+          'You are not done verifying your email. Check your Inbox or Spam folder to activate your account.',
+          'info'
+        );
+        navigate('/verify-email', {
+          replace: true,
+          state: { email: email.trim().toLowerCase(), resumed: true },
+        });
+        return;
+      }
       showToast('Signed in successfully.', 'success');
       navigate(fromPath === '/login' ? '/' : fromPath, { replace: true });
     } catch (err) {

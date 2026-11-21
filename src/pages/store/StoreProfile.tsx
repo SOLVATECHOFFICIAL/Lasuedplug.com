@@ -309,8 +309,11 @@ export function StoreProfile() {
                 <Badge variant="role">
                   {store.category || 'Campus Store'}
                 </Badge>
+                {store.subcategory && (
+                  <Badge variant="role">{store.subcategory}</Badge>
+                )}
                 {ownerProfile?.accountType === 'business' && (
-                  <Badge variant="verified">Business Account</Badge>
+                  <Badge variant="verified">Marketer Store</Badge>
                 )}
               </div>
 
@@ -318,7 +321,16 @@ export function StoreProfile() {
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                   {store.name}
                 </h1>
-                {isVerified && <VerifiedBadge size="sm" />}
+                {isVerified && (
+                  <VerifiedBadge
+                    size="sm"
+                    label={
+                      ownerProfile?.accountType === 'business'
+                        ? 'Verified Marketer'
+                        : 'Verified Student'
+                    }
+                  />
+                )}
               </div>
 
               <StarRating
