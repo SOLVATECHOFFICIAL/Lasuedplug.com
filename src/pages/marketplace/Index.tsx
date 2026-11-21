@@ -34,6 +34,11 @@ import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import {
+  fetchAllApprovedActiveItemsFromServer,
+  fetchTrendingProductsFromServer,
+  reconcileMarketplaceBrowseSlice,
+} from '../../lib/backgroundSync';
+import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
   getFastCacheEnvelope,
@@ -42,10 +47,13 @@ import {
 } from '../../lib/fastCache';
 import {
   FEED_FRESH_MS,
+  getEntityContentSignature,
   getNewestCreatedAtMs,
+  haveListsDiverged,
   mergeDeltaEntities,
   resolveSyncStrategy,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import {
   getListingAdType,
   hasActiveMarketplaceFilters,
@@ -547,6 +555,104 @@ export function MarketplaceIndex() {
   useEffect(() => {
     void loadInitialProducts();
   }, [loadInitialProducts]);
+
+  const browseProductsRef = useRef(browseProducts);
+  browseProductsRef.current = browseProducts;
+  const trendingProductsRef = useRef(trendingProducts);
+  trendingProductsRef.current = trendingProducts;
+  const rawSearchProductsRef = useRef(rawSearchProducts);
+  rawSearchProductsRef.current = rawSearchProducts;
+  const debouncedSearchRef = useRef(debouncedSearch);
+  debouncedSearchRef.current = debouncedSearch;
+  const selectedCategoryRef = useRef(selectedCategory);
+  selectedCategoryRef.current = selectedCategory;
+
+  useBackgroundSync({
+    enabled: !isLegacyStoresTab,
+    onTick: useCallback(async ({ tickIndex, reason }) => {
+      const cat = selectedCategoryRef.current;
+      const browseCacheKey = getBrowseCacheKey(cat);
+      const currentList = browseProductsRef.current;
+      const targetLimit = Math.max(
+        MARKETPLACE_PAGE_SIZE,
+        currentList.length || MARKETPLACE_PAGE_SIZE
+      );
+
+      const res = await reconcileMarketplaceBrowseSlice({
+        cachedProducts: currentList,
+        categoryId: cat || undefined,
+        limitCount: targetLimit,
+        tickIndex,
+        forceHeadCheck: reason === 'resume',
+      });
+
+      if (!res.changed) {
+        return;
+      }
+
+      if (
+        haveListsDiverged(
+          currentList,
+          res.items,
+          getEntityContentSignature
+        )
+      ) {
+        setBrowseProducts(res.items);
+        setFastCache(browseCacheKey, res.items, {
+          localData: compactListingsForCache(res.items, 24),
+          isFull: true,
+        });
+      }
+
+      if (res.cleared && !cat) {
+        if (trendingProductsRef.current.length > 0) {
+          setTrendingProducts([]);
+        }
+        if (rawSearchProductsRef.current.length > 0) {
+          setRawSearchProducts([]);
+        }
+        return;
+      }
+
+      const freshTrending = await fetchTrendingProductsFromServer(8);
+      if (freshTrending) {
+        if (
+          haveListsDiverged(
+            trendingProductsRef.current,
+            freshTrending,
+            getEntityContentSignature
+          )
+        ) {
+          setTrendingProducts(freshTrending);
+          setFastCache('mkt_trending', freshTrending, {
+            localData: compactListingsForCache(freshTrending, 8),
+            isFull: true,
+          });
+        }
+      } else if (res.removedIds.length > 0) {
+        const remSet = new Set(res.removedIds);
+        const pruned = trendingProductsRef.current.filter(
+          (item) => !item.id || !remSet.has(item.id)
+        );
+        setTrendingProducts(pruned);
+        setFastCache('mkt_trending', pruned, {
+          localData: compactListingsForCache(pruned, 8),
+          isFull: true,
+        });
+      }
+
+      const activeQuery = debouncedSearchRef.current.trim();
+      if (activeQuery) {
+        const freshAll = await fetchAllApprovedActiveItemsFromServer();
+        if (freshAll) {
+          setFastCache('mkt_all_items', freshAll, { idbOnly: true });
+          const nextMatched = findBestAndRelatedProducts(freshAll, activeQuery);
+          setRawSearchProducts(nextMatched.products);
+          setUsedRelatedFallback(nextMatched.usedRelatedFallback);
+        }
+      }
+    }, []),
+  });
 
   // Apply category filter (if chosen) & search sort filter
   const products = useMemo(() => {

@@ -6,7 +6,7 @@ import { Footer } from './Footer';
 import { MobileNav } from './MobileNav';
 import { InstallPWA } from './InstallPWA';
 import { useAuth } from '../../contexts/AuthContext';
-import { isAuthorizedAdminSession } from '../../lib/adminHelpers';
+import { isAuthorizedAdminSession, isUserAdmin } from '../../lib/adminHelpers';
 import {
   buildRouteKey,
   getSavedRouteScroll,
@@ -22,7 +22,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { user, loading, isProfileComplete, isSuspended } = useAuth();
+  const { user, profile, loading, isProfileComplete, isSuspended } = useAuth();
   const location = useLocation();
   const navigationType = useNavigationType();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -168,11 +168,12 @@ export function AppShell({ children }: AppShellProps) {
     saveRouteScroll(key, routeKey, window.scrollY);
   };
 
-  const isAdminSession = isAuthorizedAdminSession(user);
+  const isAdminSession = isAuthorizedAdminSession(user) || isUserAdmin(profile);
   const showMaintenanceGate = shouldShowMaintenanceScreen({
     maintenanceMode,
     pathname: location.pathname,
     user,
+    profile,
   });
 
   if (showMaintenanceGate) {

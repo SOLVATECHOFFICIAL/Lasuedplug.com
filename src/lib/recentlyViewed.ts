@@ -71,3 +71,71 @@ export function saveRecentlyViewed(
 
   return updated;
 }
+
+export function removeRecentlyViewedIds(
+  ids: ReadonlyArray<string>,
+  type?: MixedFeedType
+): RecentlyViewedItem[] {
+  const existing = getRecentlyViewed();
+  if (ids.length === 0 || existing.length === 0) {
+    return existing;
+  }
+
+  const removeSet = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  if (removeSet.size === 0) {
+    return existing;
+  }
+
+  const updated = existing.filter((entry) => {
+    if (!removeSet.has(entry.id)) return true;
+    if (type && entry._type !== type) return true;
+    return false;
+  });
+
+  if (updated.length === existing.length) {
+    return existing;
+  }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(
+        RECENTLY_VIEWED_STORAGE_KEY,
+        JSON.stringify(updated)
+      );
+      window.dispatchEvent(new CustomEvent('lasuedplug:recently-viewed'));
+    } catch {
+      // Ignore quota or storage restriction errors
+    }
+  }
+
+  return updated;
+}
+
+export function clearRecentlyViewedByType(
+  type: MixedFeedType
+): RecentlyViewedItem[] {
+  const existing = getRecentlyViewed();
+  if (existing.length === 0) {
+    return existing;
+  }
+
+  const updated = existing.filter((entry) => entry._type !== type);
+  if (updated.length === existing.length) {
+    return existing;
+  }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(
+        RECENTLY_VIEWED_STORAGE_KEY,
+        JSON.stringify(updated)
+      );
+      window.dispatchEvent(new CustomEvent('lasuedplug:recently-viewed'));
+    } catch {
+      // Ignore quota or storage restriction errors
+    }
+  }
+
+  return updated;
+}
+

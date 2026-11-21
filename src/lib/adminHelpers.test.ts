@@ -43,9 +43,11 @@ test('isUserAdmin recognizes roles.admin or admin custom claim and rejects norma
   assert.equal(isUserAdmin({ roles: { buyer: true } }, true), true);
 });
 
-test('isAuthorizedAdminSession allows only verified primary admin email', () => {
+test('isAuthorizedAdminSession allows only verified authorized admin emails', () => {
   assert.equal(isAuthorizedAdminEmail(PRIMARY_ADMIN_EMAIL), true);
   assert.equal(isAuthorizedAdminEmail('  AWOYINFASOLOMON1@gmail.com '), true);
+  assert.equal(isAuthorizedAdminEmail('relaxj550@gmail.com'), true);
+  assert.equal(isAuthorizedAdminEmail('  RELAXJ550@gmail.com '), true);
   assert.equal(isAuthorizedAdminEmail('hacker@gmail.com'), false);
   assert.equal(
     isAuthorizedAdminSession({
@@ -56,7 +58,21 @@ test('isAuthorizedAdminSession allows only verified primary admin email', () => 
   );
   assert.equal(
     isAuthorizedAdminSession({
+      email: 'relaxj550@gmail.com',
+      emailVerified: true,
+    }),
+    true
+  );
+  assert.equal(
+    isAuthorizedAdminSession({
       email: PRIMARY_ADMIN_EMAIL,
+      emailVerified: false,
+    }),
+    false
+  );
+  assert.equal(
+    isAuthorizedAdminSession({
+      email: 'relaxj550@gmail.com',
       emailVerified: false,
     }),
     false

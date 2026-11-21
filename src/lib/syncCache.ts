@@ -1,11 +1,28 @@
 import {
   getFastCacheEnvelope,
+  getFastCacheKeysWithPrefix,
+  invalidateFastCache,
   invalidateFastCachePrefix,
   setFastCache,
 } from './fastCache';
+import {
+  compactListingsForCache,
+  compactMixedFeedForCache,
+} from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
+import {
+  clearRecentlyViewedByType,
+  removeRecentlyViewedIds,
+} from './recentlyViewed';
+import { getListingAdType } from './marketplaceHelpers';
 import { MixedFeedItem } from './trendingHelpers';
-import { Accommodation, Product, Service, Store } from '../types';
+import {
+  Accommodation,
+  Product,
+  RoommateRequest,
+  Service,
+  Store,
+} from '../types';
 
 export const FEED_FRESH_MS = 4 * 60_000; // 4 minutes: skip Firestore reads completely on repeat visits
 export const FEED_FULL_RECONCILE_MS = 30 * 60_000; // 30 minutes: delta sync between 4m and 30m
@@ -373,3 +390,486 @@ export function claimSessionViewTrack(
 export function resetSessionViewMemoryForTests(): void {
   memoryViewedIds.clear();
 }
+
+export type MixedFeedCollectionKind =
+  | 'products'
+  | 'legacyServices'
+  | 'stores'
+  | 'accommodations';
+
+export function getMixedFeedCollectionKind(
+  item: MixedFeedItem
+): MixedFeedCollectionKind {
+  if (item._type === 'store' || item.store) {
+    return 'stores';
+  }
+  if (item._type === 'accommodation' || item.accommodation) {
+    return 'accommodations';
+  }
+  if (item._type === 'service' && item.service && !item.product) {
+    return 'legacyServices';
+  }
+  return 'products';
+}
+
+export function replaceMixedFeedCollectionSlice(
+  existing: ReadonlyArray<MixedFeedItem>,
+  kind: MixedFeedCollectionKind,
+  incomingSlice: ReadonlyArray<MixedFeedItem>,
+  maxItems = 80
+): MixedFeedItem[] {
+  const preserved = existing.filter(
+    (item) => getMixedFeedCollectionKind(item) !== kind
+  );
+  const byKey = new Map<string, MixedFeedItem>();
+  for (const item of preserved) {
+    if (item.id) {
+      byKey.set(`${item._type}:${item.id}`, item);
+    }
+  }
+  for (const item of incomingSlice) {
+    if (item.id) {
+      byKey.set(`${item._type}:${item.id}`, item);
+    }
+  }
+  const merged = Array.from(byKey.values());
+  merged.sort(
+    (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+  );
+  return merged.slice(0, maxItems);
+}
+
+export function getEntityContentSignature(entity: unknown): string {
+  if (!entity || typeof entity !== 'object') return '';
+  const rec = entity as Record<string, unknown>;
+  const id = typeof rec.id === 'string' ? rec.id : '';
+  const title =
+    typeof rec.title === 'string'
+      ? rec.title
+      : typeof rec.name === 'string'
+        ? rec.name
+        : '';
+  const price =
+    typeof rec.price === 'number'
+      ? rec.price
+      : typeof rec.rentPrice === 'number'
+        ? rec.rentPrice
+        : typeof rec.budget === 'number'
+          ? rec.budget
+          : '';
+  const status = typeof rec.status === 'string' ? rec.status : '';
+  const approved = rec.isApproved === true ? '1' : '0';
+  const active = rec.isActive === false ? '0' : '1';
+  const quantity = typeof rec.quantity === 'number' ? rec.quantity : '';
+  const updatedMs = getTimestampMillis(rec.updatedAt);
+  const createdMs = getTimestampMillis(rec.createdAt);
+  const images = Array.isArray(rec.images) ? rec.images : [];
+  const firstImg = typeof images[0] === 'string' ? images[0].slice(0, 64) : '';
+  const logoUrl =
+    typeof rec.logoUrl === 'string' ? rec.logoUrl.slice(0, 64) : '';
+  const descLen =
+    typeof rec.description === 'string' ? rec.description.length : 0;
+  const verified =
+    rec.isVerified === true ||
+    (rec.sellerSnapshot as Record<string, unknown> | undefined)?.isVerified ===
+      true ||
+    (rec.ownerSnapshot as Record<string, unknown> | undefined)?.isVerified ===
+      true ||
+    (rec.userSnapshot as Record<string, unknown> | undefined)?.isVerified ===
+      true
+      ? '1'
+      : '0';
+
+  return [
+    id,
+    title,
+    price,
+    status,
+    approved,
+    active,
+    quantity,
+    updatedMs,
+    createdMs,
+    images.length,
+    firstImg || logoUrl,
+    descLen,
+    verified,
+  ].join('|');
+}
+
+export function haveListsDiverged<T>(
+  existing: ReadonlyArray<T>,
+  incoming: ReadonlyArray<T>,
+  getSig: (item: T) => string = getEntityContentSignature
+): boolean {
+  if (existing.length !== incoming.length) {
+    return true;
+  }
+  for (let i = 0; i < existing.length; i += 1) {
+    if (getSig(existing[i]) !== getSig(incoming[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function getMixedFeedItemSignature(item: MixedFeedItem): string {
+  const embedded = item.product || item.service || item.store || item.accommodation;
+  return [
+    item._type,
+    item.id,
+    item.title,
+    item.sellerId,
+    item.isVerified ? '1' : '0',
+    item.trustScore,
+    getTimestampMillis(item.createdAt),
+    embedded ? getEntityContentSignature(embedded) : '',
+  ].join('|');
+}
+
+function updateCachedListRemovingIds<T extends { id?: string }>(
+  cacheKey: string,
+  removeSet: ReadonlySet<string>,
+  compactLimit = 24
+): void {
+  const env = getFastCacheEnvelope<T[]>(cacheKey, 0);
+  if (!env || !Array.isArray(env.data) || env.data.length === 0) {
+    return;
+  }
+  const filtered = env.data.filter(
+    (entry) => !entry.id || !removeSet.has(entry.id)
+  );
+  if (filtered.length === env.data.length) {
+    return;
+  }
+  setFastCache(cacheKey, filtered, {
+    localData: compactListingsForCache(filtered as Array<T & { images?: string[] }>, compactLimit) as unknown as T[],
+    isFull: env.isFull,
+    syncedAt: env.syncedAt,
+    fullSyncAt: env.fullSyncAt,
+  });
+}
+
+export function pruneDeletedIdsFromAllCaches(
+  entityKind: 'product' | 'legacyService' | 'store' | 'accommodation' | 'roommate',
+  removedIds: ReadonlyArray<string>
+): void {
+  const cleanIds = removedIds.map((id) => id.trim()).filter(Boolean);
+  if (cleanIds.length === 0) return;
+
+  const removeSet = new Set(cleanIds);
+
+  if (entityKind === 'product' || entityKind === 'legacyService') {
+    for (const id of cleanIds) {
+      invalidateFastCache(`product:${id}`);
+    }
+
+    // Prune home_mixed_feed & home_trending_feed
+    for (const feedKey of ['home_mixed_feed', 'home_trending_feed'] as const) {
+      const env = getFastCacheEnvelope<MixedFeedItem[]>(feedKey, 0);
+      if (env && Array.isArray(env.data) && env.data.length > 0) {
+        const filtered = env.data.filter((item) => {
+          if (!removeSet.has(item.id)) return true;
+          if (entityKind === 'product') {
+            return item._type !== 'item' && !(item._type === 'service' && item.product);
+          }
+          return !(item._type === 'service' && item.service && !item.product);
+        });
+        if (filtered.length !== env.data.length) {
+          setFastCache(feedKey, filtered, {
+            localData: compactMixedFeedForCache(filtered, 24),
+            isFull: env.isFull,
+            syncedAt: env.syncedAt,
+            fullSyncAt: env.fullSyncAt,
+          });
+        }
+      }
+    }
+
+    if (entityKind === 'product') {
+      updateCachedListRemovingIds<Product>('mkt_trending', removeSet, 8);
+      updateCachedListRemovingIds<Product>('mkt_browse_default', removeSet, 24);
+      for (const catKey of getFastCacheKeysWithPrefix('mkt_browse_cat:')) {
+        updateCachedListRemovingIds<Product>(catKey, removeSet, 24);
+      }
+      const allItemsEnv = getFastCacheEnvelope<Product[]>('mkt_all_items', 0);
+      if (allItemsEnv && Array.isArray(allItemsEnv.data)) {
+        const filteredAll = allItemsEnv.data.filter(
+          (item) => !item.id || !removeSet.has(item.id)
+        );
+        if (filteredAll.length !== allItemsEnv.data.length) {
+          setFastCache('mkt_all_items', filteredAll, {
+            idbOnly: true,
+            syncedAt: allItemsEnv.syncedAt,
+            fullSyncAt: allItemsEnv.fullSyncAt,
+          });
+        }
+      }
+    }
+
+    const svcEnv = getFastCacheEnvelope<{
+      productServices: Product[];
+      legacyServices: Service[];
+    }>('services_feed', 0);
+    if (svcEnv?.data) {
+      const nextProducts =
+        entityKind === 'product'
+          ? svcEnv.data.productServices.filter(
+              (p) => !p.id || !removeSet.has(p.id)
+            )
+          : svcEnv.data.productServices;
+      const nextLegacy =
+        entityKind === 'legacyService'
+          ? svcEnv.data.legacyServices.filter(
+              (s) => !s.id || !removeSet.has(s.id)
+            )
+          : svcEnv.data.legacyServices;
+      if (
+        nextProducts.length !== svcEnv.data.productServices.length ||
+        nextLegacy.length !== svcEnv.data.legacyServices.length
+      ) {
+        setFastCache(
+          'services_feed',
+          { productServices: nextProducts, legacyServices: nextLegacy },
+          {
+            localData: {
+              productServices: compactListingsForCache(nextProducts, 24),
+              legacyServices: compactListingsForCache(nextLegacy, 24),
+            },
+            isFull: svcEnv.isFull,
+            syncedAt: svcEnv.syncedAt,
+            fullSyncAt: svcEnv.fullSyncAt,
+          }
+        );
+      }
+    }
+
+    removeRecentlyViewedIds(cleanIds, 'item');
+    removeRecentlyViewedIds(cleanIds, 'service');
+    return;
+  }
+
+  if (entityKind === 'store') {
+    for (const id of cleanIds) {
+      invalidateFastCache(`store:${id}`);
+      invalidateFastCache(`store_profile:${id}`);
+    }
+    updateCachedListRemovingIds<Store>('approved_stores', removeSet, 24);
+    const homeEnv = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0);
+    if (homeEnv && Array.isArray(homeEnv.data)) {
+      const filtered = homeEnv.data.filter(
+        (item) => !(item._type === 'store' && removeSet.has(item.id))
+      );
+      if (filtered.length !== homeEnv.data.length) {
+        setFastCache('home_mixed_feed', filtered, {
+          localData: compactMixedFeedForCache(filtered, 24),
+          isFull: homeEnv.isFull,
+          syncedAt: homeEnv.syncedAt,
+          fullSyncAt: homeEnv.fullSyncAt,
+        });
+      }
+    }
+    removeRecentlyViewedIds(cleanIds, 'store');
+    return;
+  }
+
+  if (entityKind === 'accommodation') {
+    for (const id of cleanIds) {
+      invalidateFastCache(`accommodation:${id}`);
+    }
+    updateCachedListRemovingIds<Accommodation>(
+      'accommodations_feed',
+      removeSet,
+      24
+    );
+    const homeEnv = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0);
+    if (homeEnv && Array.isArray(homeEnv.data)) {
+      const filtered = homeEnv.data.filter(
+        (item) => !(item._type === 'accommodation' && removeSet.has(item.id))
+      );
+      if (filtered.length !== homeEnv.data.length) {
+        setFastCache('home_mixed_feed', filtered, {
+          localData: compactMixedFeedForCache(filtered, 24),
+          isFull: homeEnv.isFull,
+          syncedAt: homeEnv.syncedAt,
+          fullSyncAt: homeEnv.fullSyncAt,
+        });
+      }
+    }
+    removeRecentlyViewedIds(cleanIds, 'accommodation');
+    return;
+  }
+
+  if (entityKind === 'roommate') {
+    updateCachedListRemovingIds<RoommateRequest>(
+      'roommates_feed',
+      removeSet,
+      24
+    );
+  }
+}
+
+export function clearCollectionFromAllCaches(
+  scope:
+    | 'products_all'
+    | 'products_item'
+    | 'products_service'
+    | 'legacyServices'
+    | 'stores'
+    | 'accommodations'
+    | 'roommates'
+): void {
+  if (scope === 'products_all' || scope === 'products_item') {
+    setFastCache('mkt_trending', [], { localData: [], isFull: true });
+    setFastCache('mkt_browse_default', [], { localData: [], isFull: true });
+    for (const catKey of getFastCacheKeysWithPrefix('mkt_browse_cat:')) {
+      setFastCache(catKey, [], { localData: [], isFull: true });
+    }
+    setFastCache('mkt_all_items', [], { idbOnly: true, isFull: true });
+    clearRecentlyViewedByType('item');
+  }
+
+  if (scope === 'products_all' || scope === 'products_service') {
+    const svcEnv = getFastCacheEnvelope<{
+      productServices: Product[];
+      legacyServices: Service[];
+    }>('services_feed', 0);
+    if (svcEnv?.data) {
+      setFastCache(
+        'services_feed',
+        {
+          productServices: [],
+          legacyServices: svcEnv.data.legacyServices,
+        },
+        {
+          localData: {
+            productServices: [],
+            legacyServices: compactListingsForCache(
+              svcEnv.data.legacyServices,
+              24
+            ),
+          },
+          isFull: true,
+        }
+      );
+    }
+  }
+
+  if (scope === 'legacyServices') {
+    const svcEnv = getFastCacheEnvelope<{
+      productServices: Product[];
+      legacyServices: Service[];
+    }>('services_feed', 0);
+    if (svcEnv?.data) {
+      setFastCache(
+        'services_feed',
+        {
+          productServices: svcEnv.data.productServices,
+          legacyServices: [],
+        },
+        {
+          localData: {
+            productServices: compactListingsForCache(
+              svcEnv.data.productServices,
+              24
+            ),
+            legacyServices: [],
+          },
+          isFull: true,
+        }
+      );
+    }
+  }
+
+  if (
+    scope === 'products_all' ||
+    scope === 'products_item' ||
+    scope === 'products_service' ||
+    scope === 'legacyServices'
+  ) {
+    if (scope === 'products_all') {
+      invalidateFastCachePrefix('product:');
+      clearRecentlyViewedByType('service');
+    } else if (scope === 'products_item' || scope === 'products_service') {
+      const targetAd = scope === 'products_item' ? 'item' : 'service';
+      for (const pKey of getFastCacheKeysWithPrefix('product:')) {
+        const env = getFastCacheEnvelope<Product>(pKey, 0);
+        if (env?.data && getListingAdType(env.data) === targetAd) {
+          invalidateFastCache(pKey);
+        }
+      }
+      if (scope === 'products_service') {
+        clearRecentlyViewedByType('service');
+      }
+    }
+
+    for (const feedKey of ['home_mixed_feed', 'home_trending_feed'] as const) {
+      const env = getFastCacheEnvelope<MixedFeedItem[]>(feedKey, 0);
+      if (env && Array.isArray(env.data)) {
+        const filtered = env.data.filter((item) => {
+          if (scope === 'products_all') {
+            return getMixedFeedCollectionKind(item) !== 'products';
+          }
+          if (scope === 'products_item') {
+            return !(
+              getMixedFeedCollectionKind(item) === 'products' &&
+              item._type === 'item'
+            );
+          }
+          if (scope === 'products_service') {
+            return !(
+              getMixedFeedCollectionKind(item) === 'products' &&
+              item._type === 'service'
+            );
+          }
+          return getMixedFeedCollectionKind(item) !== 'legacyServices';
+        });
+        setFastCache(feedKey, filtered, {
+          localData: compactMixedFeedForCache(filtered, 24),
+          isFull: true,
+        });
+      }
+    }
+    return;
+  }
+
+  if (scope === 'stores') {
+    invalidateFastCachePrefix('store:');
+    invalidateFastCachePrefix('store_profile:');
+    setFastCache('approved_stores', [], { localData: [], isFull: true });
+    const homeEnv = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0);
+    if (homeEnv && Array.isArray(homeEnv.data)) {
+      const next = replaceMixedFeedCollectionSlice(homeEnv.data, 'stores', []);
+      setFastCache('home_mixed_feed', next, {
+        localData: compactMixedFeedForCache(next, 24),
+        isFull: true,
+      });
+    }
+    clearRecentlyViewedByType('store');
+    return;
+  }
+
+  if (scope === 'accommodations') {
+    invalidateFastCachePrefix('accommodation:');
+    setFastCache('accommodations_feed', [], { localData: [], isFull: true });
+    const homeEnv = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0);
+    if (homeEnv && Array.isArray(homeEnv.data)) {
+      const next = replaceMixedFeedCollectionSlice(
+        homeEnv.data,
+        'accommodations',
+        []
+      );
+      setFastCache('home_mixed_feed', next, {
+        localData: compactMixedFeedForCache(next, 24),
+        isFull: true,
+      });
+    }
+    clearRecentlyViewedByType('accommodation');
+    return;
+  }
+
+  if (scope === 'roommates') {
+    setFastCache('roommates_feed', [], { localData: [], isFull: true });
+  }
+}
+

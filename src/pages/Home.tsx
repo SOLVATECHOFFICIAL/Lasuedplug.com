@@ -32,13 +32,22 @@ import { SITE_TAGLINE, UPDATES_WHATSAPP_GROUP_LINK } from '../lib/constants';
 import { compactMixedFeedForCache } from '../lib/firestoreQueryCache';
 import { getHomeMixedFeed, getHomeMixedFeedDelta, primeMixedFeedEntities } from '../lib/homeService';
 import {
+  fetchHomeTrendingProductsFromServer,
+  reconcileHomeMixedFeed,
+} from '../lib/backgroundSync';
+import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
   getFastCacheEnvelope,
   setFastCache,
   touchFastCache,
 } from '../lib/fastCache';
-import { resolveSyncStrategy } from '../lib/syncCache';
+import {
+  getMixedFeedItemSignature,
+  haveListsDiverged,
+  resolveSyncStrategy,
+} from '../lib/syncCache';
+import { useBackgroundSync } from '../lib/useBackgroundSync';
 import { getTrendingItems } from '../lib/trendingService';
 import {
   applyTwoHourTrendingShuffle,
@@ -336,7 +345,10 @@ export function Home() {
         Date.now(),
         30
       );
-      if (derivedTrending.length > 0) {
+      if (nextMixed.length === 0) {
+        setTrendingItems([]);
+        setFastCache('home_trending_feed', [], { localData: [], isFull: true });
+      } else if (derivedTrending.length > 0) {
         setTrendingItems((prev) => (prev.length === 0 ? derivedTrending : prev));
         if (!getFastCache<MixedFeedItem[]>('home_trending_feed')?.length) {
           setFastCache('home_trending_feed', derivedTrending, {
@@ -362,6 +374,94 @@ export function Home() {
   useEffect(() => {
     void loadFeeds(false);
   }, [loadFeeds]);
+
+  const mixedItemsRef = useRef(mixedItems);
+  mixedItemsRef.current = mixedItems;
+  const trendingItemsRef = useRef(trendingItems);
+  trendingItemsRef.current = trendingItems;
+
+  useBackgroundSync({
+    enabled: true,
+    onTick: useCallback(async ({ tickIndex, reason }) => {
+      const result = await reconcileHomeMixedFeed({
+        cachedMixed: mixedItemsRef.current,
+        tickIndex,
+        forceHeadCheck: reason === 'resume',
+        limitPerCollection: 20,
+      });
+
+      if (!result.changed) {
+        return;
+      }
+
+      if (
+        haveListsDiverged(
+          mixedItemsRef.current,
+          result.items,
+          getMixedFeedItemSignature
+        )
+      ) {
+        setMixedItems(result.items);
+        setFastCache('home_mixed_feed', result.items, {
+          localData: compactMixedFeedForCache(result.items, 24),
+          isFull: true,
+        });
+      }
+
+      const hasProdOrSvc = result.items.some(
+        (i) => i._type === 'item' || i._type === 'service'
+      );
+      if (!hasProdOrSvc) {
+        if (trendingItemsRef.current.length > 0) {
+          setTrendingItems([]);
+        }
+        setFastCache('home_trending_feed', [], { localData: [], isFull: true });
+        return;
+      }
+
+      const removedProdSet = new Set(result.removedProductIds);
+      const prevProdMixed = mixedItemsRef.current.filter(
+        (i) => i._type === 'item' || i._type === 'service'
+      );
+      const nextProdMixed = result.items.filter(
+        (i) => i._type === 'item' || i._type === 'service'
+      );
+      const prodSliceChanged = haveListsDiverged(
+        prevProdMixed,
+        nextProdMixed,
+        getMixedFeedItemSignature
+      );
+      const prunedTrending =
+        removedProdSet.size > 0
+          ? trendingItemsRef.current.filter(
+              (item) => !removedProdSet.has(item.id)
+            )
+          : trendingItemsRef.current;
+
+      if (
+        prodSliceChanged ||
+        removedProdSet.size > 0 ||
+        prunedTrending.length !== trendingItemsRef.current.length ||
+        trendingItemsRef.current.length === 0
+      ) {
+        const freshTrendingRaw = await fetchHomeTrendingProductsFromServer();
+        const nextTrending = freshTrendingRaw
+          ? applyTwoHourTrendingShuffle(freshTrendingRaw, Date.now(), 30)
+          : applyTwoHourTrendingShuffle(
+              result.items.filter(
+                (i) => i._type === 'item' || i._type === 'service'
+              ),
+              Date.now(),
+              30
+            );
+        setTrendingItems(nextTrending);
+        setFastCache('home_trending_feed', nextTrending, {
+          localData: compactMixedFeedForCache(nextTrending, 24),
+          isFull: true,
+        });
+      }
+    }, []),
+  });
 
   const handleSortTabChange = async (nextMode: HomeSortMode) => {
     setSortMode(nextMode);

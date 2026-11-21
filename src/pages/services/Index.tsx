@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -30,6 +30,7 @@ import {
   saveRouteViewState,
 } from '../../lib/feedScrollState';
 import { buildMixedServicesAndStoresFeed } from '../../lib/servicesFeedHelpers';
+import { reconcileServicesAndStoresSlices } from '../../lib/backgroundSync';
 import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
@@ -38,11 +39,14 @@ import {
   touchFastCache,
 } from '../../lib/fastCache';
 import {
+  getEntityContentSignature,
   getNewestCreatedAtMs,
+  haveListsDiverged,
   mergeDeltaEntities,
   primeLegacyServiceIntoCache,
   resolveSyncStrategy,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import { Product, Service, Store } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
@@ -384,6 +388,68 @@ export function ServicesIndex() {
   useEffect(() => {
     void loadServices();
   }, [loadServices]);
+
+  const productServicesRef = useRef(productServices);
+  productServicesRef.current = productServices;
+  const legacyServicesRef = useRef(legacyServices);
+  legacyServicesRef.current = legacyServices;
+  const storesRef = useRef(stores);
+  storesRef.current = stores;
+
+  useBackgroundSync({
+    enabled: true,
+    onTick: useCallback(async ({ tickIndex, reason }) => {
+      const res = await reconcileServicesAndStoresSlices({
+        cachedProductServices: productServicesRef.current,
+        cachedLegacyServices: legacyServicesRef.current,
+        cachedStores: storesRef.current,
+        tickIndex,
+        forceHeadCheck: reason === 'resume',
+      });
+
+      if (res.servicesChanged) {
+        const prodChanged = haveListsDiverged(
+          productServicesRef.current,
+          res.productServices,
+          getEntityContentSignature
+        );
+        const legacyChanged = haveListsDiverged(
+          legacyServicesRef.current,
+          res.legacyServices,
+          getEntityContentSignature
+        );
+        if (prodChanged || legacyChanged) {
+          setProductServices(res.productServices);
+          setLegacyServices(res.legacyServices);
+          setFastCache(
+            'services_feed',
+            {
+              productServices: res.productServices,
+              legacyServices: res.legacyServices,
+            },
+            {
+              localData: {
+                productServices: compactListingsForCache(res.productServices, 24),
+                legacyServices: compactListingsForCache(res.legacyServices, 24),
+              },
+              isFull: true,
+            }
+          );
+        }
+      }
+
+      if (
+        res.storesChanged &&
+        haveListsDiverged(storesRef.current, res.stores, getEntityContentSignature)
+      ) {
+        setStores(res.stores);
+        setFastCache('approved_stores', res.stores, {
+          localData: compactListingsForCache(res.stores, 24),
+          isFull: true,
+        });
+      }
+    }, []),
+  });
 
   const mixedEntries = useMemo(
     () =>

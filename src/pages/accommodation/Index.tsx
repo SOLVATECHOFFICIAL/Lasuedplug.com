@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigationType } from 'react-router-dom';
 import {
   Building2,
@@ -13,6 +13,7 @@ import {
   fetchApprovedAccommodationsDelta,
   primeAccommodationsIntoCache,
 } from '../../lib/accommodationService';
+import { reconcileAccommodationsSlice } from '../../lib/backgroundSync';
 import {
   ACCOMMODATION_PRICE_RANGES,
   ACCOMMODATION_TYPE_OPTIONS,
@@ -29,10 +30,13 @@ import {
   touchFastCache,
 } from '../../lib/fastCache';
 import {
+  getEntityContentSignature,
   getNewestCreatedAtMs,
+  haveListsDiverged,
   mergeDeltaEntities,
   resolveSyncStrategy,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import {
   buildRouteKey,
   getSavedRouteViewState,
@@ -187,6 +191,34 @@ export function AccommodationIndex() {
   useEffect(() => {
     void loadAccommodations();
   }, [loadAccommodations]);
+
+  const accommodationsRef = useRef(accommodations);
+  accommodationsRef.current = accommodations;
+
+  useBackgroundSync({
+    enabled: true,
+    onTick: useCallback(async ({ tickIndex, reason }) => {
+      const res = await reconcileAccommodationsSlice({
+        cachedItems: accommodationsRef.current,
+        tickIndex,
+        forceHeadCheck: reason === 'resume',
+      });
+      if (!res.changed) return;
+      if (
+        haveListsDiverged(
+          accommodationsRef.current,
+          res.items,
+          getEntityContentSignature
+        )
+      ) {
+        setAccommodations(res.items);
+        setFastCache('accommodations_feed', res.items, {
+          localData: compactListingsForCache(res.items, 24),
+          isFull: true,
+        });
+      }
+    }, []),
+  });
 
   const filteredListings = useMemo(
     () =>

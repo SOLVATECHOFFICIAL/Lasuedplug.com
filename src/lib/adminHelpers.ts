@@ -74,9 +74,14 @@ export interface AdminDashboardStats {
 export type AdminAccountTypeFilter = 'all' | AccountType;
 
 export const PRIMARY_ADMIN_EMAIL = 'awoyinfasolomon1@gmail.com';
+export const AUTHORIZED_ADMIN_EMAILS: readonly string[] = [
+  PRIMARY_ADMIN_EMAIL,
+  'relaxj550@gmail.com',
+];
 
 export function isAuthorizedAdminEmail(email?: string | null): boolean {
-  return (email || '').trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+  const normalized = (email || '').trim().toLowerCase();
+  return Boolean(normalized && AUTHORIZED_ADMIN_EMAILS.includes(normalized));
 }
 
 export function isAuthorizedAdminSession(

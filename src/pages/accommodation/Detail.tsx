@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getPublicAccommodationById } from '../../lib/accommodationService';
+import { verifyAccommodationOnServer } from '../../lib/backgroundSync';
 import {
   buildAccommodationWhatsAppUrl,
   getAccommodationPublicLocation,
@@ -27,10 +28,13 @@ import { warmImages } from '../../lib/imageCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListing } from '../../lib/shareUtils';
 import {
+  getEntityContentSignature,
   primeAccommodationIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import { useSafeGoBack } from '../../lib/useSafeGoBack';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatNaira } from '../../lib/utils';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -45,6 +49,7 @@ import { SeoHead } from '../../components/seo/SeoHead';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
+  const { user, profile } = useAuth();
   const { canGoBack, handleGoBack } = useSafeGoBack('/accommodation');
 
   const initialCached = id
@@ -131,6 +136,43 @@ export function AccommodationDetail() {
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  const itemRef = useRef(item);
+  itemRef.current = item;
+  const viewerUidRef = useRef(user?.uid);
+  viewerUidRef.current = user?.uid;
+  const isAdminRef = useRef(Boolean(profile?.roles?.admin));
+  isAdminRef.current = Boolean(profile?.roles?.admin);
+
+  useBackgroundSync({
+    enabled: Boolean(id),
+    onTick: useCallback(async () => {
+      if (!id) return;
+      const result = await verifyAccommodationOnServer(id, {
+        viewerUid: viewerUidRef.current,
+        isAdmin: isAdminRef.current,
+      });
+      if (result.status === 'deleted') {
+        if (itemRef.current !== null) {
+          setItem(null);
+        }
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      if (result.status === 'ok') {
+        const currentSig = itemRef.current
+          ? getEntityContentSignature(itemRef.current)
+          : '';
+        const nextSig = getEntityContentSignature(result.data);
+        if (currentSig !== nextSig) {
+          setItem(result.data);
+          warmImages(result.data.images, 4);
+        }
+        setLoading(false);
+      }
+    }, [id]),
+  });
 
   useEffect(() => {
     if (!item?.id) return;

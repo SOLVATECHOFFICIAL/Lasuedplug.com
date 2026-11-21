@@ -256,6 +256,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!isMounted) return;
             initialSnapshotHandled = true;
             if (!snap.exists()) {
+              if (!snap.metadata.fromCache) {
+                invalidateFastCache(`user_profile:${firebaseUser.uid}`);
+                setProfile(null);
+              }
               setLoading(false);
               return;
             }
@@ -487,6 +491,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const verified = Boolean(credential.user.emailVerified);
+      if (verified) {
+        try {
+          await credential.user.getIdToken(true);
+        } catch {
+          // Non-blocking token refresh
+        }
+      }
       setIsEmailVerified(verified);
 
       if (db) {
@@ -562,6 +573,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await reload(auth.currentUser);
     const verified = Boolean(auth.currentUser.emailVerified);
+    if (verified) {
+      try {
+        await auth.currentUser.getIdToken(true);
+      } catch {
+        // Non-blocking token refresh
+      }
+    }
     setUser(auth.currentUser);
     setIsEmailVerified(verified);
     if (verified && db) {

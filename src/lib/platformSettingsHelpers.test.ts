@@ -66,6 +66,25 @@ test('shouldShowMaintenanceScreen blocks public users when active, allows verifi
   assert.equal(
     shouldShowMaintenanceScreen({
       maintenanceMode: true,
+      pathname: '/marketplace',
+      user: { email: 'relaxj550@gmail.com', emailVerified: true },
+    }),
+    false
+  );
+
+  assert.equal(
+    shouldShowMaintenanceScreen({
+      maintenanceMode: true,
+      pathname: '/marketplace',
+      user: { email: 'db-admin@lasued.edu.ng', emailVerified: true },
+      profile: { roles: { admin: true } },
+    }),
+    false
+  );
+
+  assert.equal(
+    shouldShowMaintenanceScreen({
+      maintenanceMode: true,
       pathname: '/login',
       user: null,
     }),

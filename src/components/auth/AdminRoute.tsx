@@ -39,7 +39,10 @@ export function AdminRoute({ children }: AdminRouteProps) {
         hasAdminRole || (user && isAuthorizedAdminSession(user))
       )
     );
-  }, [hasAdminRole, user, user?.emailVerified]);
+    if (user && canAccessAdmin) {
+      void user.getIdToken(true).catch(() => {});
+    }
+  }, [hasAdminRole, canAccessAdmin, user, user?.emailVerified]);
 
   useEffect(() => {
     if (!loading && user && !canAccessAdmin && !deniedToastShownRef.current) {
@@ -67,7 +70,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
       try {
         await sendEmailVerification(user);
         showToast(
-          `Verification link sent to ${PRIMARY_ADMIN_EMAIL}. Check your inbox or spam folder.`,
+          `Verification link sent to ${user.email || PRIMARY_ADMIN_EMAIL}. Check your inbox or spam folder.`,
           'success'
         );
       } catch (err) {
@@ -122,7 +125,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               For maximum security, only a verified{' '}
               <span className="font-semibold text-slate-900 dark:text-white">
-                {PRIMARY_ADMIN_EMAIL}
+                {user.email || PRIMARY_ADMIN_EMAIL}
               </span>{' '}
               session can access the Admin Console.
             </p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
+import { verifySellerProfileOnServer } from '../../lib/backgroundSync';
 import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
@@ -29,7 +30,12 @@ import {
   getPublicUserProfile,
 } from '../../lib/sellerService';
 import { getApprovedStoresByOwner } from '../../lib/storeService';
-import { DETAIL_FRESH_MS } from '../../lib/syncCache';
+import {
+  DETAIL_FRESH_MS,
+  getEntityContentSignature,
+  haveListsDiverged,
+} from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -190,6 +196,79 @@ export function SellerProfile() {
   useEffect(() => {
     void loadSellerProfile();
   }, [loadSellerProfile]);
+
+  const sellerRef = useRef(seller);
+  sellerRef.current = seller;
+  const storesRef = useRef(stores);
+  storesRef.current = stores;
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const reviewsRef = useRef(reviews);
+  reviewsRef.current = reviews;
+
+  useBackgroundSync({
+    enabled: Boolean(uid),
+    onTick: useCallback(async () => {
+      if (!uid) return;
+      const result = await verifySellerProfileOnServer(uid, {
+        currentStoreCount: storesRef.current.length,
+        currentProductCount: productsRef.current.length,
+        currentReviewCount: reviewsRef.current.length,
+        currentStores: storesRef.current,
+        currentProducts: productsRef.current,
+        currentReviews: reviewsRef.current,
+      });
+
+      if (result.status === 'deleted') {
+        if (sellerRef.current !== null) {
+          setSeller(null);
+          setStores([]);
+          setProducts([]);
+          setReviews([]);
+        }
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      if (result.status === 'ok') {
+        const next = result.data;
+        const sellerChanged =
+          JSON.stringify(sellerRef.current || null) !==
+          JSON.stringify(next.seller || null);
+        const storesChanged = haveListsDiverged(
+          storesRef.current,
+          next.stores,
+          getEntityContentSignature
+        );
+        const productsChanged = haveListsDiverged(
+          productsRef.current,
+          next.products,
+          getEntityContentSignature
+        );
+        const reviewsChanged =
+          reviewsRef.current.length !== next.reviews.length;
+
+        if (sellerChanged) setSeller(next.seller);
+        if (storesChanged) setStores(next.stores);
+        if (productsChanged) setProducts(next.products);
+        if (reviewsChanged) setReviews(next.reviews);
+
+        if (
+          sellerChanged ||
+          storesChanged ||
+          productsChanged ||
+          reviewsChanged
+        ) {
+          setFastCache(`seller_profile:${uid}`, next, {
+            idbOnly: true,
+            isFull: true,
+          });
+        }
+        setLoading(false);
+      }
+    }, [uid]),
+  });
 
   if (loading) {
     return (

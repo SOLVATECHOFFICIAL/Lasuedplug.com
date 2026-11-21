@@ -2,10 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // =========================================================================
     // HELPER FUNCTIONS
     // =========================================================================
@@ -24,16 +20,48 @@ service cloud.firestore {
         && docId.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function hasAdminEmailToken() {
+      return 'email' in request.auth.token
+        && request.auth.token.email is string
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.email.lower() in [
+          'awoyinfasolomon1@gmail.com',
+          'relaxj550@gmail.com'
+        ];
+    }
+
+    function hasAdminClaim() {
+      return request.auth.token.get('admin', false) == true
+        || (
+          request.auth.token.get('role', '') is string
+          && request.auth.token.get('role', '').lower() == 'admin'
+        );
+    }
+
+    function isAdminDocData(userData) {
+      return (
+        'roles' in userData
+        && userData.roles is map
+        && userData.roles.get('admin', false) == true
+      )
+      || (
+        userData.get('role', '') is string
+        && userData.get('role', '').lower() == 'admin'
+      )
+      || userData.get('isAdmin', false) == true
+      || userData.get('admin', false) == true;
+    }
+
+    function hasAdminUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && isAdminDocData(get(/databases/$(database)/documents/users/$(request.auth.uid)).data);
+    }
+
     function isAdmin() {
       return isSignedIn() && (
-        (
-          request.auth.token.get('email', '').lower() == 'awoyinfasolomon1@gmail.com'
-          && request.auth.token.get('email_verified', false) == true
-        )
-        || (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roles', {}).get('admin', false) == true
-        )
+        hasAdminClaim()
+        || hasAdminEmailToken()
+        || hasAdminUserDoc()
       );
     }
 
@@ -92,6 +120,14 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // ADMIN GOD-MODE OVERRIDE (Full read/write/delete across entire database)
+    // Once authenticated as Admin, every Admin Dashboard action succeeds here.
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
     // USERS & LEGACY USER SUBCOLLECTIONS
     // =========================================================================
     match /users/{userId} {
@@ -147,7 +183,7 @@ service cloud.firestore {
       match /notifications/{notifId} {
         allow read: if (isNotSuspended() && isOwner(userId)) || isAdmin();
         allow update, delete: if (isNotSuspended() && isOwner(userId)) || isAdmin();
-        allow create: if isNotSuspended();
+        allow create: if isNotSuspended() || isAdmin();
       }
     }
 
@@ -466,12 +502,14 @@ service cloud.firestore {
       allow list: if isAdmin()
         || (isNotSuspended() && resource.data.userId == request.auth.uid);
 
-      allow create: if isValidId(favId)
+      allow create: if isAdmin() || (
+        isValidId(favId)
         && isNotSuspended()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.listingId is string
         && request.resource.data.listingId.size() > 0
-        && request.resource.data.listingId.size() <= 128;
+        && request.resource.data.listingId.size() <= 128
+      );
 
       allow update, delete: if isAdmin()
         || (isNotSuspended() && resource.data.userId == request.auth.uid);
@@ -533,14 +571,16 @@ service cloud.firestore {
         )
       );
 
-      allow create: if isValidId(id)
+      allow create: if isAdmin() || (
+        isValidId(id)
         && isNotSuspended()
         && request.resource.data.buyerId == request.auth.uid
         && request.resource.data.listingId is string
         && request.resource.data.listingId.size() > 0
         && request.resource.data.listingId.size() <= 128
         && request.resource.data.get('listingTitle', '') is string
-        && request.resource.data.get('listingTitle', '').size() <= 250;
+        && request.resource.data.get('listingTitle', '').size() <= 250
+      );
 
       allow update, delete: if isAdmin();
     }
@@ -551,7 +591,8 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if true;
 
-      allow create: if isValidId(reviewId)
+      allow create: if isAdmin() || (
+        isValidId(reviewId)
         && isNotSuspended()
         && request.resource.data.reviewerId == request.auth.uid
         && request.resource.data.targetType in ['user', 'store']
@@ -567,7 +608,8 @@ service cloud.firestore {
         && (
           request.resource.data.targetType != 'user'
           || request.resource.data.targetId != request.auth.uid
-        );
+        )
+      );
 
       allow update: if isAdmin()
         || (
@@ -592,7 +634,8 @@ service cloud.firestore {
     // REPORTS (Content & User Moderation Reports)
     // =========================================================================
     match /reports/{id} {
-      allow create: if isValidId(id)
+      allow create: if isAdmin() || (
+        isValidId(id)
         && isNotSuspended()
         && request.resource.data.reporterId == request.auth.uid
         && request.resource.data.targetType in [
@@ -609,7 +652,8 @@ service cloud.firestore {
         && request.resource.data.reason is string
         && request.resource.data.reason.size() >= 5
         && request.resource.data.reason.size() <= 2000
-        && request.resource.data.get('status', 'open') == 'open';
+        && request.resource.data.get('status', 'open') == 'open'
+      );
 
       allow read, update, delete: if isAdmin();
     }
@@ -644,7 +688,8 @@ service cloud.firestore {
       allow get, list: if isAdmin()
         || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid);
 
-      allow create: if isValidId(id)
+      allow create: if isAdmin() || (
+        isValidId(id)
         && (!isSignedIn() || !isSuspendedUser())
         && (
           !('userId' in request.resource.data)
@@ -656,7 +701,8 @@ service cloud.firestore {
         && request.resource.data.details is string
         && request.resource.data.details.size() >= 10
         && request.resource.data.details.size() <= 1500
-        && request.resource.data.get('status', 'new') == 'new';
+        && request.resource.data.get('status', 'new') == 'new'
+      );
 
       allow update, delete: if isAdmin();
     }

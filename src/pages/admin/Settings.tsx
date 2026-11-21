@@ -40,7 +40,21 @@ export function AdminSettings() {
     const nextValue = !maintenanceMode;
     setSaving(true);
     try {
-      await updateMaintenanceMode(nextValue, user?.email);
+      try {
+        await updateMaintenanceMode(nextValue, user?.email);
+      } catch (firstErr) {
+        const code =
+          firstErr && typeof firstErr === 'object' && 'code' in firstErr
+            ? String((firstErr as { code?: unknown }).code || '')
+            : '';
+        if (code === 'permission-denied' && user) {
+          await user.reload().catch(() => {});
+          await user.getIdToken(true);
+          await updateMaintenanceMode(nextValue, user.email);
+        } else {
+          throw firstErr;
+        }
+      }
       setMaintenanceMode(nextValue);
       showToast(
         nextValue

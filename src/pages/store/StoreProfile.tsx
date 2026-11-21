@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
+import { verifyStoreProfileOnServer } from '../../lib/backgroundSync';
 import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
@@ -31,7 +32,13 @@ import {
   getApprovedProductsByStoreId,
   getStoreById,
 } from '../../lib/storeService';
-import { DETAIL_FRESH_MS, primeStoreIntoCache } from '../../lib/syncCache';
+import {
+  DETAIL_FRESH_MS,
+  getEntityContentSignature,
+  haveListsDiverged,
+  primeStoreIntoCache,
+} from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -227,6 +234,82 @@ export function StoreProfile() {
   useEffect(() => {
     void loadStoreProfile();
   }, [loadStoreProfile]);
+
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const ownerProfileRef = useRef(ownerProfile);
+  ownerProfileRef.current = ownerProfile;
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const reviewsRef = useRef(reviews);
+  reviewsRef.current = reviews;
+  const viewerUidRef = useRef(user?.uid);
+  viewerUidRef.current = user?.uid;
+  const isAdminRef = useRef(Boolean(currentUserProfile?.roles?.admin));
+  isAdminRef.current = Boolean(currentUserProfile?.roles?.admin);
+
+  useBackgroundSync({
+    enabled: Boolean(id),
+    onTick: useCallback(async ({ tickIndex }) => {
+      if (!id) return;
+      const result = await verifyStoreProfileOnServer(id, {
+        viewerUid: viewerUidRef.current,
+        isAdmin: isAdminRef.current,
+        currentProductCount: productsRef.current.length,
+        currentReviewCount: reviewsRef.current.length,
+        tickIndex,
+        currentOwnerProfile: ownerProfileRef.current,
+        currentProducts: productsRef.current,
+        currentReviews: reviewsRef.current,
+      });
+
+      if (result.status === 'deleted') {
+        if (storeRef.current !== null) {
+          setStore(null);
+          setOwnerProfile(null);
+          setProducts([]);
+          setReviews([]);
+        }
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      if (result.status === 'ok') {
+        const next = result.data;
+        const storeChanged =
+          !storeRef.current ||
+          getEntityContentSignature(storeRef.current) !==
+            getEntityContentSignature(next.store);
+        const ownerChanged =
+          JSON.stringify(ownerProfileRef.current || null) !==
+          JSON.stringify(next.ownerProfile || null);
+        const productsChanged = haveListsDiverged(
+          productsRef.current,
+          next.products,
+          getEntityContentSignature
+        );
+        const reviewsChanged =
+          reviewsRef.current.length !== next.reviews.length;
+
+        if (storeChanged) setStore(next.store);
+        if (ownerChanged) setOwnerProfile(next.ownerProfile);
+        if (productsChanged) setProducts(next.products);
+        if (reviewsChanged) setReviews(next.reviews);
+
+        if (
+          next.store.isApproved &&
+          (storeChanged || ownerChanged || productsChanged || reviewsChanged)
+        ) {
+          setFastCache(`store_profile:${id}`, next, {
+            idbOnly: true,
+            isFull: true,
+          });
+        }
+        setLoading(false);
+      }
+    }, [id]),
+  });
 
   useEffect(() => {
     setSelectedStoreImageIndex(0);

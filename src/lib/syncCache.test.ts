@@ -8,22 +8,27 @@ import {
 } from './fastCache';
 import {
   claimSessionViewTrack,
+  clearCollectionFromAllCaches,
   DETAIL_FRESH_MS,
   FEED_FRESH_MS,
   FEED_FULL_RECONCILE_MS,
+  getEntityContentSignature,
   getNewestCreatedAtMs,
+  haveListsDiverged,
   isSyntheticSeedId,
   mergeDeltaEntities,
   mergeMixedFeedDelta,
   primeEntityRecord,
   primeProductIntoCache,
+  pruneDeletedIdsFromAllCaches,
+  replaceMixedFeedCollectionSlice,
   resetSessionViewMemoryForTests,
   resolveSyncStrategy,
   shouldSkipDetailNetworkFetch,
   SimpleStorageLike,
 } from './syncCache';
 import { MixedFeedItem } from './trendingHelpers';
-import { Product } from '../types';
+import { Accommodation, Product, Store } from '../types';
 
 function makeProduct(overrides: Partial<Product> = {}): Product {
   return {
@@ -268,4 +273,205 @@ describe('syncCache helpers', () => {
     assert.equal(claimSessionViewTrack('seed-item', fakeStorage), false);
     assert.equal(claimSessionViewTrack('item-2', fakeStorage), true);
   });
+
+  it('replaceMixedFeedCollectionSlice updates only the target collection slice', () => {
+    const prod = makeProduct({ id: 'p1', createdAt: { toMillis: () => 2000 } });
+    const store: Store = {
+      id: 'st1',
+      ownerId: 'u2',
+      name: 'Campus Cafe',
+      description: 'Food',
+      category: 'Food',
+      whatsappNumber: '2348011111111',
+      locationName: 'Gate',
+      isApproved: true,
+      isActive: true,
+      createdAt: { toMillis: () => 1500 },
+    };
+    const existing: MixedFeedItem[] = [
+      {
+        id: 'p1',
+        _type: 'item',
+        title: prod.title,
+        sellerId: prod.sellerId,
+        isVerified: true,
+        trustScore: 4,
+        reviewCount: 0,
+        contactCount: 0,
+        viewCount: 0,
+        createdAt: prod.createdAt,
+        searchHaystack: prod.title.toLowerCase(),
+        product: prod,
+      },
+      {
+        id: 'st1',
+        _type: 'store',
+        title: store.name,
+        sellerId: store.ownerId,
+        isVerified: true,
+        trustScore: 5,
+        reviewCount: 0,
+        contactCount: 0,
+        viewCount: 0,
+        createdAt: store.createdAt,
+        searchHaystack: store.name.toLowerCase(),
+        store,
+      },
+    ];
+
+    const updated = replaceMixedFeedCollectionSlice(existing, 'products', [], 80);
+    assert.deepEqual(
+      updated.map((x) => `${x._type}:${x.id}`),
+      ['store:st1']
+    );
+  });
+
+  it('haveListsDiverged detects field edits, deletions, and matches identical lists', () => {
+    const a = [makeProduct({ id: 'p1', title: 'Book A', price: 1000 })];
+    const same = [makeProduct({ id: 'p1', title: 'Book A', price: 1000 })];
+    const edited = [makeProduct({ id: 'p1', title: 'Book A', price: 1500 })];
+
+    assert.equal(haveListsDiverged(a, same, getEntityContentSignature), false);
+    assert.equal(haveListsDiverged(a, edited, getEntityContentSignature), true);
+    assert.equal(haveListsDiverged(a, [], getEntityContentSignature), true);
+  });
+
+  it('pruneDeletedIdsFromAllCaches removes deleted product across all feeds and detail cache', () => {
+    const p1 = makeProduct({ id: 'del-1' });
+    const p2 = makeProduct({ id: 'keep-2' });
+    primeProductIntoCache(p1, { isFull: true });
+    setFastCache('mkt_browse_default', [p1, p2], { isFull: true });
+    setFastCache('mkt_trending', [p1, p2], { isFull: true });
+    setFastCache(
+      'home_mixed_feed',
+      [
+        {
+          id: 'del-1',
+          _type: 'item',
+          title: p1.title,
+          sellerId: p1.sellerId,
+          isVerified: false,
+          trustScore: 0,
+          reviewCount: 0,
+          contactCount: 0,
+          viewCount: 0,
+          createdAt: p1.createdAt,
+          searchHaystack: p1.title.toLowerCase(),
+          product: p1,
+        },
+        {
+          id: 'keep-2',
+          _type: 'item',
+          title: p2.title,
+          sellerId: p2.sellerId,
+          isVerified: false,
+          trustScore: 0,
+          reviewCount: 0,
+          contactCount: 0,
+          viewCount: 0,
+          createdAt: p2.createdAt,
+          searchHaystack: p2.title.toLowerCase(),
+          product: p2,
+        },
+      ],
+      { isFull: true }
+    );
+
+    pruneDeletedIdsFromAllCaches('product', ['del-1']);
+
+    assert.equal(getFastCacheEnvelope('product:del-1', 0), null);
+    assert.deepEqual(
+      getFastCacheEnvelope<Product[]>('mkt_browse_default', 0)?.data.map((p) => p.id),
+      ['keep-2']
+    );
+    assert.deepEqual(
+      getFastCacheEnvelope<Product[]>('mkt_trending', 0)?.data.map((p) => p.id),
+      ['keep-2']
+    );
+    assert.deepEqual(
+      getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0)?.data.map(
+        (m) => m.id
+      ),
+      ['keep-2']
+    );
+  });
+
+  it('clearCollectionFromAllCaches empties accommodations while keeping stores in home feed', () => {
+    const acc: Accommodation = {
+      id: 'acc-1',
+      ownerId: 'u1',
+      type: 'self_con',
+      title: 'Lodge',
+      description: 'Clean',
+      rentPrice: 200000,
+      generalLocation: 'Epe',
+      amenities: [],
+      images: [],
+      whatsappNumber: '2348011111111',
+      isApproved: true,
+      isActive: true,
+      createdAt: { toMillis: () => 2000 },
+    };
+    const st: Store = {
+      id: 'st-1',
+      ownerId: 'u2',
+      name: 'Shop',
+      description: 'Desc',
+      category: 'Food',
+      whatsappNumber: '2348011111111',
+      locationName: 'Gate',
+      isApproved: true,
+      isActive: true,
+      createdAt: { toMillis: () => 1000 },
+    };
+    setFastCache('accommodations_feed', [acc], { isFull: true });
+    setFastCache(
+      'home_mixed_feed',
+      [
+        {
+          id: 'acc-1',
+          _type: 'accommodation',
+          title: 'Lodge',
+          sellerId: acc.ownerId,
+          isVerified: true,
+          trustScore: 5,
+          reviewCount: 0,
+          contactCount: 0,
+          viewCount: 0,
+          createdAt: acc.createdAt,
+          searchHaystack: 'lodge',
+          accommodation: acc,
+        },
+        {
+          id: 'st-1',
+          _type: 'store',
+          title: 'Shop',
+          sellerId: st.ownerId,
+          isVerified: true,
+          trustScore: 5,
+          reviewCount: 0,
+          contactCount: 0,
+          viewCount: 0,
+          createdAt: st.createdAt,
+          searchHaystack: 'shop',
+          store: st,
+        },
+      ],
+      { isFull: true }
+    );
+
+    clearCollectionFromAllCaches('accommodations');
+
+    assert.deepEqual(
+      getFastCacheEnvelope<Accommodation[]>('accommodations_feed', 0)?.data,
+      []
+    );
+    assert.deepEqual(
+      getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed', 0)?.data.map(
+        (m) => m.id
+      ),
+      ['st-1']
+    );
+  });
 });
+

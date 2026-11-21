@@ -276,6 +276,26 @@ export function invalidateFastCachePrefix(prefix: string): void {
   }
 }
 
+export function getFastCacheKeysWithPrefix(prefix: string): string[] {
+  const keys = new Set<string>();
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith(prefix)) {
+      keys.add(key);
+    }
+  }
+  const storage = getStorage();
+  if (storage) {
+    const fullPrefix = buildStorageKey(prefix);
+    for (let i = 0; i < storage.length; i += 1) {
+      const k = storage.key(i);
+      if (k && k.startsWith(fullPrefix)) {
+        keys.add(k.slice(CACHE_KEY_PREFIX.length));
+      }
+    }
+  }
+  return Array.from(keys);
+}
+
 export function clearAllFastCache(): void {
   memoryCache.clear();
   void idbClear();

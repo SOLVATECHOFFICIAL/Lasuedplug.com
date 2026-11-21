@@ -48,11 +48,14 @@ import {
 import { warmImages } from '../../lib/imageCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
+import { verifyProductOnServer } from '../../lib/backgroundSync';
 import {
   claimSessionViewTrack,
+  getEntityContentSignature,
   primeProductIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -70,7 +73,7 @@ import { SeoHead } from '../../components/seo/SeoHead';
 export function MarketplaceDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showToast } = useToast();
 
   const { canGoBack, handleGoBack } = useSafeGoBack('/marketplace');
@@ -159,6 +162,43 @@ export function MarketplaceDetail() {
   useEffect(() => {
     void loadProduct();
   }, [loadProduct]);
+
+  const productRef = useRef(product);
+  productRef.current = product;
+  const viewerUidRef = useRef(user?.uid);
+  viewerUidRef.current = user?.uid;
+  const isAdminRef = useRef(Boolean(profile?.roles?.admin));
+  isAdminRef.current = Boolean(profile?.roles?.admin);
+
+  useBackgroundSync({
+    enabled: Boolean(id),
+    onTick: useCallback(async () => {
+      if (!id) return;
+      const result = await verifyProductOnServer(id, {
+        viewerUid: viewerUidRef.current,
+        isAdmin: isAdminRef.current,
+      });
+      if (result.status === 'deleted') {
+        if (productRef.current !== null) {
+          setProduct(null);
+        }
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      if (result.status === 'ok') {
+        const currentSig = productRef.current
+          ? getEntityContentSignature(productRef.current)
+          : '';
+        const nextSig = getEntityContentSignature(result.data);
+        if (currentSig !== nextSig) {
+          setProduct(result.data);
+          warmImages(result.data.images, 4);
+        }
+        setLoading(false);
+      }
+    }, [id]),
+  });
 
   // Save recentlyViewed and increment viewCount once per browser session
   useEffect(() => {

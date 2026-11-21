@@ -36,6 +36,7 @@ import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getTimestampMillis } from '../../lib/homeHelpers';
 import { warmImages } from '../../lib/imageCache';
+import { reconcileRoommatesSlice } from '../../lib/backgroundSync';
 import {
   CACHE_HYDRATED_EVENT,
   getFastCache,
@@ -44,10 +45,13 @@ import {
   touchFastCache,
 } from '../../lib/fastCache';
 import {
+  getEntityContentSignature,
   getNewestCreatedAtMs,
+  haveListsDiverged,
   mergeDeltaEntities,
   resolveSyncStrategy,
 } from '../../lib/syncCache';
+import { useBackgroundSync } from '../../lib/useBackgroundSync';
 import {
   buildRouteKey,
   getSavedRouteViewState,
@@ -356,6 +360,51 @@ export function Roommates() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  const requestsRef = useRef(requests);
+  requestsRef.current = requests;
+  const selectedRequestRef = useRef(selectedRequest);
+  selectedRequestRef.current = selectedRequest;
+
+  useBackgroundSync({
+    enabled: true,
+    onTick: useCallback(async ({ tickIndex, reason }) => {
+      const res = await reconcileRoommatesSlice({
+        cachedItems: requestsRef.current,
+        tickIndex,
+        forceHeadCheck: reason === 'resume',
+      });
+      if (!res.changed) return;
+
+      if (
+        haveListsDiverged(
+          requestsRef.current,
+          res.items,
+          getEntityContentSignature
+        )
+      ) {
+        setRequests(res.items);
+        setFastCache('roommates_feed', res.items, {
+          localData: compactListingsForCache(res.items, 24),
+          isFull: true,
+        });
+      }
+
+      if (selectedRequestRef.current?.id) {
+        const updatedMatch = res.items.find(
+          (item) => item.id === selectedRequestRef.current?.id
+        );
+        if (!updatedMatch) {
+          setSelectedRequest(null);
+        } else if (
+          getEntityContentSignature(updatedMatch) !==
+          getEntityContentSignature(selectedRequestRef.current)
+        ) {
+          setSelectedRequest(updatedMatch);
+        }
+      }
+    }, []),
+  });
 
   useEffect(() => {
     if (profile?.phone && !whatsappNumber) {
