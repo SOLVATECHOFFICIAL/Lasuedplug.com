@@ -124,19 +124,128 @@ export function getSavedRouteViewState<T>(
   return undefined;
 }
 
+const ROUTE_TRAIL_STORAGE_KEY = 'lasuedplug_route_trail_v1';
+const MAX_ROUTE_TRAIL_ENTRIES = 30;
+let inAppRouteTrail: string[] = [];
+
+function readSessionTrail(): string[] {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) {
+      return [];
+    }
+    const raw = window.sessionStorage.getItem(ROUTE_TRAIL_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string' && item.startsWith('/'))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSessionTrail(trail: string[]): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) {
+      return;
+    }
+    window.sessionStorage.setItem(
+      ROUTE_TRAIL_STORAGE_KEY,
+      JSON.stringify(trail.slice(-MAX_ROUTE_TRAIL_ENTRIES))
+    );
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function ensureRouteTrailLoaded(): string[] {
+  if (inAppRouteTrail.length === 0) {
+    const persisted = readSessionTrail();
+    if (persisted.length > 0) {
+      inAppRouteTrail = persisted;
+    }
+  }
+  return inAppRouteTrail;
+}
+
+export function recordInAppRoute(
+  routeKey: string,
+  navigationType: 'POP' | 'PUSH' | 'REPLACE'
+): void {
+  if (!routeKey || !routeKey.startsWith('/')) return;
+  const trail = ensureRouteTrailLoaded();
+
+  if (navigationType === 'POP') {
+    const existingIndex = trail.lastIndexOf(routeKey);
+    if (existingIndex !== -1) {
+      inAppRouteTrail = trail.slice(0, existingIndex + 1);
+    } else if (trail.length > 1 && trail[trail.length - 1] !== routeKey) {
+      inAppRouteTrail = [...trail.slice(0, -1), routeKey];
+    } else if (trail.length === 0) {
+      inAppRouteTrail = [routeKey];
+    }
+  } else if (navigationType === 'REPLACE') {
+    if (trail.length === 0) {
+      inAppRouteTrail = [routeKey];
+    } else {
+      inAppRouteTrail = [...trail.slice(0, -1), routeKey];
+    }
+  } else {
+    if (trail[trail.length - 1] !== routeKey) {
+      inAppRouteTrail = [...trail, routeKey].slice(-MAX_ROUTE_TRAIL_ENTRIES);
+    }
+  }
+
+  writeSessionTrail(inAppRouteTrail);
+}
+
+export function getPreviousInAppRoute(currentRouteKey?: string): string | null {
+  const trail = ensureRouteTrailLoaded();
+  if (trail.length < 2) return null;
+
+  if (currentRouteKey) {
+    for (let i = trail.length - 1; i >= 1; i -= 1) {
+      if (trail[i] === currentRouteKey) {
+        for (let j = i - 1; j >= 0; j -= 1) {
+          if (trail[j] !== currentRouteKey) {
+            return trail[j];
+          }
+        }
+      }
+    }
+  }
+
+  for (let i = trail.length - 2; i >= 0; i -= 1) {
+    if (!currentRouteKey || trail[i] !== currentRouteKey) {
+      return trail[i];
+    }
+  }
+
+  return null;
+}
+
 export function hasInAppBackHistory(
   historyState: unknown = typeof window !== 'undefined'
     ? window.history.state
     : null,
-  locationKey?: string
+  locationKey?: string,
+  currentRouteKey?: string
 ): boolean {
   if (
     historyState &&
     typeof historyState === 'object' &&
     typeof (historyState as { idx?: unknown }).idx === 'number'
   ) {
-    return (historyState as { idx: number }).idx > 0;
+    if ((historyState as { idx: number }).idx > 0) {
+      return true;
+    }
+    return getPreviousInAppRoute(currentRouteKey) !== null;
   }
+
+  if (getPreviousInAppRoute(currentRouteKey) !== null) {
+    return true;
+  }
+
   return Boolean(locationKey && locationKey !== 'default');
 }
 
@@ -157,4 +266,5 @@ export function resetFeedScrollStateForTests(): void {
   scrollByHistoryKey.clear();
   scrollByRouteKey.clear();
   feedViewStateByKey.clear();
+  inAppRouteTrail = [];
 }

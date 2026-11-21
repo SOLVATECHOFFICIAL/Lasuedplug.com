@@ -40,6 +40,7 @@ import { AdminSettings } from './pages/admin/Settings';
 
 import { AboutPage } from './pages/static/About';
 import { SafetyPage } from './pages/static/Safety';
+import { SuggestionsPage } from './pages/static/Suggestions';
 import { TermsPage } from './pages/static/Terms';
 import { PrivacyPage } from './pages/static/Privacy';
 
@@ -209,9 +210,10 @@ export function AppRouter() {
         }
       />
 
-      {/* Legal & Trust */}
+      {/* Legal, Community & Trust */}
       <Route path="/about" element={<AboutPage />} />
       <Route path="/safety" element={<SafetyPage />} />
+      <Route path="/suggestions" element={<SuggestionsPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
 

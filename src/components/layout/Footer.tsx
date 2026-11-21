@@ -11,6 +11,7 @@ const FOOTER_LINKS = [
 
 const LEGAL_LINKS = [
   { name: 'About', path: '/about' },
+  { name: 'Suggestions', path: '/suggestions' },
   { name: 'Safety Rules', path: '/safety' },
   { name: 'Terms of Service', path: '/terms' },
   { name: 'Privacy Policy', path: '/privacy' },

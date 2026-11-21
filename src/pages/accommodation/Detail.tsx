@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Building2,
@@ -30,7 +30,7 @@ import {
   primeAccommodationIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
-import { hasInAppBackHistory } from '../../lib/feedScrollState';
+import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { formatNaira } from '../../lib/utils';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -45,12 +45,7 @@ import { SeoHead } from '../../components/seo/SeoHead';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const canGoBack = hasInAppBackHistory(
-    typeof window !== 'undefined' ? window.history.state : null,
-    location.key
-  );
+  const { canGoBack, handleGoBack } = useSafeGoBack('/accommodation');
 
   const initialCached = id
     ? getFastCache<Omit<Accommodation, 'exactAddress'>>(`accommodation:${id}`)
@@ -158,7 +153,15 @@ export function AccommodationDetail() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
+        </button>
         <Loading variant="skeleton" message="Loading accommodation details..." />
       </div>
     );
@@ -166,7 +169,15 @@ export function AccommodationDetail() {
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
+        </button>
         <ErrorState message={error} onRetry={() => void loadDetail()} />
       </div>
     );
@@ -200,9 +211,7 @@ export function AccommodationDetail() {
               type="button"
               variant="primary"
               size="sm"
-              onClick={() =>
-                canGoBack ? navigate(-1) : navigate('/accommodation')
-              }
+              onClick={handleGoBack}
             >
               {canGoBack ? 'Go Back' : 'Back to Accommodation'}
             </Button>
@@ -252,14 +261,8 @@ export function AccommodationDetail() {
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => {
-            if (canGoBack) {
-              navigate(-1);
-            } else {
-              navigate('/accommodation');
-            }
-          }}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>

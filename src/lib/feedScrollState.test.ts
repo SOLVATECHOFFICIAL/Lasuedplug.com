@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildRouteKey,
+  getPreviousInAppRoute,
   getSavedRouteScroll,
   getSavedRouteViewState,
   getScrollActionForNavigation,
   hasInAppBackHistory,
+  recordInAppRoute,
   resetFeedScrollStateForTests,
   saveRouteScroll,
   saveRouteViewState,
@@ -80,9 +82,29 @@ test('getScrollActionForNavigation resets on pathname change PUSH/REPLACE and re
 });
 
 test('hasInAppBackHistory distinguishes in-app navigation from direct landing', () => {
+  resetFeedScrollStateForTests();
   assert.equal(hasInAppBackHistory({ idx: 0 }, 'default'), false);
   assert.equal(hasInAppBackHistory({ idx: 0 }, 'abc'), false);
   assert.equal(hasInAppBackHistory({ idx: 2 }, 'abc'), true);
   assert.equal(hasInAppBackHistory(null, 'default'), false);
   assert.equal(hasInAppBackHistory(null, 'abc'), true);
+});
+
+test('in-app route trail tracks multi-step forward and back navigation cleanly', () => {
+  resetFeedScrollStateForTests();
+  recordInAppRoute('/', 'POP');
+  assert.equal(getPreviousInAppRoute('/'), null);
+
+  recordInAppRoute('/services?tab=stores', 'PUSH');
+  recordInAppRoute('/store/s-1', 'PUSH');
+  recordInAppRoute('/marketplace/p-1', 'PUSH');
+
+  assert.equal(getPreviousInAppRoute('/marketplace/p-1'), '/store/s-1');
+  assert.equal(hasInAppBackHistory({ idx: 0 }, 'k-any', '/marketplace/p-1'), true);
+
+  recordInAppRoute('/store/s-1', 'POP');
+  assert.equal(getPreviousInAppRoute('/store/s-1'), '/services?tab=stores');
+
+  recordInAppRoute('/services?tab=stores', 'POP');
+  assert.equal(getPreviousInAppRoute('/services?tab=stores'), '/');
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Clock,
@@ -53,7 +53,7 @@ import {
   primeProductIntoCache,
   shouldSkipDetailNetworkFetch,
 } from '../../lib/syncCache';
-import { hasInAppBackHistory } from '../../lib/feedScrollState';
+import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Product } from '../../types';
@@ -70,14 +70,10 @@ import { SeoHead } from '../../components/seo/SeoHead';
 export function MarketplaceDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const canGoBack = hasInAppBackHistory(
-    typeof window !== 'undefined' ? window.history.state : null,
-    location.key
-  );
+  const { canGoBack, handleGoBack } = useSafeGoBack('/marketplace');
 
   const initialProduct = id ? getFastCache<Product>(`product:${id}`) : null;
   const [product, setProduct] = useState<Product | null>(initialProduct);
@@ -231,7 +227,15 @@ export function MarketplaceDetail() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
+        </button>
         <Loading variant="skeleton" message="Loading listing details..." />
       </div>
     );
@@ -239,7 +243,15 @@ export function MarketplaceDetail() {
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
+        </button>
         <ErrorState message={error} onRetry={() => void loadProduct()} />
       </div>
     );
@@ -273,9 +285,7 @@ export function MarketplaceDetail() {
               type="button"
               variant="primary"
               size="sm"
-              onClick={() =>
-                canGoBack ? navigate(-1) : navigate('/marketplace')
-              }
+              onClick={handleGoBack}
             >
               {canGoBack ? 'Go Back' : 'Back to Marketplace'}
             </Button>
@@ -452,12 +462,12 @@ export function MarketplaceDetail() {
           type="button"
           onClick={() => {
             if (canGoBack) {
-              navigate(-1);
+              handleGoBack();
             } else {
               navigate(isServiceListing ? '/services' : '/marketplace');
             }
           }}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>

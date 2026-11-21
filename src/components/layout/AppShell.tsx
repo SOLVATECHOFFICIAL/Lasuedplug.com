@@ -11,6 +11,7 @@ import {
   buildRouteKey,
   getSavedRouteScroll,
   getScrollActionForNavigation,
+  recordInAppRoute,
   saveRouteScroll,
 } from '../../lib/feedScrollState';
 import { shouldShowMaintenanceScreen } from '../../lib/platformSettingsHelpers';
@@ -78,6 +79,9 @@ export function AppShell({ children }: AppShellProps) {
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
+    const routeKey = buildRouteKey(location.pathname, location.search);
+    recordInAppRoute(routeKey, navigationType);
+
     const pathnameChanged = prevPathnameRef.current !== location.pathname;
     prevPathnameRef.current = location.pathname;
 
@@ -92,19 +96,18 @@ export function AppShell({ children }: AppShellProps) {
 
     if (action === 'reset-top') {
       isRestoringScrollRef.current = false;
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      window.scrollTo(0, 0);
       const raf = window.requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+        window.scrollTo(0, 0);
       });
       return () => window.cancelAnimationFrame(raf);
     }
 
-    const routeKey = buildRouteKey(location.pathname, location.search);
     const savedY = getSavedRouteScroll(location.key, routeKey);
 
     if (typeof savedY !== 'number' || savedY <= 0) {
       isRestoringScrollRef.current = false;
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      window.scrollTo(0, 0);
       return;
     }
 
@@ -113,13 +116,21 @@ export function AppShell({ children }: AppShellProps) {
     let rafId: number | null = null;
     isRestoringScrollRef.current = true;
 
+    const cancelRestoreOnUserInput = () => {
+      cancelled = true;
+      isRestoringScrollRef.current = false;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+
+    window.addEventListener('wheel', cancelRestoreOnUserInput, { passive: true, once: true });
+    window.addEventListener('touchstart', cancelRestoreOnUserInput, { passive: true, once: true });
+
     const tryRestore = () => {
       if (cancelled) return;
-      window.scrollTo({
-        top: savedY,
-        left: 0,
-        behavior: 'instant' as ScrollBehavior,
-      });
+      window.scrollTo(0, savedY);
       const maxReachableY = Math.max(
         0,
         document.documentElement.scrollHeight - window.innerHeight
@@ -130,6 +141,8 @@ export function AppShell({ children }: AppShellProps) {
 
       if (settled || attempts >= 24) {
         isRestoringScrollRef.current = false;
+        window.removeEventListener('wheel', cancelRestoreOnUserInput);
+        window.removeEventListener('touchstart', cancelRestoreOnUserInput);
         return;
       }
 
@@ -141,6 +154,8 @@ export function AppShell({ children }: AppShellProps) {
     return () => {
       cancelled = true;
       isRestoringScrollRef.current = false;
+      window.removeEventListener('wheel', cancelRestoreOnUserInput);
+      window.removeEventListener('touchstart', cancelRestoreOnUserInput);
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
       }

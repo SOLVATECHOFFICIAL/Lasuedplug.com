@@ -81,6 +81,11 @@ export function AboutPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Link to="/suggestions">
+            <Button variant="outline" size="md">
+              Suggest Features
+            </Button>
+          </Link>
           <Link to="/safety">
             <Button variant="outline" size="md">
               Safety Rules

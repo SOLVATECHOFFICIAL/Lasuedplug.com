@@ -30,7 +30,7 @@ import {
 } from '../../lib/sellerService';
 import { getApprovedStoresByOwner } from '../../lib/storeService';
 import { DETAIL_FRESH_MS } from '../../lib/syncCache';
-import { hasInAppBackHistory } from '../../lib/feedScrollState';
+import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -53,10 +53,7 @@ export function SellerProfile() {
   const location = useLocation();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const canGoBack = hasInAppBackHistory(
-    typeof window !== 'undefined' ? window.history.state : null,
-    location.key
-  );
+  const { canGoBack, handleGoBack } = useSafeGoBack('/marketplace');
 
   interface CachedSellerProfile {
     seller: UserProfile;
@@ -195,12 +192,32 @@ export function SellerProfile() {
   }, [loadSellerProfile]);
 
   if (loading) {
-    return <Loading fullScreen message="Loading seller profile..." />;
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
+        </button>
+        <Loading message="Loading seller profile..." />
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
+        </button>
         <ErrorState message={error} onRetry={() => void loadSellerProfile()} />
       </div>
     );
@@ -263,14 +280,8 @@ export function SellerProfile() {
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => {
-            if (canGoBack) {
-              navigate(-1);
-            } else {
-              navigate('/marketplace');
-            }
-          }}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>

@@ -4,3 +4,4 @@ export const SITE_DOMAIN = "lasuedplug.com";
 export const SITE_TAGLINE = "Your campus marketplace for products, services & accommodation";
 export const SUPPORT_WHATSAPP = "2349049979183";
 export const SUPPORT_LINK = "https://wa.me/2349049979183?text=Hello%20LASUEDPLUG%20Support,%20I%20need%20help.";
+export const UPDATES_WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/DdRUGL68WgE2kECup1OZ87?s=cl&p=a&iam=2";

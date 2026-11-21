@@ -552,5 +552,25 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // =========================================================================
+    // COMMUNITY SUGGESTIONS & FEEDBACK
+    // =========================================================================
+    match /suggestions/{id} {
+      allow get, list: if isAdmin()
+        || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid);
+
+      allow create: if isValidId(id)
+        && (!isSignedIn() || !isSuspendedUser())
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 4
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.details is string
+        && request.resource.data.details.size() >= 10
+        && request.resource.data.details.size() <= 1500
+        && request.resource.data.get('status', 'new') == 'new';
+
+      allow update, delete: if isAdmin();
+    }
   }
 }

@@ -10,6 +10,7 @@ import {
   Download,
   Flag,
   LayoutDashboard,
+  Lightbulb,
   LogOut,
   Menu,
   ShieldCheck,
@@ -573,6 +574,16 @@ export function Navbar() {
                       <span>My Dashboard</span>
                     </Link>
 
+                    <Link
+                      to="/suggestions"
+                      role="menuitem"
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                    >
+                      <Lightbulb className="w-4 h-4" />
+                      <span>Suggestions &amp; Updates</span>
+                    </Link>
+
                     {showAdminConsoleLink && (
                       <Link
                         to="/admin"
@@ -760,6 +771,18 @@ export function Navbar() {
                   </Link>
                 );
               })}
+              <Link
+                to="/suggestions"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`px-4 py-3.5 rounded-xl text-base font-medium transition-colors duration-200 flex items-center gap-2.5 ${
+                  location.pathname === '/suggestions'
+                    ? 'text-blue-600 bg-primary-50 font-semibold'
+                    : 'text-slate-700 hover:text-blue-600 hover:bg-slate-50'
+                }`}
+              >
+                <Lightbulb className="w-4 h-4 shrink-0" />
+                <span>Suggestions &amp; Updates</span>
+              </Link>
             </nav>
           </div>
 

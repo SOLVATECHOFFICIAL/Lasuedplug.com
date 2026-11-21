@@ -32,7 +32,7 @@ import {
   getStoreById,
 } from '../../lib/storeService';
 import { DETAIL_FRESH_MS, primeStoreIntoCache } from '../../lib/syncCache';
-import { hasInAppBackHistory } from '../../lib/feedScrollState';
+import { useSafeGoBack } from '../../lib/useSafeGoBack';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -55,10 +55,7 @@ export function StoreProfile() {
   const location = useLocation();
   const { user, profile: currentUserProfile } = useAuth();
   const { showToast } = useToast();
-  const canGoBack = hasInAppBackHistory(
-    typeof window !== 'undefined' ? window.history.state : null,
-    location.key
-  );
+  const { canGoBack, handleGoBack } = useSafeGoBack('/services?tab=stores');
 
   interface CachedStoreProfile {
     store: Store;
@@ -247,12 +244,32 @@ export function StoreProfile() {
   }, [store, ownerProfile?.isVerified]);
 
   if (loading) {
-    return <Loading fullScreen message="Loading store profile..." />;
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
+        </button>
+        <Loading message="Loading store profile..." />
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-5">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
+        </button>
         <ErrorState message={error} onRetry={() => void loadStoreProfile()} />
       </div>
     );
@@ -331,14 +348,8 @@ export function StoreProfile() {
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => {
-            if (canGoBack) {
-              navigate(-1);
-            } else {
-              navigate('/services?tab=stores');
-            }
-          }}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
