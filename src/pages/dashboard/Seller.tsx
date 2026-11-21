@@ -37,7 +37,7 @@ import {
   UnifiedSellerListing,
 } from '../../lib/sellerHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   deleteUnifiedSellerListing,
   getAllSellerDashboardItems,
@@ -143,8 +143,15 @@ export function SellerDashboard() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const [listings, setListings] = useState<UnifiedSellerListing[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const initialCached = user?.uid
+    ? getFastCache<UnifiedSellerListing[]>(`seller_dash:${user.uid}`)
+    : null;
+  const [listings, setListings] = useState<UnifiedSellerListing[]>(
+    () => initialCached ?? []
+  );
+  const [loading, setLoading] = useState<boolean>(
+    () => Boolean(user?.uid) && !initialCached
+  );
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SellerTab>('all');
 
@@ -165,8 +172,6 @@ export function SellerDashboard() {
     }
   }, [authLoading, user, isProfileComplete, navigate, showToast]);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadListings = useCallback(async () => {
     if (!user?.uid) {
       setListings([]);
@@ -174,17 +179,26 @@ export function SellerDashboard() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<UnifiedSellerListing[]>(`seller_dash:${user.uid}`);
+    if (cached) {
+      setListings(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const data = await withLoadTimeout(getAllSellerDashboardItems(user.uid));
+      const data = await getAllSellerDashboardItems(user.uid);
       setListings(data);
+      setFastCache(`seller_dash:${user.uid}`, data);
     } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : 'Unable to load your dashboard listings.';
-      setError(message);
+      if (!cached) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Unable to load your dashboard listings.';
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }

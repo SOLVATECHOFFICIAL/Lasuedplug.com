@@ -40,7 +40,7 @@ import {
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
 import { getInitials } from '../../lib/authHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListingLink } from '../../lib/shareUtils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -60,9 +60,10 @@ export function MarketplaceDetail() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [product, setProduct] = useState<Product | null>(null);
+  const initialProduct = id ? getFastCache<Product>(`product:${id}`) : null;
+  const [product, setProduct] = useState<Product | null>(initialProduct);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(id) && !initialProduct);
   const [error, setError] = useState<string | null>(null);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -73,26 +74,35 @@ export function MarketplaceDetail() {
 
   const trackedViewForIdRef = useRef<string | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadProduct = useCallback(async () => {
     if (!id) {
       setProduct(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const cached = getFastCache<Product>(`product:${id}`);
+    if (cached) {
+      setProduct(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const row = await withLoadTimeout(getProductById(id));
+      const row = await getProductById(id);
       setProduct(row);
       setSelectedImageIndex(0);
+      if (row) {
+        setFastCache(`product:${id}`, row);
+      }
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to load product details. Please try again.';
-      setError(msg);
+      if (!cached) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load product details. Please try again.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

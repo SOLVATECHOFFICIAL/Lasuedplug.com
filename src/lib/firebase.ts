@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import {
+  CACHE_SIZE_UNLIMITED,
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
@@ -54,6 +55,7 @@ try {
       db = isNewApp
         ? initializeFirestore(app, {
             localCache: persistentLocalCache({
+              cacheSizeBytes: CACHE_SIZE_UNLIMITED,
               tabManager: persistentMultipleTabManager(),
             }),
             ignoreUndefinedProperties: true,

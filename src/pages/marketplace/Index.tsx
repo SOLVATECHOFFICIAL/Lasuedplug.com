@@ -30,7 +30,7 @@ import {
 } from '../../lib/aiSearchService';
 import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
-import { useLoadCap } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   getListingAdType,
   hasActiveMarketplaceFilters,
@@ -88,11 +88,19 @@ export function MarketplaceIndex() {
   const initialSort: SearchSortValue =
     initialSortParam === 'price_asc' ? 'price_asc' : 'newest';
 
-  const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
-  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [trendingProducts, setTrendingProducts] = useState<Product[]>(
+    () => getFastCache<Product[]>('mkt_trending') || []
+  );
+  const [trendingLoading, setTrendingLoading] = useState(
+    () => (getFastCache<Product[]>('mkt_trending') || []).length === 0
+  );
 
   const [rawSearchProducts, setRawSearchProducts] = useState<Product[]>([]);
-  const [browseProducts, setBrowseProducts] = useState<Product[]>([]);
+  const [browseProducts, setBrowseProducts] = useState<Product[]>(() =>
+    !initialQuery && !initialCategory
+      ? getFastCache<Product[]>('mkt_browse_default') || []
+      : []
+  );
   const [lastVisibleDoc, setLastVisibleDoc] =
     useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -108,21 +116,19 @@ export function MarketplaceIndex() {
   const [activeBrowseTab, setActiveBrowseTab] = useState<'items' | 'stores'>(() =>
     searchParams.get('tab') === 'stores' ? 'stores' : 'items'
   );
-  const [stores, setStores] = useState<Store[]>([]);
+  const [stores, setStores] = useState<Store[]>(
+    () => getFastCache<Store[]>('approved_stores') || []
+  );
   const [storesLoading, setStoresLoading] = useState(false);
   const [storesError, setStoresError] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() =>
+    !initialQuery && !initialCategory
+      ? (getFastCache<Product[]>('mkt_browse_default') || []).length === 0
+      : true
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useLoadCap(loading, () => {
-    setLoading(false);
-    setAiSearching(false);
-  });
-  useLoadCap(trendingLoading, () => setTrendingLoading(false));
-  useLoadCap(storesLoading, () => setStoresLoading(false));
-  useLoadCap(aiSearching, () => setAiSearching(false));
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const requestIdRef = useRef(0);
@@ -156,15 +162,24 @@ export function MarketplaceIndex() {
   }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, setSearchParams]);
 
   const loadStores = useCallback(async () => {
-    setStoresLoading(true);
+    const cachedStores = getFastCache<Store[]>('approved_stores');
+    if (cachedStores && cachedStores.length > 0) {
+      setStores(cachedStores);
+      setStoresLoading(false);
+    } else {
+      setStoresLoading(true);
+    }
     setStoresError(null);
     try {
       const list = await getApprovedStores();
       setStores(list);
+      setFastCache('approved_stores', list);
     } catch (err) {
-      setStoresError(
-        err instanceof Error ? err.message : 'Unable to load campus stores.'
-      );
+      if (!cachedStores || cachedStores.length === 0) {
+        setStoresError(
+          err instanceof Error ? err.message : 'Unable to load campus stores.'
+        );
+      }
     } finally {
       setStoresLoading(false);
     }
@@ -190,20 +205,23 @@ export function MarketplaceIndex() {
   useEffect(() => {
     let cancelled = false;
     async function loadTrending() {
-      setTrendingLoading(true);
+      const cached = getFastCache<Product[]>('mkt_trending');
+      if (!cached || cached.length === 0) {
+        setTrendingLoading(true);
+      }
       try {
         const rows = await fetchTrendingProducts(8);
         if (!cancelled) {
-          setTrendingProducts(
-            rows.filter(
-              (item) =>
-                item.categoryId !== 'accommodation' &&
-                getListingAdType(item) === 'item'
-            )
+          const clean = rows.filter(
+            (item) =>
+              item.categoryId !== 'accommodation' &&
+              getListingAdType(item) === 'item'
           );
+          setTrendingProducts(clean);
+          setFastCache('mkt_trending', clean);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && (!cached || cached.length === 0)) {
           setTrendingProducts([]);
         }
       } finally {
@@ -221,12 +239,22 @@ export function MarketplaceIndex() {
   // Load main grid: AI Search mode when searching, otherwise paginated browse mode (with PRODUCT_CATEGORIES filter)
   const loadInitialProducts = useCallback(async () => {
     const reqId = ++requestIdRef.current;
-    setLoading(true);
+    const trimmedQuery = debouncedSearch.trim();
+    const isDefaultBrowse = !trimmedQuery && !selectedCategory;
+    const cachedBrowse = isDefaultBrowse
+      ? getFastCache<Product[]>('mkt_browse_default')
+      : null;
+
+    if (cachedBrowse && cachedBrowse.length > 0) {
+      setBrowseProducts(cachedBrowse);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
     setLastVisibleDoc(null);
     setHasMore(false);
-
-    const trimmedQuery = debouncedSearch.trim();
 
     if (searchAbortRef.current) {
       searchAbortRef.current.abort();
@@ -305,22 +333,26 @@ export function MarketplaceIndex() {
         sortBy: 'newest',
       });
       if (reqId !== requestIdRef.current) return;
-      setBrowseProducts(
-        result.products.filter(
-          (item) =>
-            item.categoryId !== 'accommodation' &&
-            getListingAdType(item) === 'item'
-        )
+      const cleanProducts = result.products.filter(
+        (item) =>
+          item.categoryId !== 'accommodation' &&
+          getListingAdType(item) === 'item'
       );
+      setBrowseProducts(cleanProducts);
+      if (isDefaultBrowse) {
+        setFastCache('mkt_browse_default', cleanProducts);
+      }
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Failed to load marketplace listings. Please try again.';
-      setError(msg);
+      if (!cachedBrowse || cachedBrowse.length === 0) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Failed to load marketplace listings. Please try again.';
+        setError(msg);
+      }
     } finally {
       if (reqId === requestIdRef.current) {
         setLoading(false);

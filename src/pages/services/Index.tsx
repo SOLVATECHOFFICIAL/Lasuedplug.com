@@ -12,7 +12,7 @@ import { SERVICE_CATEGORIES, getCategoryName } from '../../lib/categories';
 import { fetchApprovedActiveServices } from '../../lib/marketplaceService';
 import { getLatestServices } from '../../lib/homeService';
 import { getListingAdType, getProductPriceDisplay } from '../../lib/marketplaceHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { Product, Service } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -99,23 +99,37 @@ const LegacyServiceCard = memo(function LegacyServiceCard({
 });
 
 export function ServicesIndex() {
-  const [productServices, setProductServices] = useState<Product[]>([]);
-  const [legacyServices, setLegacyServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialCached = getFastCache<{
+    productServices: Product[];
+    legacyServices: Service[];
+  }>('services_feed');
+
+  const [productServices, setProductServices] = useState<Product[]>(
+    () => initialCached?.productServices || []
+  );
+  const [legacyServices, setLegacyServices] = useState<Service[]>(
+    () => initialCached?.legacyServices || []
+  );
+  const [loading, setLoading] = useState(() => !initialCached);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadServices = useCallback(async () => {
-    setLoading(true);
+    const cached = getFastCache<{
+      productServices: Product[];
+      legacyServices: Service[];
+    }>('services_feed');
+    if (!cached) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const [serviceProducts, rawServices] = await withLoadTimeout(
-        Promise.all([fetchApprovedActiveServices(), getLatestServices(60)])
-      );
+      const [serviceProducts, rawServices] = await Promise.all([
+        fetchApprovedActiveServices(),
+        getLatestServices(60),
+      ]);
       const filteredServiceProducts = serviceProducts.filter(
         (item) => getListingAdType(item) === 'service'
       );
@@ -126,12 +140,18 @@ export function ServicesIndex() {
 
       setProductServices(filteredServiceProducts);
       setLegacyServices(uniqueLegacy);
+      setFastCache('services_feed', {
+        productServices: filteredServiceProducts,
+        legacyServices: uniqueLegacy,
+      });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load campus services right now.'
-      );
+      if (!cached) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to load campus services right now.'
+        );
+      }
     } finally {
       setLoading(false);
     }

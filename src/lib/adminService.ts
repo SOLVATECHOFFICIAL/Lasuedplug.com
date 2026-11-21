@@ -16,6 +16,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { invalidateFastCachePrefix } from './fastCache';
 import { getTimestampMillis } from './homeHelpers';
 import {
   AdminDashboardStats,
@@ -191,6 +192,13 @@ export async function approvePendingItem(item: PendingAdminItem): Promise<void> 
     await updateDoc(doc(db, item.collectionName, item.id), {
       isApproved: true,
     });
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('accommodations_');
+    invalidateFastCachePrefix('roommates_');
+    invalidateFastCachePrefix('approved_stores');
+    invalidateFastCachePrefix('admin_stats');
     if (item.ownerId) {
       await notifyListingApproved(
         item.ownerId,
@@ -216,6 +224,8 @@ export async function rejectPendingItem(item: PendingAdminItem): Promise<void> {
 
   try {
     await deleteDoc(doc(db, item.collectionName, item.id));
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('admin_stats');
     if (item.ownerId) {
       try {
         await createNotification(

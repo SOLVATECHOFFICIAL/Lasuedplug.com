@@ -6,7 +6,6 @@ import {
   subscribeToPlatformSettings,
   updateMaintenanceMode,
 } from '../../lib/platformSettingsService';
-import { useLoadCap } from '../../lib/loadTimeout';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Card } from '../../components/ui/Card';
 
@@ -17,8 +16,6 @@ export function AdminSettings() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  useLoadCap(loading, () => setLoading(false));
 
   useEffect(() => {
     const unsubscribe = subscribeToPlatformSettings(

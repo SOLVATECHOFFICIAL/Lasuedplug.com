@@ -17,7 +17,6 @@ import {
   fetchPendingVerificationRequests,
   rejectVerificationRequest,
 } from '../../lib/verificationService';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { VerificationRequest } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -33,13 +32,11 @@ export function AdminVerifications() {
   const [previewRequest, setPreviewRequest] =
     useState<VerificationRequest | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadPending = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await withLoadTimeout(fetchPendingVerificationRequests());
+      const data = await fetchPendingVerificationRequests();
       setRequests(data);
     } catch (err) {
       setError(

@@ -18,7 +18,7 @@ import {
   getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
 import { getInitials } from '../../lib/authHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListingLink } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
@@ -36,14 +36,15 @@ export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
   const { showToast } = useToast();
 
+  const initialCached = id
+    ? getFastCache<Omit<Accommodation, 'exactAddress'>>(`accommodation:${id}`)
+    : null;
   const [item, setItem] = useState<Omit<Accommodation, 'exactAddress'> | null>(
-    null
+    initialCached
   );
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
   const [error, setError] = useState<string | null>(null);
-
-  useLoadCap(loading, () => setLoading(false));
 
   const loadDetail = useCallback(async () => {
     if (!id) {
@@ -51,18 +52,31 @@ export function AccommodationDetail() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const cached = getFastCache<Omit<Accommodation, 'exactAddress'>>(
+      `accommodation:${id}`
+    );
+    if (cached) {
+      setItem(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const record = await withLoadTimeout(getPublicAccommodationById(id));
+      const record = await getPublicAccommodationById(id);
       setItem(record);
       setSelectedImageIndex(0);
+      if (record) {
+        setFastCache(`accommodation:${id}`, record);
+      }
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to load accommodation details. Please try again.';
-      setError(msg);
+      if (!cached) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load accommodation details. Please try again.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

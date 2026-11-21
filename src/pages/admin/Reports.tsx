@@ -25,7 +25,6 @@ import {
   suspendReportedUserAndResolve,
 } from '../../lib/adminService';
 import { formatNotificationTime } from '../../lib/notificationHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { Report } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -63,13 +62,11 @@ export function AdminReports() {
   );
   const [busyAction, setBusyAction] = useState<ModalActionKind | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadReports = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await withLoadTimeout(getEnrichedOpenReports());
+      const data = await getEnrichedOpenReports();
       setReports(data);
     } catch (err) {
       setError(

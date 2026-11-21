@@ -17,7 +17,7 @@ import {
   getSubcategoriesForCategory,
 } from '../../lib/categories';
 import { getListingAdType } from '../../lib/marketplaceHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, invalidateFastCache, invalidateFastCachePrefix } from '../../lib/fastCache';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -78,8 +78,6 @@ export function MarketplaceEdit() {
   const submittingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadListing = useCallback(async () => {
     if (!id) {
       setListing(null);
@@ -87,11 +85,19 @@ export function MarketplaceEdit() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<Product>(`product:${id}`);
+    if (!cached) {
+      setLoading(true);
+    }
     setLoadError(null);
     try {
-      const record = await withLoadTimeout(getProductById(id));
+      const record = await getProductById(id);
       setListing(record);
+      if (record && id) {
+        invalidateFastCache(`product:${id}`);
+        invalidateFastCachePrefix('home_');
+        invalidateFastCachePrefix('mkt_');
+      }
       if (record) {
         const adType = getListingAdType(record);
         setTitle(record.title || '');

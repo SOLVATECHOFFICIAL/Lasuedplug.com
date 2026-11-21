@@ -44,7 +44,7 @@ import {
   SUSPENDED_ACCOUNT_MESSAGE,
 } from '../lib/authHelpers';
 import { AccountType, UserProfile } from '../types';
-import { withLoadTimeout } from '../lib/loadTimeout';
+import { getFastCache, invalidateFastCache, setFastCache } from '../lib/fastCache';
 
 export interface ProfileUpdateFields {
   fullName: string;
@@ -151,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
           setProfile(data);
+          setFastCache(`user_profile:${uid}`, data);
           return data;
         }
         if (email && (await isEmailBannedInFirestore(email))) {
@@ -161,7 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       } catch (err) {
         console.warn('Failed to load user profile:', err);
-        setProfile(null);
         return null;
       }
     },
@@ -178,11 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let isMounted = true;
     let unsubscribeProfile: (() => void) | null = null;
-    const authSafetyTimer = setTimeout(() => {
-      if (isMounted) {
-        setLoading(false);
-      }
-    }, 2500);
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!isMounted) return;
@@ -192,7 +187,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!firebaseUser) {
-        clearTimeout(authSafetyTimer);
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -201,6 +195,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       suspensionToastUidRef.current = null;
       setUser(firebaseUser);
+
+      const cachedProfile = getFastCache<UserProfile>(`user_profile:${firebaseUser.uid}`);
+      if (cachedProfile && !isAccountSuspended(cachedProfile)) {
+        setProfile(cachedProfile);
+        setLoading(false);
+      }
 
       if (db) {
         unsubscribeProfile = onSnapshot(
@@ -212,10 +212,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ...(snap.data() as Omit<UserProfile, 'uid'>),
             };
             if (isAccountSuspended(liveProfile)) {
+              invalidateFastCache(`user_profile:${firebaseUser.uid}`);
               void handleSuspendedLogout(firebaseUser.uid);
               return;
             }
             setProfile(liveProfile);
+            setFastCache(`user_profile:${firebaseUser.uid}`, liveProfile);
           },
           (err) => {
             console.warn('Profile status listener warning:', err);
@@ -223,30 +225,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      const loadedProfile = await withLoadTimeout(
-        fetchUserProfile(firebaseUser.uid, firebaseUser.email),
-        2000,
-        null
-      );
+      const loadedProfile = await fetchUserProfile(firebaseUser.uid, firebaseUser.email);
 
       if (!isMounted) return;
       if (!auth?.currentUser) {
-        clearTimeout(authSafetyTimer);
         setLoading(false);
         return;
       }
 
       if (loadedProfile) {
         setProfile(loadedProfile);
+        setFastCache(`user_profile:${firebaseUser.uid}`, loadedProfile);
       }
 
-      clearTimeout(authSafetyTimer);
       setLoading(false);
     });
 
     return () => {
       isMounted = false;
-      clearTimeout(authSafetyTimer);
       unsubscribeAuth();
       if (unsubscribeProfile) {
         unsubscribeProfile();
@@ -332,6 +328,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    const prevUid = auth?.currentUser?.uid;
+    if (prevUid) {
+      invalidateFastCache(`user_profile:${prevUid}`);
+    }
     if (!auth) {
       setUser(null);
       setProfile(null);
@@ -467,10 +467,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (profile) {
           await setDoc(userRef, firestoreUpdates, { merge: true });
-          setProfile({
+          const nextProfile = {
             ...profile,
             ...localUpdates,
-          });
+          };
+          setProfile(nextProfile);
+          setFastCache(`user_profile:${user.uid}`, nextProfile);
         } else {
           const baseProfile = buildNewUserProfile({
             uid: user.uid,
@@ -484,11 +486,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ...firestoreUpdates,
           };
           await setDoc(userRef, fullDoc, { merge: true });
-          setProfile({
+          const nextProfile = {
             ...baseProfile,
             ...localUpdates,
             createdAt: nowLocal,
-          });
+          };
+          setProfile(nextProfile);
+          setFastCache(`user_profile:${user.uid}`, nextProfile);
         }
       } catch (err) {
         throw new Error(formatFirebaseAuthError(err));

@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
 import { shareListingLink } from '../../lib/shareUtils';
@@ -46,15 +46,29 @@ export function StoreProfile() {
   const { user, profile: currentUserProfile } = useAuth();
   const { showToast } = useToast();
 
-  const [store, setStore] = useState<Store | null>(null);
-  const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+  interface CachedStoreProfile {
+    store: Store;
+    ownerProfile: UserProfile | null;
+    products: Product[];
+    reviews: Review[];
+  }
+  const initialCached = id
+    ? getFastCache<CachedStoreProfile>(`store_profile:${id}`)
+    : null;
+
+  const [store, setStore] = useState<Store | null>(() => initialCached?.store ?? null);
+  const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(
+    () => initialCached?.ownerProfile ?? null
+  );
+  const [products, setProducts] = useState<Product[]>(
+    () => initialCached?.products ?? []
+  );
+  const [reviews, setReviews] = useState<Review[]>(
+    () => initialCached?.reviews ?? []
+  );
+  const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
   const [error, setError] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
-
-  useLoadCap(loading, () => setLoading(false));
 
   const loadStoreProfile = useCallback(async () => {
     if (!id) {
@@ -63,11 +77,20 @@ export function StoreProfile() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<CachedStoreProfile>(`store_profile:${id}`);
+    if (cached) {
+      setStore(cached.store);
+      setOwnerProfile(cached.ownerProfile);
+      setProducts(cached.products);
+      setReviews(cached.reviews);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      const storeRecord = await withLoadTimeout(getStoreById(id));
+      const storeRecord = await getStoreById(id);
       if (!storeRecord) {
         setStore(null);
         setOwnerProfile(null);
@@ -88,24 +111,32 @@ export function StoreProfile() {
         return;
       }
 
-      const [ownerData, storeProducts, storeReviews] = await withLoadTimeout(
-        Promise.all([
-          getPublicUserProfile(storeRecord.ownerId).catch(() => null),
-          getApprovedProductsByStoreId(id),
-          fetchReviewsForTarget(id, 'store'),
-        ])
-      );
+      const [ownerData, storeProducts, storeReviews] = await Promise.all([
+        getPublicUserProfile(storeRecord.ownerId).catch(() => null),
+        getApprovedProductsByStoreId(id),
+        fetchReviewsForTarget(id, 'store'),
+      ]);
 
       setStore(storeRecord);
       setOwnerProfile(ownerData);
       setProducts(storeProducts);
       setReviews(storeReviews);
+      if (storeRecord.isApproved) {
+        setFastCache(`store_profile:${id}`, {
+          store: storeRecord,
+          ownerProfile: ownerData,
+          products: storeProducts,
+          reviews: storeReviews,
+        });
+      }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load this campus store right now.'
-      );
+      if (!cached) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to load this campus store right now.'
+        );
+      }
     } finally {
       setLoading(false);
     }

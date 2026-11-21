@@ -17,7 +17,7 @@ import {
   countUnreadNotifications,
   formatNotificationTime,
 } from '../../lib/notificationHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AppNotification } from '../../types';
@@ -45,13 +45,16 @@ export function NotificationsIndex() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialCached = user?.uid
+    ? getFastCache<AppNotification[]>(`notifications:${user.uid}`)
+    : null;
+  const [notifications, setNotifications] = useState<AppNotification[]>(
+    () => initialCached ?? []
+  );
+  const [loading, setLoading] = useState(() => Boolean(user?.uid) && !initialCached);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [markingAll, setMarkingAll] = useState(false);
-
-  useLoadCap(loading, () => setLoading(false));
 
   const loadNotifications = useCallback(async () => {
     if (!user?.uid) {
@@ -60,15 +63,24 @@ export function NotificationsIndex() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<AppNotification[]>(`notifications:${user.uid}`);
+    if (cached) {
+      setNotifications(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const items = await withLoadTimeout(getUserNotifications(user.uid, 50));
+      const items = await getUserNotifications(user.uid, 50);
       setNotifications(items);
+      setFastCache(`notifications:${user.uid}`, items);
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Unable to load notifications.';
-      setError(msg);
+      if (!cached) {
+        const msg =
+          err instanceof Error ? err.message : 'Unable to load notifications.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

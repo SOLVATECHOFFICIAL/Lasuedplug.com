@@ -13,6 +13,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { invalidateFastCachePrefix } from './fastCache';
 import { buildFavoriteDocId, sortByCreatedAtDesc } from './buyerHelpers';
 import { SEED_PRODUCTS } from './homeHelpers';
 import { Enquiry, Favorite, Product } from '../types';
@@ -98,6 +99,7 @@ export async function toggleFavorite(
       } else {
         await deleteDoc(doc(db, 'favorites', deterministicId));
       }
+      invalidateFastCachePrefix(`buyer_dash:${userId}`);
       return false;
     }
 
@@ -108,6 +110,7 @@ export async function toggleFavorite(
       createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'favorites', deterministicId), payload);
+    invalidateFastCachePrefix(`buyer_dash:${userId}`);
     return true;
   } catch (err) {
     throw mapBuyerFirestoreError(err, 'Unable to update saved items right now.');

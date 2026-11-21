@@ -26,7 +26,6 @@ import {
   fetchPendingApprovals,
   rejectPendingItem,
 } from '../../lib/adminService';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { Button } from '../../components/ui/Button';
@@ -92,13 +91,11 @@ export function AdminListings() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PendingAdminItem | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadPending = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await withLoadTimeout(fetchPendingApprovals());
+      const data = await fetchPendingApprovals();
       setItems(data);
     } catch (err) {
       setError(

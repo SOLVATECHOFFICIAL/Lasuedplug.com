@@ -18,7 +18,7 @@ import {
   getPrimaryUserRoleBadge,
 } from '../../lib/adminHelpers';
 import { getAllUsers, updateUserAccountStatus } from '../../lib/adminService';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { UserProfile } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -30,8 +30,9 @@ export function AdminUsers() {
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialCached = getFastCache<UserProfile[]>('admin_users');
+  const [users, setUsers] = useState<UserProfile[]>(() => initialCached ?? []);
+  const [loading, setLoading] = useState(() => !initialCached);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || '');
   const [busyUid, setBusyUid] = useState<string | null>(null);
@@ -55,18 +56,22 @@ export function AdminUsers() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadUsers = useCallback(async () => {
-    setLoading(true);
+    const cached = getFastCache<UserProfile[]>('admin_users');
+    if (!cached) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const data = await withLoadTimeout(getAllUsers());
+      const data = await getAllUsers();
       setUsers(data);
+      setFastCache('admin_users', data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unable to load users list.'
-      );
+      if (!cached) {
+        setError(
+          err instanceof Error ? err.message : 'Unable to load users list.'
+        );
+      }
     } finally {
       setLoading(false);
     }

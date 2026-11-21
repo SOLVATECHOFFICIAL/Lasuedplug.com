@@ -2,7 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS ---
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
     function isSignedIn() {
       return request.auth != null;
     }
@@ -11,10 +13,24 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == ownerId;
     }
 
+    function isValidId(docId) {
+      return docId is string
+        && docId.size() > 0
+        && docId.size() <= 128
+        && docId.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
     function isAdmin() {
-      return isSignedIn()
-        && request.auth.token.get('email', '').lower() == 'awoyinfasolomon1@gmail.com'
-        && request.auth.token.get('email_verified', false) == true;
+      return isSignedIn() && (
+        (
+          request.auth.token.get('email', '').lower() == 'awoyinfasolomon1@gmail.com'
+          && request.auth.token.get('email_verified', false) == true
+        )
+        || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roles', {}).get('admin', false) == true
+        )
+      );
     }
 
     function isSuspendedUser() {
@@ -30,13 +46,34 @@ service cloud.firestore {
       return isSignedIn() && !isSuspendedUser();
     }
 
-    // --- USERS ---
-    // Public read so usernames/fullNames/profiles and seller info load without permission errors.
-    // Writes stay locked down so users can only edit their own safe profile fields (never isVerified/roles/status/email/isBanned).
+    function isValidCounterIncrement(field) {
+      return resource.data.isApproved == true
+        && (!isSignedIn() || !isSuspendedUser())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([field])
+        && request.resource.data[field] is number
+        && request.resource.data[field] == (
+          resource.data.get(field, 0) is number ? resource.data.get(field, 0) : 0
+        ) + 1;
+    }
+
+    function isValidTrustScoreUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustScore', 'reviewCount'])
+        && request.resource.data.trustScore is number
+        && request.resource.data.trustScore >= 0
+        && request.resource.data.trustScore <= 5
+        && request.resource.data.reviewCount is number
+        && request.resource.data.reviewCount >= 0;
+    }
+
+    // =========================================================================
+    // USERS & LEGACY USER SUBCOLLECTIONS
+    // =========================================================================
     match /users/{userId} {
       allow read: if true;
+
       allow create: if isAdmin() || (
-        isOwner(userId)
+        isValidId(userId)
+        && isOwner(userId)
         && request.resource.data.get('isVerified', false) == false
         && request.resource.data.get('status', 'active') == 'active'
         && request.resource.data.get('isBanned', false) == false
@@ -48,29 +85,35 @@ service cloud.firestore {
         && request.resource.data.get('uid', userId) == userId
         && request.resource.data.get('email', '').lower() == request.auth.token.get('email', '').lower()
       );
+
       allow update: if isAdmin()
         || (
           isOwner(userId)
           && !isSuspendedUser()
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified', 'roles', 'status', 'uid', 'email', 'isBanned', 'trustScore', 'reviewCount'])
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'isVerified',
+            'roles',
+            'status',
+            'uid',
+            'email',
+            'isBanned',
+            'trustScore',
+            'reviewCount'
+          ])
         )
         || (
           isNotSuspended()
           && request.auth.uid != userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustScore', 'reviewCount'])
-          && request.resource.data.trustScore is number
-          && request.resource.data.trustScore >= 0
-          && request.resource.data.trustScore <= 5
-          && request.resource.data.reviewCount is number
-          && request.resource.data.reviewCount >= 0
+          && isValidTrustScoreUpdate()
         );
+
       allow delete: if isAdmin();
 
-      // Legacy user-scoped subcollections
       match /favorites/{favId} {
         allow read: if (isNotSuspended() && isOwner(userId)) || isAdmin();
         allow write: if (isNotSuspended() && isOwner(userId)) || isAdmin();
       }
+
       match /notifications/{notifId} {
         allow read: if (isNotSuspended() && isOwner(userId)) || isAdmin();
         allow update, delete: if (isNotSuspended() && isOwner(userId)) || isAdmin();
@@ -78,25 +121,50 @@ service cloud.firestore {
       }
     }
 
-    // --- VERIFICATION REQUESTS ---
+    // =========================================================================
+    // VERIFICATION REQUESTS (Student ID / Fee Receipt)
+    // =========================================================================
     match /verification_requests/{requestId} {
-      allow get: if isAdmin() || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
-      allow list: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
-      allow create: if isNotSuspended()
+      allow get: if isAdmin()
+        || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
+      allow list: if isAdmin()
+        || (isNotSuspended() && resource.data.userId == request.auth.uid);
+
+      allow create: if isValidId(requestId)
+        && isNotSuspended()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'pending';
+        && request.resource.data.status == 'pending'
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 0
+        && request.resource.data.documentUrl is string
+        && request.resource.data.documentUrl.size() > 0;
+
       allow update, delete: if isAdmin();
     }
 
-    // --- PRODUCTS (Marketplace Items & Services) ---
+    // =========================================================================
+    // PRODUCTS (Marketplace Items & Services)
+    // =========================================================================
     match /products/{id} {
-      allow get: if resource == null || resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.sellerId)) || isAdmin();
-      allow list: if resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.sellerId)) || isAdmin();
+      allow get: if resource == null
+        || resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.sellerId))
+        || isAdmin();
+
+      allow list: if resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.sellerId))
+        || isAdmin();
+
       allow create: if isAdmin() || (
-        isNotSuspended()
+        isValidId(id)
+        && isNotSuspended()
         && request.resource.data.sellerId == request.auth.uid
         && request.resource.data.isApproved == false
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
       );
+
       allow update: if isAdmin()
         || (
           isNotSuspended()
@@ -110,32 +178,32 @@ service cloud.firestore {
             )
           )
         )
-        || (
-          resource.data.isApproved == true
-          && (!isSignedIn() || !isSuspendedUser())
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
-          && request.resource.data.viewCount is number
-          && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
-        )
-        || (
-          resource.data.isApproved == true
-          && (!isSignedIn() || !isSuspendedUser())
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
-          && request.resource.data.contactCount is number
-          && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
-        );
+        || isValidCounterIncrement('viewCount')
+        || isValidCounterIncrement('contactCount');
+
       allow delete: if (isNotSuspended() && isOwner(resource.data.sellerId)) || isAdmin();
     }
 
-    // --- SERVICES (Dedicated Services Collection) ---
+    // =========================================================================
+    // SERVICES (Legacy Dedicated Services Collection)
+    // =========================================================================
     match /services/{id} {
-      allow get: if resource == null || resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.providerId)) || isAdmin();
-      allow list: if resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.providerId)) || isAdmin();
+      allow get: if resource == null
+        || resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.providerId))
+        || isAdmin();
+
+      allow list: if resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.providerId))
+        || isAdmin();
+
       allow create: if isAdmin() || (
-        isNotSuspended()
+        isValidId(id)
+        && isNotSuspended()
         && request.resource.data.providerId == request.auth.uid
         && request.resource.data.isApproved == false
       );
+
       allow update: if isAdmin()
         || (
           isNotSuspended()
@@ -149,80 +217,116 @@ service cloud.firestore {
             )
           )
         )
-        || (
-          resource.data.isApproved == true
-          && (!isSignedIn() || !isSuspendedUser())
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
-          && request.resource.data.viewCount is number
-          && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
-        )
-        || (
-          resource.data.isApproved == true
-          && (!isSignedIn() || !isSuspendedUser())
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
-          && request.resource.data.contactCount is number
-          && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
-        );
+        || isValidCounterIncrement('viewCount')
+        || isValidCounterIncrement('contactCount');
+
       allow delete: if (isNotSuspended() && isOwner(resource.data.providerId)) || isAdmin();
     }
 
-    // --- ACCOMMODATIONS ---
+    // =========================================================================
+    // ACCOMMODATIONS
+    // =========================================================================
     match /accommodations/{id} {
-      allow get: if resource == null || resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
-      allow list: if resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
+      allow get: if resource == null
+        || resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.ownerId))
+        || isAdmin();
+
+      allow list: if resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.ownerId))
+        || isAdmin();
+
       allow create: if isAdmin() || (
-        isNotSuspended()
+        isValidId(id)
+        && isNotSuspended()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.isApproved == false
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
       );
-      allow update: if isAdmin() || (
-        isNotSuspended()
-        && isOwner(resource.data.ownerId)
-        && request.resource.data.ownerId == resource.data.ownerId
-        && (
-          request.resource.data.isApproved == false
-          || (
-            request.resource.data.isApproved == resource.data.isApproved
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+
+      allow update: if isAdmin()
+        || (
+          isNotSuspended()
+          && isOwner(resource.data.ownerId)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && (
+            request.resource.data.isApproved == false
+            || (
+              request.resource.data.isApproved == resource.data.isApproved
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+            )
           )
         )
-      );
+        || isValidCounterIncrement('viewCount')
+        || isValidCounterIncrement('contactCount');
+
       allow delete: if (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
     }
 
-    // --- ROOMMATE REQUESTS ---
+    // =========================================================================
+    // ROOMMATE REQUESTS
+    // =========================================================================
     match /roommate_requests/{id} {
-      allow get: if resource == null || resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.userId)) || isAdmin();
-      allow list: if resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.userId)) || isAdmin();
+      allow get: if resource == null
+        || resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.userId))
+        || isAdmin();
+
+      allow list: if resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.userId))
+        || isAdmin();
+
       allow create: if isAdmin() || (
-        isNotSuspended()
+        isValidId(id)
+        && isNotSuspended()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.isApproved == false
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
       );
-      allow update: if isAdmin() || (
-        isNotSuspended()
-        && isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId
-        && (
-          request.resource.data.isApproved == false
-          || (
-            request.resource.data.isApproved == resource.data.isApproved
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+
+      allow update: if isAdmin()
+        || (
+          isNotSuspended()
+          && isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId
+          && (
+            request.resource.data.isApproved == false
+            || (
+              request.resource.data.isApproved == resource.data.isApproved
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'status'])
+            )
           )
         )
-      );
+        || isValidCounterIncrement('viewCount')
+        || isValidCounterIncrement('contactCount');
+
       allow delete: if (isNotSuspended() && isOwner(resource.data.userId)) || isAdmin();
     }
 
-    // --- STORES ---
+    // =========================================================================
+    // CAMPUS STORES
+    // =========================================================================
     match /stores/{id} {
-      allow get: if resource == null || resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
-      allow list: if resource.data.isApproved == true || (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
+      allow get: if resource == null
+        || resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.ownerId))
+        || isAdmin();
+
+      allow list: if resource.data.isApproved == true
+        || (isNotSuspended() && isOwner(resource.data.ownerId))
+        || isAdmin();
+
       allow create: if isAdmin() || (
-        isNotSuspended()
+        isValidId(id)
+        && isNotSuspended()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.isApproved == false
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
       );
+
       allow update: if isAdmin()
         || (
           isNotSuspended()
@@ -240,44 +344,91 @@ service cloud.firestore {
           resource.data.isApproved == true
           && isNotSuspended()
           && request.auth.uid != resource.data.ownerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustScore', 'reviewCount'])
-          && request.resource.data.trustScore is number
-          && request.resource.data.trustScore >= 0
-          && request.resource.data.trustScore <= 5
-          && request.resource.data.reviewCount is number
-          && request.resource.data.reviewCount >= 0
-        );
+          && isValidTrustScoreUpdate()
+        )
+        || isValidCounterIncrement('viewCount')
+        || isValidCounterIncrement('contactCount');
+
       allow delete: if (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
     }
 
-    // --- FAVORITES (Top-level collection used by BuyerService) ---
+    // =========================================================================
+    // FAVORITES (Saved Listings)
+    // =========================================================================
     match /favorites/{favId} {
-      allow get: if isAdmin() || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
-      allow list: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
-      allow create: if isNotSuspended() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin()
+        || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
+      allow list: if isAdmin()
+        || (isNotSuspended() && resource.data.userId == request.auth.uid);
+
+      allow create: if isValidId(favId)
+        && isNotSuspended()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0;
+
+      allow update, delete: if isAdmin()
+        || (isNotSuspended() && resource.data.userId == request.auth.uid);
     }
 
-    // --- NOTIFICATIONS (Top-level collection used by NotificationService & Navbar) ---
+    // =========================================================================
+    // NOTIFICATIONS
+    // =========================================================================
     match /notifications/{notifId} {
-      allow get: if isAdmin() || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
-      allow list: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
-      allow create: if isAdmin() || (isNotSuspended() && request.resource.data.get('isRead', false) == false);
-      allow update, delete: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin()
+        || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
+      allow list: if isAdmin()
+        || (isNotSuspended() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        isValidId(notifId)
+        && isNotSuspended()
+        && request.resource.data.userId is string
+        && request.resource.data.userId.size() > 0
+        && request.resource.data.get('isRead', false) == false
+      );
+
+      allow update, delete: if isAdmin()
+        || (isNotSuspended() && resource.data.userId == request.auth.uid);
     }
 
-    // --- ENQUIRIES ---
+    // =========================================================================
+    // ENQUIRIES (WhatsApp Buyer <-> Seller History)
+    // =========================================================================
     match /enquiries/{id} {
-      allow get: if isAdmin() || (isNotSuspended() && (resource == null || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
-      allow list: if isAdmin() || (isNotSuspended() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
-      allow create: if isNotSuspended() && request.resource.data.buyerId == request.auth.uid;
+      allow get: if isAdmin() || (
+        isNotSuspended()
+        && (
+          resource == null
+          || resource.data.buyerId == request.auth.uid
+          || resource.data.sellerId == request.auth.uid
+        )
+      );
+      allow list: if isAdmin() || (
+        isNotSuspended()
+        && (
+          resource.data.buyerId == request.auth.uid
+          || resource.data.sellerId == request.auth.uid
+        )
+      );
+
+      allow create: if isValidId(id)
+        && isNotSuspended()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0;
+
       allow update, delete: if isAdmin();
     }
 
-    // --- REVIEWS ---
+    // =========================================================================
+    // REVIEWS (Trust Score & Ratings for Sellers and Stores)
+    // =========================================================================
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isNotSuspended()
+
+      allow create: if isValidId(reviewId)
+        && isNotSuspended()
         && request.resource.data.reviewerId == request.auth.uid
         && request.resource.data.targetType in ['user', 'store']
         && request.resource.data.targetId is string
@@ -287,29 +438,59 @@ service cloud.firestore {
         && request.resource.data.rating <= 5
         && request.resource.data.comment is string
         && request.resource.data.comment.size() >= 3
+        && request.resource.data.comment.size() <= 1500
         && (
           request.resource.data.targetType != 'user'
           || request.resource.data.targetId != request.auth.uid
         );
-      allow update, delete: if isAdmin() || (isNotSuspended() && resource.data.reviewerId == request.auth.uid);
+
+      allow update, delete: if isAdmin()
+        || (isNotSuspended() && resource.data.reviewerId == request.auth.uid);
     }
 
-    // --- REPORTS ---
+    // =========================================================================
+    // REPORTS (Content & User Moderation Reports)
+    // =========================================================================
     match /reports/{id} {
-      allow create: if isNotSuspended()
+      allow create: if isValidId(id)
+        && isNotSuspended()
         && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.targetType in [
+          'product',
+          'service',
+          'accommodation',
+          'roommate_request',
+          'store',
+          'user'
+        ]
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() > 0
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
         && request.resource.data.get('status', 'open') == 'open';
+
       allow read, update, delete: if isAdmin();
     }
 
-    // --- CATEGORIES ---
+    // =========================================================================
+    // CATEGORIES & PLATFORM SETTINGS
+    // =========================================================================
     match /productCategories/{id} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // --- PLATFORM SETTINGS ---
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /platform_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }

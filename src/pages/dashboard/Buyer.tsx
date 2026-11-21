@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatEnquiryDate } from '../../lib/buyerHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   FavoriteWithListing,
   getUserEnquiries,
@@ -164,14 +164,26 @@ export function BuyerDashboard() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
+  interface CachedBuyerDash {
+    savedItems: FavoriteWithListing[];
+    enquiries: Enquiry[];
+  }
+  const initialCached = user?.uid
+    ? getFastCache<CachedBuyerDash>(`buyer_dash:${user.uid}`)
+    : null;
+
   const [activeTab, setActiveTab] = useState<BuyerTab>('saved');
-  const [savedItems, setSavedItems] = useState<FavoriteWithListing[]>([]);
-  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [savedItems, setSavedItems] = useState<FavoriteWithListing[]>(
+    () => initialCached?.savedItems ?? []
+  );
+  const [enquiries, setEnquiries] = useState<Enquiry[]>(
+    () => initialCached?.enquiries ?? []
+  );
+  const [loading, setLoading] = useState<boolean>(
+    () => Boolean(user?.uid) && !initialCached
+  );
   const [error, setError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
-
-  useLoadCap(loading, () => setLoading(false));
 
   const loadBuyerData = useCallback(async () => {
     if (!user?.uid) {
@@ -181,23 +193,34 @@ export function BuyerDashboard() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<CachedBuyerDash>(`buyer_dash:${user.uid}`);
+    if (cached) {
+      setSavedItems(cached.savedItems);
+      setEnquiries(cached.enquiries);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const [favoritesResult, enquiriesResult] = await withLoadTimeout(
-        Promise.all([
-          getUserFavorites(user.uid),
-          getUserEnquiries(user.uid),
-        ])
-      );
+      const [favoritesResult, enquiriesResult] = await Promise.all([
+        getUserFavorites(user.uid),
+        getUserEnquiries(user.uid),
+      ]);
       setSavedItems(favoritesResult);
       setEnquiries(enquiriesResult);
+      setFastCache(`buyer_dash:${user.uid}`, {
+        savedItems: favoritesResult,
+        enquiries: enquiriesResult,
+      });
     } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : 'Unable to load your dashboard data right now.';
-      setError(message);
+      if (!cached) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Unable to load your dashboard data right now.';
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }

@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
 import { getHomeMixedFeed } from '../lib/homeService';
-import { useLoadCap, withLoadTimeout } from '../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../lib/fastCache';
 import { getTrendingItems } from '../lib/trendingService';
 import {
   filterMixedFeedItems,
@@ -134,13 +134,19 @@ export function Home() {
   const [typeFilter, setTypeFilter] = useState<MixedFeedType | 'all'>('all');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
-  const [mixedItems, setMixedItems] = useState<MixedFeedItem[]>([]);
-  const [trendingItems, setTrendingItems] = useState<MixedFeedItem[]>([]);
+  const [mixedItems, setMixedItems] = useState<MixedFeedItem[]>(
+    () => getFastCache<MixedFeedItem[]>('home_mixed_feed') || []
+  );
+  const [trendingItems, setTrendingItems] = useState<MixedFeedItem[]>(
+    () => getFastCache<MixedFeedItem[]>('home_trending_feed') || []
+  );
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedItem[]>(() =>
     getRecentlyViewed()
   );
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    () => (getFastCache<MixedFeedItem[]>('home_mixed_feed') || []).length === 0
+  );
   const [trendingLoading, setTrendingLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,33 +176,36 @@ export function Home() {
     };
   }, [syncRecentlyViewed]);
 
-  useLoadCap(loading, () => {
-    setLoading(false);
-    setRefreshing(false);
-  });
-  useLoadCap(trendingLoading, () => setTrendingLoading(false));
-
   const loadFeeds = useCallback(async (isRefresh = false) => {
+    const cachedMixed = getFastCache<MixedFeedItem[]>('home_mixed_feed');
+    const hasCached = Boolean(cachedMixed && cachedMixed.length > 0);
+
     if (isRefresh) {
       setRefreshing(true);
-    } else {
+    } else if (!hasCached) {
       setLoading(true);
     }
     setError(null);
 
     try {
       const [mixedResult, trendingResult] = await Promise.all([
-        withLoadTimeout(getHomeMixedFeed(40), 2800),
-        withLoadTimeout(getTrendingItems(), 2800, []),
+        getHomeMixedFeed(40),
+        getTrendingItems().catch(() => getFastCache<MixedFeedItem[]>('home_trending_feed') || []),
       ]);
       setMixedItems(mixedResult);
       setTrendingItems(trendingResult);
+      setFastCache('home_mixed_feed', mixedResult);
+      if (trendingResult.length > 0) {
+        setFastCache('home_trending_feed', trendingResult);
+      }
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to load marketplace feed. Please try again.';
-      setError(message);
+      if (!hasCached || isRefresh) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Failed to load marketplace feed. Please try again.';
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

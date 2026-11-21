@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { invalidateFastCachePrefix } from './fastCache';
 import { Review } from '../types';
 import {
   calculateReviewStats,
@@ -109,6 +110,9 @@ export async function submitReview(
       trustScore: stats.trustScore,
       reviewCount: stats.reviewCount,
     });
+    invalidateFastCachePrefix(`store_profile:${cleanTargetId}`);
+    invalidateFastCachePrefix(`seller_profile:${cleanTargetId}`);
+    invalidateFastCachePrefix('home_');
 
     return {
       review: {

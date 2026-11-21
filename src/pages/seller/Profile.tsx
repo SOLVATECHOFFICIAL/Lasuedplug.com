@@ -15,7 +15,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getInitials } from '../../lib/authHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
 import {
@@ -44,16 +44,30 @@ export function SellerProfile() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [seller, setSeller] = useState<UserProfile | null>(null);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+  interface CachedSellerProfile {
+    seller: UserProfile;
+    stores: Store[];
+    products: Product[];
+    reviews: Review[];
+  }
+  const initialCached = uid
+    ? getFastCache<CachedSellerProfile>(`seller_profile:${uid}`)
+    : null;
+
+  const [seller, setSeller] = useState<UserProfile | null>(
+    () => initialCached?.seller ?? null
+  );
+  const [stores, setStores] = useState<Store[]>(() => initialCached?.stores ?? []);
+  const [products, setProducts] = useState<Product[]>(
+    () => initialCached?.products ?? []
+  );
+  const [reviews, setReviews] = useState<Review[]>(
+    () => initialCached?.reviews ?? []
+  );
+  const [loading, setLoading] = useState(() => Boolean(uid) && !initialCached);
   const [error, setError] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
-
-  useLoadCap(loading, () => setLoading(false));
 
   const loadSellerProfile = useCallback(async () => {
     if (!uid) {
@@ -62,31 +76,48 @@ export function SellerProfile() {
       return;
     }
 
-    setLoading(true);
+    const cached = getFastCache<CachedSellerProfile>(`seller_profile:${uid}`);
+    if (cached) {
+      setSeller(cached.seller);
+      setStores(cached.stores);
+      setProducts(cached.products);
+      setReviews(cached.reviews);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     setAvatarFailed(false);
 
     try {
       const [profileData, sellerStores, sellerProducts, sellerReviews] =
-        await withLoadTimeout(
-          Promise.all([
-            getPublicUserProfile(uid),
-            getApprovedStoresByOwner(uid),
-            getApprovedProductsBySeller(uid),
-            fetchReviewsForTarget(uid, 'user'),
-          ])
-        );
+        await Promise.all([
+          getPublicUserProfile(uid),
+          getApprovedStoresByOwner(uid),
+          getApprovedProductsBySeller(uid),
+          fetchReviewsForTarget(uid, 'user'),
+        ]);
 
       setSeller(profileData);
       setStores(sellerStores);
       setProducts(sellerProducts);
       setReviews(sellerReviews);
+      if (profileData) {
+        setFastCache(`seller_profile:${uid}`, {
+          seller: profileData,
+          stores: sellerStores,
+          products: sellerProducts,
+          reviews: sellerReviews,
+        });
+      }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load this seller profile right now.'
-      );
+      if (!cached) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to load this seller profile right now.'
+        );
+      }
     } finally {
       setLoading(false);
     }

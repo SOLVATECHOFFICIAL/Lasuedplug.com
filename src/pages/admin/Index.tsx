@@ -12,35 +12,43 @@ import {
 } from 'lucide-react';
 import { AdminDashboardStats } from '../../lib/adminHelpers';
 import { getAdminDashboardStats } from '../../lib/adminService';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
 import { ErrorState } from '../../components/feedback/ErrorState';
 
 export function AdminIndex() {
-  const [stats, setStats] = useState<AdminDashboardStats>({
-    totalUsers: 0,
-    totalListings: 0,
-    pendingApprovals: 0,
-    openReports: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const initialCached = getFastCache<AdminDashboardStats>('admin_stats');
+  const [stats, setStats] = useState<AdminDashboardStats>(
+    () =>
+      initialCached ?? {
+        totalUsers: 0,
+        totalListings: 0,
+        pendingApprovals: 0,
+        openReports: 0,
+      }
+  );
+  const [loading, setLoading] = useState(() => !initialCached);
   const [error, setError] = useState<string | null>(null);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadStats = useCallback(async () => {
-    setLoading(true);
+    const cached = getFastCache<AdminDashboardStats>('admin_stats');
+    if (!cached) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const data = await withLoadTimeout(getAdminDashboardStats());
+      const data = await getAdminDashboardStats();
       setStats(data);
+      setFastCache('admin_stats', data);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load admin overview statistics.'
-      );
+      if (!cached) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to load admin overview statistics.'
+        );
+      }
     } finally {
       setLoading(false);
     }

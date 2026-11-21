@@ -15,7 +15,7 @@ import {
   AccommodationPriceRange,
   filterAccommodations,
 } from '../../lib/accommodationHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { Accommodation } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
@@ -25,8 +25,12 @@ import { AccommodationCard } from '../../components/marketplace/AccommodationCar
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
 
 export function AccommodationIndex() {
-  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [accommodations, setAccommodations] = useState<Accommodation[]>(
+    () => getFastCache<Accommodation[]>('accommodations_feed') || []
+  );
+  const [loading, setLoading] = useState(
+    () => (getFastCache<Accommodation[]>('accommodations_feed') || []).length === 0
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -34,20 +38,24 @@ export function AccommodationIndex() {
     useState<AccommodationPriceRange>('all');
   const [locationQuery, setLocationQuery] = useState<string>('');
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadAccommodations = useCallback(async () => {
-    setLoading(true);
+    const cached = getFastCache<Accommodation[]>('accommodations_feed');
+    if (!cached || cached.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const items = await withLoadTimeout(fetchApprovedAccommodations());
+      const items = await fetchApprovedAccommodations();
       setAccommodations(items);
+      setFastCache('accommodations_feed', items);
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to load accommodation listings right now.';
-      setError(msg);
+      if (!cached || cached.length === 0) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load accommodation listings right now.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

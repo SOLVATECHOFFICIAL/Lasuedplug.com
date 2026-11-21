@@ -30,7 +30,7 @@ import {
   fetchApprovedRoommateRequests,
 } from '../../lib/accommodationService';
 import { getInitials } from '../../lib/authHelpers';
-import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { formatNaira } from '../../lib/utils';
@@ -62,8 +62,12 @@ export function Roommates() {
   const { user, profile } = useAuth();
   const { showToast } = useToast();
 
-  const [requests, setRequests] = useState<RoommateRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<RoommateRequest[]>(
+    () => getFastCache<RoommateRequest[]>('roommates_feed') || []
+  );
+  const [loading, setLoading] = useState(
+    () => (getFastCache<RoommateRequest[]>('roommates_feed') || []).length === 0
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<'all' | RoommateRequestType>(
@@ -89,20 +93,24 @@ export function Roommates() {
   const previewUrlsRef = useRef<string[]>([]);
   const submittingRef = useRef(false);
 
-  useLoadCap(loading, () => setLoading(false));
-
   const loadRequests = useCallback(async () => {
-    setLoading(true);
+    const cached = getFastCache<RoommateRequest[]>('roommates_feed');
+    if (!cached || cached.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const items = await withLoadTimeout(fetchApprovedRoommateRequests());
+      const items = await fetchApprovedRoommateRequests();
       setRequests(items);
+      setFastCache('roommates_feed', items);
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to load roommate requests right now.';
-      setError(msg);
+      if (!cached || cached.length === 0) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load roommate requests right now.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

@@ -12,6 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { invalidateFastCachePrefix } from './fastCache';
 import { getTimestampMillis } from './homeHelpers';
 import {
   getProductLocationLabel,
@@ -240,6 +241,11 @@ export async function markSellerListingSoldOne(
       status: nextState.status,
       isActive: nextState.isActive,
     });
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('seller_dash:');
+    invalidateFastCachePrefix(`product:${listing.id}`);
     return nextState;
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to update stock count.');
@@ -264,6 +270,11 @@ export async function toggleSellerListingActive(
       isActive: nextState.isActive,
       status: nextState.status,
     });
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('seller_dash:');
+    invalidateFastCachePrefix(`product:${listing.id}`);
     return nextState;
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to update listing visibility.');
@@ -280,6 +291,11 @@ export async function deleteSellerListing(productId: string): Promise<void> {
 
   try {
     await deleteDoc(doc(db, 'products', productId));
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('seller_dash:');
+    invalidateFastCachePrefix(`product:${productId}`);
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to delete listing.');
   }
@@ -298,6 +314,13 @@ export async function deleteUnifiedSellerListing(
 
   try {
     await deleteDoc(doc(db, collectionName, id));
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('accommodations_');
+    invalidateFastCachePrefix('roommates_');
+    invalidateFastCachePrefix('approved_stores');
+    invalidateFastCachePrefix('seller_dash:');
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to delete item.');
   }
@@ -324,6 +347,11 @@ export async function updateSellerListing(
 
   try {
     await updateDoc(doc(db, 'products', productId), payload);
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('seller_dash:');
+    invalidateFastCachePrefix(`product:${productId}`);
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to save listing updates.');
   }
