@@ -5,6 +5,7 @@ import {
   FirestoreError,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   serverTimestamp,
@@ -12,6 +13,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import {
+  hasKnownMissingIndex,
+  markMissingIndex,
+  runDeduplicatedQuery,
+} from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
 import { Product, Store } from '../types';
 
@@ -90,24 +96,16 @@ export async function getApprovedStores(): Promise<Store[]> {
     return [];
   }
 
-  const colRef = collection(db, 'stores');
+  return runDeduplicatedQuery('stores:approved', async () => {
+    const colRef = collection(db!, 'stores');
+    const indexKey = 'stores:approved_active_createdAt';
 
-  try {
-    const q = query(
-      colRef,
-      where('isApproved', '==', true),
-      where('isActive', '==', true),
-      orderBy('createdAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<Store, 'id'>),
-    }));
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
+    const runFallback = async () => {
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(60)
+      );
       const snapshot = await getDocs(fallbackQ);
       return snapshot.docs
         .map((docSnap) => ({
@@ -118,9 +116,34 @@ export async function getApprovedStores(): Promise<Store[]> {
         .sort(
           (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    throw mapStoreFirestoreError(err, 'Unable to load stores.');
-  }
+
+    try {
+      const q = query(
+        colRef,
+        where('isApproved', '==', true),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(60)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Store, 'id'>),
+      }));
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      throw mapStoreFirestoreError(err, 'Unable to load stores.');
+    }
+  });
 }
 
 export async function getStoreById(storeId: string): Promise<Store | null> {

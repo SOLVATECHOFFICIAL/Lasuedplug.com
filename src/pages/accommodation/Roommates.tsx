@@ -31,6 +31,7 @@ import {
   fetchApprovedRoommateRequests,
 } from '../../lib/accommodationService';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   MAX_LISTING_IMAGES,
@@ -103,7 +104,7 @@ export function Roommates() {
     try {
       const items = await fetchApprovedRoommateRequests();
       setRequests(items);
-      setFastCache('roommates_feed', items);
+      setFastCache('roommates_feed', compactListingsForCache(items, 24));
     } catch (err) {
       if (!cached || cached.length === 0) {
         const msg =
@@ -415,7 +416,7 @@ export function Roommates() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredRequests.map((req) => {
+          {filteredRequests.map((req, index) => {
             const typeLabel = getRoommateTypeLabel(req.type);
             const posterName =
               req.userSnapshot?.fullName || 'LASUEDPLUG Student';
@@ -457,6 +458,7 @@ export function Roommates() {
                         <ProductImage
                           src={req.images[0]}
                           alt={req.title}
+                          priority={index < 3}
                           className="w-full h-full object-cover"
                           iconClassName="w-8 h-8 text-slate-400"
                         />

@@ -16,6 +16,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import {
+  hasKnownMissingIndex,
+  markMissingIndex,
+  runDeduplicatedQuery,
+} from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
 import {
   applyLocalMarketplaceFiltersAndSort,
@@ -58,35 +63,17 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
     return [];
   }
 
-  const colRef = collection(db, 'products');
+  return runDeduplicatedQuery(`marketplace:trending:${limitCount}`, async () => {
+    const colRef = collection(db!, 'products');
+    const indexKey = 'products:approved_active_item_viewCount';
+    const fallbackLimit = Math.max(limitCount * 5, 40);
 
-  try {
-    const q = query(
-      colRef,
-      where('isApproved', '==', true),
-      where('isActive', '==', true),
-      where('adType', '==', 'item'),
-      orderBy('viewCount', 'desc'),
-      limit(limitCount)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Product, 'id'>),
-      }))
-      .filter(
-        (item) =>
-          item.categoryId !== 'accommodation' && getListingAdType(item) === 'item'
+    const runFallback = async () => {
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(fallbackLimit)
       );
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      console.warn(
-        'Firestore composite index required on collection "products": (isApproved ASC, isActive ASC, adType ASC, viewCount DESC). Check firestore.indexes.json.',
-        firestoreErr.message
-      );
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
       const snapshot = await getDocs(fallbackQ);
       const docs = snapshot.docs
         .map((docSnap) => ({
@@ -108,18 +95,49 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
           return getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt);
         });
       return docs.slice(0, limitCount);
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the marketplace database. Check your internet connection and try again.'
+
+    try {
+      const q = query(
+        colRef,
+        where('isApproved', '==', true),
+        where('isActive', '==', true),
+        where('adType', '==', 'item'),
+        orderBy('viewCount', 'desc'),
+        limit(limitCount)
       );
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Product, 'id'>),
+        }))
+        .filter(
+          (item) =>
+            item.categoryId !== 'accommodation' && getListingAdType(item) === 'item'
+        );
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      if (firestoreErr?.code === 'unavailable') {
+        throw new Error(
+          'Could not reach the marketplace database. Check your internet connection and try again.'
+        );
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 /**
- * Fetches all approved & active Firestore products strictly filtered by adType (defaults to 'item')
+ * Fetches approved & active Firestore products strictly filtered by adType (defaults to 'item')
  * so Marketplace AI search only scans physical items and Services only scans services.
  */
 export async function fetchAllApprovedActiveProducts(
@@ -129,34 +147,16 @@ export async function fetchAllApprovedActiveProducts(
     return [];
   }
 
-  const colRef = collection(db, 'products');
+  return runDeduplicatedQuery(`marketplace:all:${targetAdType}`, async () => {
+    const colRef = collection(db!, 'products');
+    const indexKey = `products:approved_active_${targetAdType}_all`;
 
-  try {
-    const constraints: QueryConstraint[] = [
-      where('isApproved', '==', true),
-      where('isActive', '==', true),
-    ];
-    if (targetAdType === 'service') {
-      constraints.push(where('adType', '==', 'service'));
-    }
-    constraints.push(limit(250));
-
-    const q = query(colRef, ...constraints);
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Product, 'id'>),
-      }))
-      .filter(
-        (item) =>
-          item.categoryId !== 'accommodation' &&
-          getListingAdType(item) === targetAdType
+    const runFallback = async () => {
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(120)
       );
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
       const snapshot = await getDocs(fallbackQ);
       return snapshot.docs
         .map((docSnap) => ({
@@ -170,14 +170,48 @@ export async function fetchAllApprovedActiveProducts(
             item.categoryId !== 'accommodation' &&
             getListingAdType(item) === targetAdType
         );
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the marketplace database. Check your internet connection and try again.'
-      );
+
+    try {
+      const constraints: QueryConstraint[] = [
+        where('isApproved', '==', true),
+        where('isActive', '==', true),
+      ];
+      if (targetAdType === 'service') {
+        constraints.push(where('adType', '==', 'service'));
+      }
+      constraints.push(limit(120));
+
+      const q = query(colRef, ...constraints);
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Product, 'id'>),
+        }))
+        .filter(
+          (item) =>
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === targetAdType
+        );
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      if (firestoreErr?.code === 'unavailable') {
+        throw new Error(
+          'Could not reach the marketplace database. Check your internet connection and try again.'
+        );
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 export async function fetchApprovedActiveServices(): Promise<Product[]> {
@@ -213,92 +247,44 @@ export async function fetchMarketplaceProducts(
   const sortBy: MarketplaceSortOption = filters.sortBy || 'newest';
   const targetAdType: AdType = filters.adType || 'item';
   const trimmedSearch = filters.searchQuery?.trim() || '';
+  const trimmedCat = filters.categoryId?.trim() || '';
+  const trimmedSub = filters.subcategory?.trim() || '';
+  const indexKey = `products:list:${targetAdType}:${trimmedCat}:${trimmedSub}:${sortBy}`;
 
-  const baseConstraints: QueryConstraint[] = [
-    where('isApproved', '==', true),
-    where('isActive', '==', true),
-    where('adType', '==', targetAdType),
-  ];
+  const runBrowseQuery = async (): Promise<PaginatedProductsResult> => {
+    const baseConstraints: QueryConstraint[] = [
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('adType', '==', targetAdType),
+    ];
 
-  if (filters.categoryId?.trim()) {
-    baseConstraints.push(where('categoryId', '==', filters.categoryId.trim()));
-  }
-
-  if (filters.subcategory?.trim()) {
-    baseConstraints.push(where('subcategory', '==', filters.subcategory.trim()));
-  }
-
-  if (sortBy === 'price_asc') {
-    baseConstraints.push(orderBy('price', 'asc'));
-  } else if (sortBy === 'price_desc') {
-    baseConstraints.push(orderBy('price', 'desc'));
-  } else if (sortBy === 'most_contacted') {
-    baseConstraints.push(orderBy('contactCount', 'desc'));
-  } else {
-    baseConstraints.push(orderBy('createdAt', 'desc'));
-  }
-
-  try {
-    if (trimmedSearch) {
-      const searchQ = query(colRef, ...baseConstraints, limit(100));
-      const snapshot = await getDocs(searchQ);
-      const rawDocs = snapshot.docs
-        .map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Product, 'id'>),
-        }))
-        .filter(
-          (item) =>
-            item.categoryId !== 'accommodation' &&
-            getListingAdType(item) === targetAdType
-        );
-      const matched = filterProductsByQuery(rawDocs, trimmedSearch);
-      return {
-        products: matched,
-        lastVisibleDoc: null,
-        hasMore: false,
-      };
+    if (trimmedCat) {
+      baseConstraints.push(where('categoryId', '==', trimmedCat));
     }
 
-    const paginatedConstraints: QueryConstraint[] = [...baseConstraints];
-    if (lastDoc) {
-      paginatedConstraints.push(startAfter(lastDoc));
+    if (trimmedSub) {
+      baseConstraints.push(where('subcategory', '==', trimmedSub));
     }
-    paginatedConstraints.push(limit(limitCount + 1));
 
-    const q = query(colRef, ...paginatedConstraints);
-    const snapshot = await getDocs(q);
+    if (sortBy === 'price_asc') {
+      baseConstraints.push(orderBy('price', 'asc'));
+    } else if (sortBy === 'price_desc') {
+      baseConstraints.push(orderBy('price', 'desc'));
+    } else if (sortBy === 'most_contacted') {
+      baseConstraints.push(orderBy('contactCount', 'desc'));
+    } else {
+      baseConstraints.push(orderBy('createdAt', 'desc'));
+    }
 
-    const hasMore = snapshot.docs.length > limitCount;
-    const pageDocs = hasMore
-      ? snapshot.docs.slice(0, limitCount)
-      : snapshot.docs;
-
-    const products = pageDocs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Product, 'id'>),
-      }))
-      .filter(
-        (item) =>
-          item.categoryId !== 'accommodation' &&
-          getListingAdType(item) === targetAdType
+    const runFallback = async (): Promise<PaginatedProductsResult> => {
+      const fallbackLimit = trimmedSearch
+        ? 100
+        : Math.max(limitCount * 4, 48);
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(fallbackLimit)
       );
-
-    return {
-      products,
-      lastVisibleDoc:
-        pageDocs.length > 0 ? pageDocs[pageDocs.length - 1] : null,
-      hasMore,
-    };
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      console.warn(
-        getRequiredCompositeIndexHint(filters, sortBy),
-        firestoreErr.message
-      );
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
       const snapshot = await getDocs(fallbackQ);
       const snapById = new Map<string, QueryDocumentSnapshot<DocumentData>>();
       const rawDocs = snapshot.docs.map((docSnap) => {
@@ -336,14 +322,91 @@ export async function fetchMarketplaceProducts(
         lastVisibleDoc: nextLastDoc,
         hasMore: startIndex + limitCount < filtered.length,
       };
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the marketplace database. Check your internet connection and try again.'
-      );
+
+    try {
+      if (trimmedSearch) {
+        const searchQ = query(colRef, ...baseConstraints, limit(80));
+        const snapshot = await getDocs(searchQ);
+        const rawDocs = snapshot.docs
+          .map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<Product, 'id'>),
+          }))
+          .filter(
+            (item) =>
+              item.categoryId !== 'accommodation' &&
+              getListingAdType(item) === targetAdType
+          );
+        const matched = filterProductsByQuery(rawDocs, trimmedSearch);
+        return {
+          products: matched,
+          lastVisibleDoc: null,
+          hasMore: false,
+        };
+      }
+
+      const paginatedConstraints: QueryConstraint[] = [...baseConstraints];
+      if (lastDoc) {
+        paginatedConstraints.push(startAfter(lastDoc));
+      }
+      paginatedConstraints.push(limit(limitCount + 1));
+
+      const q = query(colRef, ...paginatedConstraints);
+      const snapshot = await getDocs(q);
+
+      const hasMore = snapshot.docs.length > limitCount;
+      const pageDocs = hasMore
+        ? snapshot.docs.slice(0, limitCount)
+        : snapshot.docs;
+
+      const products = pageDocs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Product, 'id'>),
+        }))
+        .filter(
+          (item) =>
+            item.categoryId !== 'accommodation' &&
+            getListingAdType(item) === targetAdType
+        );
+
+      return {
+        products,
+        lastVisibleDoc:
+          pageDocs.length > 0 ? pageDocs[pageDocs.length - 1] : null,
+        hasMore,
+      };
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        console.warn(
+          getRequiredCompositeIndexHint(filters, sortBy),
+          firestoreErr.message
+        );
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      if (firestoreErr?.code === 'unavailable') {
+        throw new Error(
+          'Could not reach the marketplace database. Check your internet connection and try again.'
+        );
+      }
+      throw err;
     }
-    throw err;
+  };
+
+  if (!lastDoc && !trimmedSearch) {
+    return runDeduplicatedQuery(
+      `marketplace:page0:${limitCount}:${indexKey}`,
+      runBrowseQuery
+    );
   }
+  return runBrowseQuery();
 }
 
 export async function getApprovedProducts(): Promise<Product[]> {

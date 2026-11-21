@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lasuedplug-static-v2';
+const CACHE_NAME = 'lasuedplug-static-v3';
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -30,7 +30,6 @@ self.addEventListener('activate', (event) => {
             .map((key) => caches.delete(key))
         )
       )
-      .then(() => self.clients.claim())
   );
 });
 
@@ -41,10 +40,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never intercept Vite HMR internals
+  // Never intercept Vite dev/HMR internals or Firestore/API requests
   if (
     url.pathname.startsWith('/@vite/') ||
-    url.pathname.startsWith('/@react-refresh')
+    url.pathname.startsWith('/@react-refresh') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/')
   ) {
     return;
   }
@@ -68,7 +69,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (CSS, JS, images, fonts, manifest): cache on fetch, serve cached copy offline
+  // Immutable hashed build assets (/assets/*.js, /assets/*.css, /assets/*.jpg): cache-first
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response && response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Static public assets (logos, icons, fonts, manifest): stale-while-revalidate for instant loads
   const isStaticAsset =
     ['style', 'script', 'image', 'font', 'manifest'].includes(
       request.destination
@@ -80,18 +98,18 @@ self.addEventListener('fetch', (event) => {
   if (!isStaticAsset) return;
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.ok && response.type === 'basic') {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        return new Response('', { status: 503, statusText: 'Offline' });
-      })
+    caches.match(request).then((cached) => {
+      const networkPromise = fetch(request)
+        .then((response) => {
+          if (response && response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => cached || new Response('', { status: 503, statusText: 'Offline' }));
+
+      return cached || networkPromise;
+    })
   );
 });

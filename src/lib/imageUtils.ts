@@ -1,9 +1,9 @@
 import imageCompression from 'browser-image-compression';
 
-const MAX_DIMENSION_PX = 800;
-const MAX_SIZE_MB = 0.07;
-// Base64 expands binary by ~33%, so 98,000 chars keeps even the Base64 Data URL < 100 KB
-const MAX_DATA_URL_LENGTH = 98_000;
+const MAX_DIMENSION_PX = 640;
+const MAX_SIZE_MB = 0.05;
+// Base64 expands binary by ~33%, so 62,000 chars keeps Base64 Data URLs compact & fast to load
+const MAX_DATA_URL_LENGTH = 62_000;
 
 export function isImageFile(file: File): boolean {
   if (file.type && file.type.startsWith('image/')) {

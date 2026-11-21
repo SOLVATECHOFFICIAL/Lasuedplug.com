@@ -18,11 +18,13 @@ import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
   product: Product;
+  priority?: boolean;
   className?: string;
 }
 
 export const ProductCard = memo(function ProductCard({
   product,
+  priority = false,
   className = '',
 }: ProductCardProps) {
   const adType = getListingAdType(product);
@@ -98,6 +100,7 @@ export const ProductCard = memo(function ProductCard({
           <ProductImage
             src={product.images?.[0]}
             alt={product.title}
+            priority={priority}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <span

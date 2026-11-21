@@ -18,12 +18,14 @@ import { ProductImage } from './ProductImage';
 interface AccommodationCardProps {
   accommodation: Accommodation;
   isVerifiedOwner?: boolean;
+  priority?: boolean;
   className?: string;
 }
 
 export const AccommodationCard = memo(function AccommodationCard({
   accommodation,
   isVerifiedOwner,
+  priority = false,
   className = '',
 }: AccommodationCardProps) {
   const typeLabel = getAccommodationTypeLabel(accommodation.type);
@@ -81,6 +83,7 @@ export const AccommodationCard = memo(function AccommodationCard({
           <ProductImage
             src={accommodation.images?.[0]}
             alt={accommodation.title}
+            priority={priority}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             iconClassName="w-10 h-10 text-slate-400"
           />

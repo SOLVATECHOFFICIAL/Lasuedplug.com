@@ -13,12 +13,14 @@ import { ProductImage } from './ProductImage';
 interface StoreCardProps {
   store: Store;
   isVerifiedOwner?: boolean;
+  priority?: boolean;
   className?: string;
 }
 
 export const StoreCard = memo(function StoreCard({
   store,
   isVerifiedOwner,
+  priority = false,
   className = '',
 }: StoreCardProps) {
   const storeHref = store.id ? `/store/${store.id}` : '/marketplace?tab=stores';
@@ -66,6 +68,7 @@ export const StoreCard = memo(function StoreCard({
           <ProductImage
             src={storePrimaryImage}
             alt={store.name}
+            priority={priority}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             iconClassName="w-10 h-10 text-slate-400"
           />

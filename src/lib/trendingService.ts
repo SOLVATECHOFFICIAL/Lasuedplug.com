@@ -8,6 +8,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import {
+  hasKnownMissingIndex,
+  markMissingIndex,
+  runDeduplicatedQuery,
+} from './firestoreQueryCache';
 import { fetchPublicUserTrustMap } from './homeService';
 import {
   applyTwoHourTrendingShuffle,
@@ -24,6 +29,29 @@ async function fetchTopEngagedProducts(limitCount = 30): Promise<Product[]> {
   }
 
   const colRef = collection(db, 'products');
+  const indexKey = 'products:approved_active_contact_view';
+  const fallbackLimit = Math.max(limitCount * 2, 40);
+
+  const runFallback = async () => {
+    const fallbackQ = query(
+      colRef,
+      where('isApproved', '==', true),
+      limit(fallbackLimit)
+    );
+    const snapshot = await getDocs(fallbackQ);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((p) => p.isActive !== false && p.categoryId !== 'accommodation')
+      .sort(compareByEngagement)
+      .slice(0, limitCount);
+  };
+
+  if (hasKnownMissingIndex(indexKey)) {
+    return runFallback();
+  }
 
   try {
     const q = query(
@@ -44,16 +72,8 @@ async function fetchTopEngagedProducts(limitCount = 30): Promise<Product[]> {
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
-      const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
-        .map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Product, 'id'>),
-        }))
-        .filter((p) => p.isActive !== false && p.categoryId !== 'accommodation')
-        .sort(compareByEngagement)
-        .slice(0, limitCount);
+      markMissingIndex(indexKey);
+      return runFallback();
     }
     throw err;
   }
@@ -65,6 +85,30 @@ async function fetchTopEngagedLegacyServices(limitCount = 15): Promise<Service[]
   }
 
   const colRef = collection(db, 'services');
+  const indexKey = 'services:approved_active_contact_view';
+  const fallbackLimit = Math.max(limitCount * 2, 24);
+
+  const runFallback = async () => {
+    const fallbackQ = query(
+      colRef,
+      where('isApproved', '==', true),
+      limit(fallbackLimit)
+    );
+    const snapshot = await getDocs(fallbackQ);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Service, 'id'>),
+      }))
+      .filter((s) => s.isActive !== false)
+      .sort(compareByEngagement)
+      .slice(0, limitCount);
+  };
+
+  if (hasKnownMissingIndex(indexKey)) {
+    return runFallback();
+  }
+
   try {
     const q = query(
       colRef,
@@ -82,16 +126,8 @@ async function fetchTopEngagedLegacyServices(limitCount = 15): Promise<Service[]
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
-      const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
-        .map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Service, 'id'>),
-        }))
-        .filter((s) => s.isActive !== false)
-        .sort(compareByEngagement)
-        .slice(0, limitCount);
+      markMissingIndex(indexKey);
+      return runFallback();
     }
     return [];
   }
@@ -108,32 +144,34 @@ export async function getTrendingItems(
     return [];
   }
 
-  const [topProducts, topServices] = await Promise.all([
-    fetchTopEngagedProducts(30),
-    fetchTopEngagedLegacyServices(15),
-  ]);
+  return runDeduplicatedQuery('trending:items', async () => {
+    const [topProducts, topServices] = await Promise.all([
+      fetchTopEngagedProducts(30),
+      fetchTopEngagedLegacyServices(15),
+    ]);
 
-  const seenIds = new Set(
-    topProducts.map((p) => p.id).filter(Boolean) as string[]
-  );
-  const uniqueLegacyServices = topServices.filter(
-    (s) => !s.id || !seenIds.has(s.id)
-  );
+    const seenIds = new Set(
+      topProducts.map((p) => p.id).filter(Boolean) as string[]
+    );
+    const uniqueLegacyServices = topServices.filter(
+      (s) => !s.id || !seenIds.has(s.id)
+    );
 
-  const sellerIds = [
-    ...topProducts.map((p) => p.sellerId),
-    ...uniqueLegacyServices.map((s) => s.providerId),
-  ];
-  const userTrustMap = await fetchPublicUserTrustMap(sellerIds);
+    const sellerIds = [
+      ...topProducts.map((p) => p.sellerId),
+      ...uniqueLegacyServices.map((s) => s.providerId),
+    ];
+    const userTrustMap = await fetchPublicUserTrustMap(sellerIds);
 
-  const combined: MixedFeedItem[] = [
-    ...topProducts.map((p) =>
-      productToMixedFeedItem(p, userTrustMap[p.sellerId])
-    ),
-    ...uniqueLegacyServices.map((s) =>
-      serviceToMixedFeedItem(s, userTrustMap[s.providerId])
-    ),
-  ];
+    const combined: MixedFeedItem[] = [
+      ...topProducts.map((p) =>
+        productToMixedFeedItem(p, userTrustMap[p.sellerId])
+      ),
+      ...uniqueLegacyServices.map((s) =>
+        serviceToMixedFeedItem(s, userTrustMap[s.providerId])
+      ),
+    ];
 
-  return applyTwoHourTrendingShuffle(combined, nowMs, 30);
+    return applyTwoHourTrendingShuffle(combined, nowMs, 30);
+  });
 }

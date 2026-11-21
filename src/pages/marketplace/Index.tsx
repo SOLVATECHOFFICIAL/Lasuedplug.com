@@ -30,6 +30,7 @@ import {
 } from '../../lib/aiSearchService';
 import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
+import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   getListingAdType,
@@ -148,7 +149,7 @@ export function MarketplaceIndex() {
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  // Sync URL params cleanly
+  // Sync URL params cleanly only when serialized query actually changes
   useEffect(() => {
     const nextParams: Record<string, string> = {};
     if (activeBrowseTab === 'stores') {
@@ -161,8 +162,11 @@ export function MarketplaceIndex() {
       nextParams.q = debouncedSearch.trim();
       if (sortBy !== 'newest') nextParams.sort = sortBy;
     }
-    setSearchParams(nextParams, { replace: true });
-  }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, setSearchParams]);
+    const nextQueryString = new URLSearchParams(nextParams).toString();
+    if (nextQueryString !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, searchParams, setSearchParams]);
 
   const loadStores = useCallback(async () => {
     const cachedStores = getFastCache<Store[]>('approved_stores');
@@ -176,7 +180,7 @@ export function MarketplaceIndex() {
     try {
       const list = await getApprovedStores();
       setStores(list);
-      setFastCache('approved_stores', list);
+      setFastCache('approved_stores', compactListingsForCache(list, 24));
     } catch (err) {
       if (!cachedStores || cachedStores.length === 0) {
         setStoresError(
@@ -222,7 +226,7 @@ export function MarketplaceIndex() {
               getListingAdType(item) === 'item'
           );
           setTrendingProducts(clean);
-          setFastCache('mkt_trending', clean);
+          setFastCache('mkt_trending', compactListingsForCache(clean, 8));
         }
       } catch {
         if (!cancelled && (!cached || cached.length === 0)) {
@@ -344,7 +348,10 @@ export function MarketplaceIndex() {
       );
       setBrowseProducts(cleanProducts);
       if (isDefaultBrowse) {
-        setFastCache('mkt_browse_default', cleanProducts);
+        setFastCache(
+          'mkt_browse_default',
+          compactListingsForCache(cleanProducts, 24)
+        );
       }
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
@@ -519,12 +526,12 @@ export function MarketplaceIndex() {
             data-testid="trending-carousel"
             className="flex w-full max-w-full overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 hide-scrollbar pb-2"
           >
-            {trendingProducts.map((product) => (
+            {trendingProducts.map((product, index) => (
               <div
                 key={`trending-${product.id || product.title}`}
                 className="w-56 sm:w-64 shrink-0 snap-start"
               >
-                <ProductCard product={product} />
+                <ProductCard product={product} priority={index < 3} />
               </div>
             ))}
           </div>
@@ -735,8 +742,12 @@ export function MarketplaceIndex() {
               {filteredStores.length === 1 ? 'campus store' : 'campus stores'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-              {filteredStores.map((store) => (
-                <StoreCard key={store.id || store.name} store={store} />
+              {filteredStores.map((store, index) => (
+                <StoreCard
+                  key={store.id || store.name}
+                  store={store}
+                  priority={index < 3}
+                />
               ))}
             </div>
           </div>
@@ -796,10 +807,11 @@ export function MarketplaceIndex() {
             data-testid="marketplace-grid"
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6"
           >
-            {products.map((product) => (
+            {products.map((product, index) => (
               <ProductCard
                 key={product.id || product.title}
                 product={product}
+                priority={index < 4}
               />
             ))}
           </div>

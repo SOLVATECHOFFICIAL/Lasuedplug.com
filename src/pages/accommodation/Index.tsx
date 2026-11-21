@@ -15,6 +15,7 @@ import {
   AccommodationPriceRange,
   filterAccommodations,
 } from '../../lib/accommodationHelpers';
+import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { Accommodation } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -47,7 +48,7 @@ export function AccommodationIndex() {
     try {
       const items = await fetchApprovedAccommodations();
       setAccommodations(items);
-      setFastCache('accommodations_feed', items);
+      setFastCache('accommodations_feed', compactListingsForCache(items, 24));
     } catch (err) {
       if (!cached || cached.length === 0) {
         const msg =
@@ -240,10 +241,11 @@ export function AccommodationIndex() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredListings.map((item) => (
+          {filteredListings.map((item, index) => (
             <AccommodationCard
               key={item.id || item.title}
               accommodation={item}
+              priority={index < 3}
             />
           ))}
         </div>

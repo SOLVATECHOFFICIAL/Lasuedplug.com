@@ -18,11 +18,13 @@ import { StoreCard } from './StoreCard';
 interface LegacyServiceCardProps {
   service: Service;
   isVerified?: boolean;
+  priority?: boolean;
 }
 
 export const LegacyServiceCard = memo(function LegacyServiceCard({
   service,
   isVerified,
+  priority = false,
 }: LegacyServiceCardProps) {
   const categoryLabel = service.subcategory || getCategoryName(service.categoryId);
   const sellerName = service.sellerSnapshot?.fullName;
@@ -78,6 +80,7 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
           <ProductImage
             src={service.images?.[0]}
             alt={service.title}
+            priority={priority}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-600/95 text-white border border-blue-500 shadow-sm backdrop-blur-sm">
@@ -138,28 +141,41 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
 
 interface MixedFeedCardProps {
   item: MixedFeedItem;
+  priority?: boolean;
 }
 
 export const MixedFeedCard = memo(function MixedFeedCard({
   item,
+  priority = false,
 }: MixedFeedCardProps) {
   if (item._type === 'store' && item.store) {
-    return <StoreCard store={item.store} isVerifiedOwner={item.isVerified} />;
+    return (
+      <StoreCard
+        store={item.store}
+        isVerifiedOwner={item.isVerified}
+        priority={priority}
+      />
+    );
   }
   if (item._type === 'accommodation' && item.accommodation) {
     return (
       <AccommodationCard
         accommodation={item.accommodation}
         isVerifiedOwner={item.isVerified}
+        priority={priority}
       />
     );
   }
   if (item.product) {
-    return <ProductCard product={item.product} />;
+    return <ProductCard product={item.product} priority={priority} />;
   }
   if (item.service) {
     return (
-      <LegacyServiceCard service={item.service} isVerified={item.isVerified} />
+      <LegacyServiceCard
+        service={item.service}
+        isVerified={item.isVerified}
+        priority={priority}
+      />
     );
   }
   return null;

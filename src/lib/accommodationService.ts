@@ -12,6 +12,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import {
+  hasKnownMissingIndex,
+  markMissingIndex,
+  runDeduplicatedQuery,
+} from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
 import { sanitizePublicAccommodation } from './accommodationHelpers';
 import {
@@ -69,27 +74,16 @@ export async function fetchApprovedAccommodations(): Promise<
     return [];
   }
 
-  const colRef = collection(db, 'accommodations');
+  return runDeduplicatedQuery('accommodations:approved', async () => {
+    const colRef = collection(db!, 'accommodations');
+    const indexKey = 'accommodations:approved_active_createdAt';
 
-  try {
-    const q = query(
-      colRef,
-      where('isApproved', '==', true),
-      where('isActive', '==', true),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) =>
-      sanitizePublicAccommodation({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Accommodation, 'id'>),
-      })
-    );
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
+    const runFallback = async () => {
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(60)
+      );
       const snapshot = await getDocs(fallbackQ);
       return snapshot.docs
         .map((docSnap) =>
@@ -103,14 +97,41 @@ export async function fetchApprovedAccommodations(): Promise<
           (a, b) =>
             getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the accommodation database. Check your internet connection and try again.'
+
+    try {
+      const q = query(
+        colRef,
+        where('isApproved', '==', true),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(60)
       );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((docSnap) =>
+        sanitizePublicAccommodation({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Accommodation, 'id'>),
+        })
+      );
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      if (firestoreErr?.code === 'unavailable') {
+        throw new Error(
+          'Could not reach the accommodation database. Check your internet connection and try again.'
+        );
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 export async function getPublicAccommodationById(
@@ -204,29 +225,16 @@ export async function fetchApprovedRoommateRequests(): Promise<
     return [];
   }
 
-  const colRef = collection(db, 'roommate_requests');
+  return runDeduplicatedQuery('roommates:approved', async () => {
+    const colRef = collection(db!, 'roommate_requests');
+    const indexKey = 'roommate_requests:approved_active_createdAt';
 
-  try {
-    const q = query(
-      colRef,
-      where('isApproved', '==', true),
-      where('isActive', '==', true),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Partial<RoommateRequest>;
-      return {
-        id: docSnap.id,
-        ...(data as Omit<RoommateRequest, 'id'>),
-        images: Array.isArray(data.images) ? data.images : [],
-      };
-    });
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('isApproved', '==', true));
+    const runFallback = async () => {
+      const fallbackQ = query(
+        colRef,
+        where('isApproved', '==', true),
+        limit(60)
+      );
       const snapshot = await getDocs(fallbackQ);
       return snapshot.docs
         .map((docSnap) => {
@@ -242,14 +250,43 @@ export async function fetchApprovedRoommateRequests(): Promise<
           (a, b) =>
             getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+    };
+
+    if (hasKnownMissingIndex(indexKey)) {
+      return runFallback();
     }
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the roommate requests database. Check your internet connection and try again.'
+
+    try {
+      const q = query(
+        colRef,
+        where('isApproved', '==', true),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(60)
       );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as Partial<RoommateRequest>;
+        return {
+          id: docSnap.id,
+          ...(data as Omit<RoommateRequest, 'id'>),
+          images: Array.isArray(data.images) ? data.images : [],
+        };
+      });
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'failed-precondition') {
+        markMissingIndex(indexKey);
+        return runFallback();
+      }
+      if (firestoreErr?.code === 'unavailable') {
+        throw new Error(
+          'Could not reach the roommate requests database. Check your internet connection and try again.'
+        );
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 export async function createRoommateRequest(

@@ -27,10 +27,12 @@ import {
   X,
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
+import { compactMixedFeedForCache } from '../lib/firestoreQueryCache';
 import { getHomeMixedFeed } from '../lib/homeService';
 import { getFastCache, setFastCache } from '../lib/fastCache';
 import { getTrendingItems } from '../lib/trendingService';
 import {
+  applyTwoHourTrendingShuffle,
   filterMixedFeedItems,
   HomeSortMode,
   MixedFeedItem,
@@ -152,9 +154,10 @@ export function Home() {
   const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_BATCH_SIZE);
 
-  // Pull-to-refresh touch state
+  // Pull-to-refresh & trending lazy-fetch state
   const touchStartYRef = useRef<number | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
+  const hasFetchedTrendingRef = useRef(false);
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -182,21 +185,32 @@ export function Home() {
 
     if (isRefresh) {
       setRefreshing(true);
+      hasFetchedTrendingRef.current = false;
     } else if (!hasCached) {
       setLoading(true);
     }
     setError(null);
 
     try {
-      const [mixedResult, trendingResult] = await Promise.all([
-        getHomeMixedFeed(40),
-        getTrendingItems().catch(() => getFastCache<MixedFeedItem[]>('home_trending_feed') || []),
-      ]);
+      const mixedResult = await getHomeMixedFeed(20);
       setMixedItems(mixedResult);
-      setTrendingItems(trendingResult);
-      setFastCache('home_mixed_feed', mixedResult);
-      if (trendingResult.length > 0) {
-        setFastCache('home_trending_feed', trendingResult);
+      setFastCache('home_mixed_feed', compactMixedFeedForCache(mixedResult, 24));
+
+      const derivedTrending = applyTwoHourTrendingShuffle(
+        mixedResult.filter(
+          (item) => item._type === 'item' || item._type === 'service'
+        ),
+        Date.now(),
+        30
+      );
+      if (derivedTrending.length > 0) {
+        setTrendingItems((prev) => (prev.length === 0 ? derivedTrending : prev));
+        if (!getFastCache<MixedFeedItem[]>('home_trending_feed')?.length) {
+          setFastCache(
+            'home_trending_feed',
+            compactMixedFeedForCache(derivedTrending, 24)
+          );
+        }
       }
     } catch (err) {
       if (!hasCached || isRefresh) {
@@ -220,15 +234,27 @@ export function Home() {
     setSortMode(nextMode);
     setVisibleCount(PAGE_BATCH_SIZE);
 
-    if (nextMode === 'trending' && trendingItems.length === 0 && !loading) {
-      setTrendingLoading(true);
+    if (nextMode === 'trending' && !hasFetchedTrendingRef.current && !loading) {
+      hasFetchedTrendingRef.current = true;
+      const shouldShowSpinner = trendingItems.length === 0;
+      if (shouldShowSpinner) {
+        setTrendingLoading(true);
+      }
       try {
         const freshTrending = await getTrendingItems();
-        setTrendingItems(freshTrending);
+        if (freshTrending.length > 0) {
+          setTrendingItems(freshTrending);
+          setFastCache(
+            'home_trending_feed',
+            compactMixedFeedForCache(freshTrending, 24)
+          );
+        }
       } catch {
-        // Keep existing state if trending refresh fails transiently
+        // Keep derived/cached trending items if refresh fails transiently
       } finally {
-        setTrendingLoading(false);
+        if (shouldShowSpinner) {
+          setTrendingLoading(false);
+        }
       }
     }
   };
@@ -664,8 +690,12 @@ export function Home() {
         ) : (
           <div className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-              {displayedFeed.map((item) => (
-                <MixedFeedCard key={`${item._type}-${item.id}`} item={item} />
+              {displayedFeed.map((item, index) => (
+                <MixedFeedCard
+                  key={`${item._type}-${item.id}`}
+                  item={item}
+                  priority={index < 4}
+                />
               ))}
             </div>
 

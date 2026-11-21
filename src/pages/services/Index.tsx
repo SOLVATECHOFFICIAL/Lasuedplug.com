@@ -8,8 +8,9 @@ import {
   X,
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, getCategoryName } from '../../lib/categories';
+import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { fetchApprovedActiveServices } from '../../lib/marketplaceService';
-import { getLatestServices } from '../../lib/homeService';
+import { getLatestLegacyServices } from '../../lib/homeService';
 import { getListingAdType } from '../../lib/marketplaceHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { Product, Service } from '../../types';
@@ -50,7 +51,7 @@ export function ServicesIndex() {
     try {
       const [serviceProducts, rawServices] = await Promise.all([
         fetchApprovedActiveServices(),
-        getLatestServices(60),
+        getLatestLegacyServices(40),
       ]);
       const filteredServiceProducts = serviceProducts.filter(
         (item) => getListingAdType(item) === 'service'
@@ -63,8 +64,8 @@ export function ServicesIndex() {
       setProductServices(filteredServiceProducts);
       setLegacyServices(uniqueLegacy);
       setFastCache('services_feed', {
-        productServices: filteredServiceProducts,
-        legacyServices: uniqueLegacy,
+        productServices: compactListingsForCache(filteredServiceProducts, 24),
+        legacyServices: compactListingsForCache(uniqueLegacy, 24),
       });
     } catch (err) {
       if (!cached) {
@@ -267,17 +268,19 @@ export function ServicesIndex() {
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
-            {filteredProductServices.map((service) => (
+            {filteredProductServices.map((service, index) => (
               <ProductCard
                 key={service.id || service.title}
                 product={service}
+                priority={index < 4}
               />
             ))}
 
-            {filteredLegacyServices.map((service) => (
+            {filteredLegacyServices.map((service, index) => (
               <LegacyServiceCard
                 key={service.id || service.title}
                 service={service}
+                priority={filteredProductServices.length === 0 && index < 4}
               />
             ))}
           </div>

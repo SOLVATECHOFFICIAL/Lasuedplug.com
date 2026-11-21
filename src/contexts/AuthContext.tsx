@@ -207,11 +207,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
 
+      let initialSnapshotHandled = false;
       if (db) {
         unsubscribeProfile = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
           (snap) => {
-            if (!snap.exists() || !isMounted) return;
+            if (!isMounted) return;
+            initialSnapshotHandled = true;
+            if (!snap.exists()) {
+              setLoading(false);
+              return;
+            }
             const liveProfile = {
               uid: snap.id,
               ...(snap.data() as Omit<UserProfile, 'uid'>),
@@ -224,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(liveProfile);
             setFastCache(`user_profile:${firebaseUser.uid}`, liveProfile);
             primeUserProfilePic(firebaseUser.uid, getUserAvatarUrl(liveProfile));
+            setLoading(false);
           },
           (err) => {
             console.warn('Profile status listener warning:', err);
@@ -231,20 +238,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      const loadedProfile = await fetchUserProfile(firebaseUser.uid, firebaseUser.email);
+      if (!initialSnapshotHandled) {
+        const loadedProfile = await fetchUserProfile(firebaseUser.uid, firebaseUser.email);
+        if (!isMounted) return;
+        if (!auth?.currentUser) {
+          setLoading(false);
+          return;
+        }
+        if (loadedProfile && !initialSnapshotHandled) {
+          setProfile(loadedProfile);
+          setFastCache(`user_profile:${firebaseUser.uid}`, loadedProfile);
+        }
+      }
 
-      if (!isMounted) return;
-      if (!auth?.currentUser) {
+      if (isMounted) {
         setLoading(false);
-        return;
       }
-
-      if (loadedProfile) {
-        setProfile(loadedProfile);
-        setFastCache(`user_profile:${firebaseUser.uid}`, loadedProfile);
-      }
-
-      setLoading(false);
     });
 
     return () => {
@@ -480,25 +489,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(nextProfile);
           setFastCache(`user_profile:${user.uid}`, nextProfile);
         } else {
-          const baseProfile = buildNewUserProfile({
-            uid: user.uid,
-            email: user.email || '',
-            fullName: resolvedFullName,
-            accountType: effectiveAccountType,
-            timestamp: serverTimestamp(),
-          });
-          const fullDoc: Record<string, unknown> = {
-            ...baseProfile,
-            ...firestoreUpdates,
-          };
-          await setDoc(userRef, fullDoc, { merge: true });
-          const nextProfile = {
-            ...baseProfile,
-            ...localUpdates,
-            createdAt: nowLocal,
-          };
-          setProfile(nextProfile);
-          setFastCache(`user_profile:${user.uid}`, nextProfile);
+          const existingSnap = await getDoc(userRef);
+          if (existingSnap.exists()) {
+            await setDoc(userRef, firestoreUpdates, { merge: true });
+            const existingData = existingSnap.data() as UserProfile;
+            const nextProfile: UserProfile = {
+              ...existingData,
+              ...localUpdates,
+            };
+            setProfile(nextProfile);
+            setFastCache(`user_profile:${user.uid}`, nextProfile);
+          } else {
+            const baseProfile = buildNewUserProfile({
+              uid: user.uid,
+              email: user.email || '',
+              fullName: resolvedFullName,
+              accountType: effectiveAccountType,
+              timestamp: serverTimestamp(),
+            });
+            const fullDoc: Record<string, unknown> = {
+              ...baseProfile,
+              ...firestoreUpdates,
+            };
+            await setDoc(userRef, fullDoc, { merge: true });
+            const nextProfile = {
+              ...baseProfile,
+              ...localUpdates,
+              createdAt: nowLocal,
+            };
+            setProfile(nextProfile);
+            setFastCache(`user_profile:${user.uid}`, nextProfile);
+          }
         }
       } catch (err) {
         throw new Error(formatFirebaseAuthError(err));
@@ -550,30 +571,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(nextProfile);
           setFastCache(`user_profile:${user.uid}`, nextProfile);
         } else {
-          const baseProfile = buildNewUserProfile({
-            uid: user.uid,
-            email: user.email || '',
-            fullName: user.displayName || '',
-            accountType: 'student',
-            timestamp: serverTimestamp(),
-          });
-          await setDoc(
-            userRef,
-            {
+          const existingSnap = await getDoc(userRef);
+          if (existingSnap.exists()) {
+            await setDoc(userRef, firestoreUpdates, { merge: true });
+            const existingData = existingSnap.data() as UserProfile;
+            const nextProfile: UserProfile = {
+              ...existingData,
+              profilePic: cleaned,
+              profilePicUpdatedAt: nowLocal,
+              updatedAt: nowLocal,
+            };
+            setProfile(nextProfile);
+            setFastCache(`user_profile:${user.uid}`, nextProfile);
+          } else {
+            const baseProfile = buildNewUserProfile({
+              uid: user.uid,
+              email: user.email || '',
+              fullName: user.displayName || '',
+              accountType: 'student',
+              timestamp: serverTimestamp(),
+            });
+            await setDoc(
+              userRef,
+              {
+                ...baseProfile,
+                ...firestoreUpdates,
+              },
+              { merge: true }
+            );
+            const nextProfile: UserProfile = {
               ...baseProfile,
-              ...firestoreUpdates,
-            },
-            { merge: true }
-          );
-          const nextProfile: UserProfile = {
-            ...baseProfile,
-            profilePic: cleaned,
-            profilePicUpdatedAt: nowLocal,
-            createdAt: nowLocal,
-            updatedAt: nowLocal,
-          };
-          setProfile(nextProfile);
-          setFastCache(`user_profile:${user.uid}`, nextProfile);
+              profilePic: cleaned,
+              profilePicUpdatedAt: nowLocal,
+              createdAt: nowLocal,
+              updatedAt: nowLocal,
+            };
+            setProfile(nextProfile);
+            setFastCache(`user_profile:${user.uid}`, nextProfile);
+          }
         }
         primeUserProfilePic(user.uid, cleaned);
       } catch (err) {
@@ -583,23 +618,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, profile]
   );
 
+  const contextValue = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      profile,
+      status,
+      isSuspended,
+      loading,
+      isProfileComplete,
+      signUp,
+      signIn,
+      signOut,
+      refreshProfile,
+      updateUserProfile,
+      updateProfilePicture,
+    }),
+    [
+      user,
+      profile,
+      status,
+      isSuspended,
+      loading,
+      isProfileComplete,
+      signUp,
+      signIn,
+      signOut,
+      refreshProfile,
+      updateUserProfile,
+      updateProfilePicture,
+    ]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        status,
-        isSuspended,
-        loading,
-        isProfileComplete,
-        signUp,
-        signIn,
-        signOut,
-        refreshProfile,
-        updateUserProfile,
-        updateProfilePicture,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

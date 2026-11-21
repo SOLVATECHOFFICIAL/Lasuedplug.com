@@ -62,14 +62,14 @@ try {
               tabManager: persistentMultipleTabManager(),
             }),
             ignoreUndefinedProperties: true,
-            experimentalForceLongPolling: true,
+            experimentalAutoDetectLongPolling: true,
           })
         : getFirestore(app);
     } catch {
       try {
         db = initializeFirestore(app, {
           ignoreUndefinedProperties: true,
-          experimentalForceLongPolling: true,
+          experimentalAutoDetectLongPolling: true,
         });
       } catch {
         db = getFirestore(app);

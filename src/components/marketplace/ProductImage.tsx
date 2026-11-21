@@ -7,6 +7,7 @@ interface ProductImageProps {
   alt: string;
   className?: string;
   iconClassName?: string;
+  priority?: boolean;
 }
 
 export const ProductImage = memo(function ProductImage({
@@ -14,6 +15,7 @@ export const ProductImage = memo(function ProductImage({
   alt,
   className = 'w-full h-full object-cover',
   iconClassName = 'w-10 h-10 text-slate-400',
+  priority = false,
 }: ProductImageProps) {
   const resolvedSrc = resolveListingImageUrl(src);
   const [failed, setFailed] = useState(false);
@@ -33,16 +35,20 @@ export const ProductImage = memo(function ProductImage({
     );
   }
 
+  const priorityProps = priority
+    ? ({ fetchpriority: 'high' } as Record<string, string>)
+    : undefined;
+
   return (
     <img
       src={resolvedSrc}
       alt={alt}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}
+      {...priorityProps}
     />
   );
 });
-
