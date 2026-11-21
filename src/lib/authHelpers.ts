@@ -1,15 +1,19 @@
-import { UserProfile, UserRoles } from '../types';
+import { AccountType, UserProfile, UserRoles } from '../types';
 
 export function buildNewUserProfile(params: {
   uid: string;
   email: string;
   fullName?: string;
+  accountType?: AccountType;
   timestamp: unknown;
 }): UserProfile {
   return {
     uid: params.uid,
     email: params.email.trim().toLowerCase(),
     fullName: params.fullName?.trim() || '',
+    accountType: params.accountType === 'business' ? 'business' : 'student',
+    trustScore: 0,
+    reviewCount: 0,
     roles: {
       buyer: true,
     },
@@ -21,7 +25,7 @@ export function buildNewUserProfile(params: {
 }
 
 export const SUSPENDED_ACCOUNT_MESSAGE =
-  'Your account has been suspended. Contact Admin on WhatsApp.';
+  'Your account has been suspended. Contact Support on WhatsApp.';
 export const BANNED_ACCOUNT_MESSAGE =
   'This account has been permanently banned and cannot sign up again.';
 
@@ -194,9 +198,10 @@ export function formatFirebaseAuthError(error: unknown): string {
 }
 
 export const PHONE_UPDATE_COOLDOWN_DAYS = 7;
-export const ADMIN_WHATSAPP_NUMBER = '09049979183';
-export const ACADEMIC_LOCK_MESSAGE = `Locked. To change, WhatsApp Admin: ${ADMIN_WHATSAPP_NUMBER}`;
-export const NAME_LOCK_MESSAGE = `Name cannot be changed. Contact Admin on WhatsApp: ${ADMIN_WHATSAPP_NUMBER}`;
+export const ACADEMIC_LOCK_MESSAGE =
+  'Locked. Contact Support to request a change.';
+export const NAME_LOCK_MESSAGE =
+  'Name cannot be changed. Contact Support to request a change.';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -208,6 +213,12 @@ export function checkProfileCompleteness(
   }
   const hasName = Boolean(profile.fullName && profile.fullName.trim());
   const hasPhone = Boolean(profile.phone && profile.phone.trim());
+  if (profile.accountType === 'business') {
+    const hasBusinessName = Boolean(
+      profile.businessName && profile.businessName.trim()
+    );
+    return hasName && hasPhone && hasBusinessName;
+  }
   const hasCampus = Boolean(profile.campus && profile.campus.trim());
   const hasDepartment = Boolean(profile.department && profile.department.trim());
   const hasLevel = Boolean(profile.level && profile.level.trim());

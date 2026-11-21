@@ -26,6 +26,7 @@ import {
   fetchPendingApprovals,
   rejectPendingItem,
 } from '../../lib/adminService';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { Button } from '../../components/ui/Button';
@@ -91,11 +92,13 @@ export function AdminListings() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PendingAdminItem | null>(null);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadPending = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPendingApprovals();
+      const data = await withLoadTimeout(fetchPendingApprovals());
       setItems(data);
     } catch (err) {
       setError(
@@ -302,7 +305,7 @@ export function AdminListings() {
                             <AdminModuleBadge type={item._type} />
                             {item.needsAiReview && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                                Needs AI Review
+                                Needs Review
                               </span>
                             )}
                             <span className="text-xs font-semibold text-primary-700 tabular-nums">

@@ -7,6 +7,7 @@ import {
   Lock,
   MapPin,
   MessageCircle,
+  Share2,
   ShieldCheck,
 } from 'lucide-react';
 import { getPublicAccommodationById } from '../../lib/accommodationService';
@@ -17,7 +18,11 @@ import {
   getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
 import { getInitials } from '../../lib/authHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { shareListingLink } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
+import { useToast } from '../../contexts/ToastContext';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -29,6 +34,7 @@ import { ProductImage } from '../../components/marketplace/ProductImage';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
+  const { showToast } = useToast();
 
   const [item, setItem] = useState<Omit<Accommodation, 'exactAddress'> | null>(
     null
@@ -36,6 +42,8 @@ export function AccommodationDetail() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useLoadCap(loading, () => setLoading(false));
 
   const loadDetail = useCallback(async () => {
     if (!id) {
@@ -46,7 +54,7 @@ export function AccommodationDetail() {
     setLoading(true);
     setError(null);
     try {
-      const record = await getPublicAccommodationById(id);
+      const record = await withLoadTimeout(getPublicAccommodationById(id));
       setItem(record);
       setSelectedImageIndex(0);
     } catch (err) {
@@ -63,6 +71,22 @@ export function AccommodationDetail() {
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    const publicLoc = getAccommodationPublicLocation(item);
+    const rent = getAccommodationRent(item);
+    saveRecentlyViewed({
+      id: item.id,
+      _type: 'accommodation',
+      title: item.title,
+      subtitle: publicLoc,
+      priceLabel: `${formatNaira(rent)} / year`,
+      imageUrl: item.images?.[0],
+      href: `/accommodation/${item.id}`,
+      isVerified: Boolean(item.ownerSnapshot?.isVerified),
+    });
+  }, [item]);
 
   const images = useMemo(() => item?.images || [], [item]);
   const activeImage = images[selectedImageIndex] || images[0];
@@ -127,7 +151,7 @@ export function AccommodationDetail() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
-      <div>
+      <div className="flex items-center justify-between gap-3">
         <Link
           to="/accommodation"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
@@ -135,6 +159,27 @@ export function AccommodationDetail() {
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Accommodation</span>
         </Link>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void shareListingLink({
+              title: item.title,
+              text: `Check out ${item.title} on LASUEDPLUG`,
+            }).then((outcome) => {
+              if (outcome === 'copied') {
+                showToast('Link copied! Share on WhatsApp.', 'success');
+              } else if (outcome === 'failed') {
+                showToast('Could not copy link. Please copy the URL from your browser.', 'error');
+              }
+            });
+          }}
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Share</span>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -244,18 +289,21 @@ export function AccommodationDetail() {
               <h2 className="text-sm font-semibold text-slate-900">
                 Landlord / Agent Information
               </h2>
-              <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Link
+                to={`/seller/${item.ownerId}`}
+                className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
+              >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-11 h-11 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
                     {ownerInitials}
                   </div>
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{ownerName}</span>
                       {ownerVerified && <VerifiedBadge size="sm" />}
                     </p>
                     <p className="text-xs text-slate-500">
-                      LASUEDPLUG Host
+                      View host profile &amp; reviews →
                     </p>
                   </div>
                 </div>
@@ -265,7 +313,7 @@ export function AccommodationDetail() {
                     Verified
                   </Badge>
                 )}
-              </div>
+              </Link>
             </div>
 
             {/* Desktop WhatsApp Primary Action */}

@@ -5,8 +5,10 @@ import {
   Eye,
   Flag,
   MapPin,
+  MessageCircle,
   ShieldCheck,
 } from 'lucide-react';
+import { SUPPORT_LINK } from '../../lib/constants';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
@@ -35,7 +37,7 @@ const SAFETY_RULES = [
   {
     title: 'Use the Report button',
     description:
-      'If a listing looks suspicious, uses misleading photos, asks for upfront payment, or behaves abusively, click the Report button immediately so the Admin team can investigate and suspend bad actors.',
+      'If a listing looks suspicious, uses misleading photos, asks for upfront payment, or behaves abusively, click the Report button immediately so our Support team can investigate and suspend bad actors.',
     icon: Flag,
     accent: 'bg-amber-50 text-amber-700',
   },
@@ -95,6 +97,15 @@ export function SafetyPage() {
           permanently banned upon report verification.
         </p>
         <div className="pt-1 flex flex-wrap gap-3">
+          <a
+            href={SUPPORT_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition-colors"
+          >
+            <MessageCircle className="w-4 h-4" aria-hidden="true" />
+            <span>Contact Support</span>
+          </a>
           <Link to="/terms">
             <Button variant="outline" size="sm">
               Read Terms of Service

@@ -60,6 +60,7 @@ export function LoginPage() {
             src={LOGO_URL}
             alt={SITE_NAME}
             loading="lazy"
+            decoding="async"
             className="h-12 w-auto mx-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">

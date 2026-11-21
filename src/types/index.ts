@@ -7,10 +7,18 @@ export interface UserRoles {
   admin?: boolean;
 }
 
+export type AccountType = 'student' | 'business';
+
 export interface UserProfile {
   uid: string;
   email: string;
   fullName: string;
+  accountType: AccountType;
+  businessName?: string;
+  openingHours?: string;
+  isOnlineOnly?: boolean;
+  trustScore: number;
+  reviewCount: number;
   phone?: string;
   avatarUrl?: string;
   bio?: string;
@@ -89,10 +97,13 @@ export interface Store {
   description: string;
   category: string;
   logoUrl?: string;
+  openingHours?: string;
   whatsappNumber: string;
   locationName: string;
   latitude?: number;
   longitude?: number;
+  trustScore?: number;
+  reviewCount?: number;
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
@@ -178,6 +189,17 @@ export interface RoommateRequest {
   isActive: boolean;
   createdAt: any;
   userSnapshot?: { fullName: string; isVerified: boolean };
+}
+
+export interface Review {
+  id?: string;
+  targetId: string;
+  targetType: 'user' | 'store';
+  reviewerId: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt: any;
 }
 
 export interface Report {

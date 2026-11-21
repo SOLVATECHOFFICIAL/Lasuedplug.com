@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LOGO_URL, SITE_NAME } from '../../lib/constants';
+import { LOGO_URL, SITE_NAME, SUPPORT_LINK } from '../../lib/constants';
 
 const FOOTER_LINKS = [
   { name: 'Marketplace', path: '/marketplace' },
@@ -27,6 +27,7 @@ export function Footer() {
               src={LOGO_URL}
               alt={SITE_NAME}
               loading="lazy"
+              decoding="async"
               className="h-8 w-auto object-contain"
             />
             <span className="font-bold text-base text-slate-900 tracking-tight">
@@ -57,6 +58,14 @@ export function Footer() {
                   {link.name}
                 </Link>
               ))}
+              <a
+                href={SUPPORT_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors duration-200"
+              >
+                Contact Support
+              </a>
             </nav>
           </div>
         </div>
@@ -66,7 +75,16 @@ export function Footer() {
             LASUEDPLUG is an independent community marketplace. Not affiliated with, endorsed by, or operated by LASUED or LASU.
           </p>
           <p className="text-slate-500 shrink-0">
-            © {currentYear} {SITE_NAME}. All rights reserved.
+            Designed &amp; Built by{' '}
+            <a
+              href={SUPPORT_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-slate-700 hover:text-blue-600 underline underline-offset-2 transition-colors"
+            >
+              Oyeyemi Solomon
+            </a>
+            . © {currentYear} {SITE_NAME}.
           </p>
         </div>
       </div>

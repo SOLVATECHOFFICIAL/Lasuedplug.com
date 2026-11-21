@@ -1,41 +1,56 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  FormEvent,
+  TouchEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ShoppingBag,
-  Wrench,
-  Building2,
-  Users,
-  Search,
-  ShieldCheck,
-  CheckCircle2,
-  MapPin,
+  ArrowDown,
   ArrowRight,
+  Award,
+  Building2,
+  CheckCircle2,
+  Clock,
+  Flame,
+  Loader2,
+  RefreshCw,
+  Search,
+  SearchX,
+  ShieldCheck,
+  ShoppingBag,
+  Users,
+  Wrench,
   X,
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
+import { getHomeMixedFeed } from '../lib/homeService';
+import { useLoadCap, withLoadTimeout } from '../lib/loadTimeout';
+import { getTrendingItems } from '../lib/trendingService';
 import {
-  getLatestAccommodations,
-  getLatestProducts,
-  getLatestServices,
-} from '../lib/homeService';
-import { buildMarketplaceSearchUrl } from '../lib/homeHelpers';
+  filterMixedFeedItems,
+  HomeSortMode,
+  MixedFeedItem,
+  MixedFeedType,
+  sortMixedFeedItems,
+} from '../lib/trendingHelpers';
 import {
-  getAccommodationPublicLocation,
-  getAccommodationRent,
-  getAccommodationTypeLabel,
-} from '../lib/accommodationHelpers';
-import { getProductPriceDisplay } from '../lib/marketplaceHelpers';
-import { getCategoryName } from '../lib/categories';
-import { formatNaira } from '../lib/utils';
-import { Accommodation, Product, Service } from '../types';
-import { SearchX } from 'lucide-react';
+  getRecentlyViewed,
+  RecentlyViewedItem,
+} from '../lib/recentlyViewed';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { VerifiedBadge } from '../components/ui/VerifiedBadge';
-import { CardSkeletonGrid } from '../components/feedback/Loading';
+import { CardSkeleton } from '../components/feedback/Loading';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { ErrorState } from '../components/feedback/ErrorState';
-import { ProductImage } from '../components/marketplace/ProductImage';
+import { MixedFeedCard } from '../components/marketplace/MixedFeedCard';
+import { RecentlyViewedRow } from '../components/marketplace/RecentlyViewedRow';
+
+const PAGE_BATCH_SIZE = 12;
+const PULL_REFRESH_THRESHOLD_PX = 64;
 
 const CATEGORIES = [
   {
@@ -90,14 +105,23 @@ const TRUST_BULLETS = [
   },
 ];
 
-function matchesHomeQuery(fields: Array<string | undefined>, query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  const haystack = fields.filter(Boolean).join(' ').toLowerCase();
-  if (haystack.includes(normalized)) return true;
-  const tokens = normalized.split(/\s+/).filter((t) => t.length >= 2);
-  return tokens.length > 0 && tokens.some((token) => haystack.includes(token));
-}
+const SORT_TABS: Array<{
+  id: HomeSortMode;
+  label: string;
+  icon: typeof Clock;
+}> = [
+  { id: 'newest', label: 'Newest', icon: Clock },
+  { id: 'trending', label: 'Trending', icon: Flame },
+  { id: 'top_rated', label: 'Top Rated', icon: Award },
+];
+
+const TYPE_FILTERS: Array<{ id: MixedFeedType | 'all'; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'item', label: 'Items' },
+  { id: 'service', label: 'Services' },
+  { id: 'store', label: 'Stores' },
+  { id: 'accommodation', label: 'Rooms' },
+];
 
 export function Home() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,40 +129,147 @@ export function Home() {
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeSearch, setActiveSearch] = useState(initialQuery.trim());
-  const [products, setProducts] = useState<Product[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadListings = useCallback(async (fetchFullCatalog: boolean) => {
-    setLoading(true);
+  const [sortMode, setSortMode] = useState<HomeSortMode>('newest');
+  const [typeFilter, setTypeFilter] = useState<MixedFeedType | 'all'>('all');
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  const [mixedItems, setMixedItems] = useState<MixedFeedItem[]>([]);
+  const [trendingItems, setTrendingItems] = useState<MixedFeedItem[]>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedItem[]>(() =>
+    getRecentlyViewed()
+  );
+
+  const [loading, setLoading] = useState(true);
+  const [trendingLoading, setTrendingLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_BATCH_SIZE);
+
+  // Pull-to-refresh touch state
+  const touchStartYRef = useRef<number | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+
+  // Infinite scroll sentinel
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const syncRecentlyViewed = useCallback(() => {
+    setRecentlyViewed(getRecentlyViewed());
+  }, []);
+
+  useEffect(() => {
+    syncRecentlyViewed();
+    window.addEventListener('lasuedplug:recently-viewed', syncRecentlyViewed);
+    window.addEventListener('storage', syncRecentlyViewed);
+    return () => {
+      window.removeEventListener(
+        'lasuedplug:recently-viewed',
+        syncRecentlyViewed
+      );
+      window.removeEventListener('storage', syncRecentlyViewed);
+    };
+  }, [syncRecentlyViewed]);
+
+  useLoadCap(loading, () => {
+    setLoading(false);
+    setRefreshing(false);
+  });
+  useLoadCap(trendingLoading, () => setTrendingLoading(false));
+
+  const loadFeeds = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
-    const limitCount = fetchFullCatalog ? 60 : 4;
+
     try {
-      const [latestProducts, latestServices, latestAccommodations] =
-        await Promise.all([
-          getLatestProducts(limitCount),
-          getLatestServices(limitCount),
-          getLatestAccommodations(limitCount),
-        ]);
-      setProducts(latestProducts);
-      setServices(latestServices);
-      setAccommodations(latestAccommodations);
+      const [mixedResult, trendingResult] = await Promise.all([
+        withLoadTimeout(getHomeMixedFeed(40), 2800),
+        withLoadTimeout(getTrendingItems(), 2800, []),
+      ]);
+      setMixedItems(mixedResult);
+      setTrendingItems(trendingResult);
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
-          : 'Failed to load marketplace listings. Please try again.';
+          : 'Failed to load marketplace feed. Please try again.';
       setError(message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadListings(Boolean(activeSearch));
-  }, [loadListings, activeSearch]);
+    void loadFeeds(false);
+  }, [loadFeeds]);
+
+  const handleSortTabChange = async (nextMode: HomeSortMode) => {
+    setSortMode(nextMode);
+    setVisibleCount(PAGE_BATCH_SIZE);
+
+    if (nextMode === 'trending' && trendingItems.length === 0 && !loading) {
+      setTrendingLoading(true);
+      try {
+        const freshTrending = await getTrendingItems();
+        setTrendingItems(freshTrending);
+      } catch {
+        // Keep existing state if trending refresh fails transiently
+      } finally {
+        setTrendingLoading(false);
+      }
+    }
+  };
+
+  // Reset pagination batch when filters/search change
+  useEffect(() => {
+    setVisibleCount(PAGE_BATCH_SIZE);
+  }, [activeSearch, verifiedOnly, typeFilter, sortMode]);
+
+  const activeSourceList = useMemo(() => {
+    if (sortMode === 'trending') {
+      return trendingItems.length > 0 ? trendingItems : mixedItems;
+    }
+    return mixedItems;
+  }, [sortMode, trendingItems, mixedItems]);
+
+  const processedFeed = useMemo(() => {
+    const filtered = filterMixedFeedItems(activeSourceList, {
+      verifiedOnly,
+      searchQuery: activeSearch,
+      typeFilter,
+    });
+    return sortMixedFeedItems(filtered, sortMode);
+  }, [activeSourceList, verifiedOnly, activeSearch, typeFilter, sortMode]);
+
+  const displayedFeed = useMemo(
+    () => processedFeed.slice(0, visibleCount),
+    [processedFeed, visibleCount]
+  );
+
+  const hasMore = visibleCount < processedFeed.length;
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((prev) =>
+            Math.min(processedFeed.length, prev + PAGE_BATCH_SIZE)
+          );
+        }
+      },
+      { rootMargin: '240px 0px' }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loading, processedFeed.length]);
 
   const handleSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -161,70 +292,76 @@ export function Home() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  // Filtered per section so Marketplace NEVER includes houses/accommodation
-  const visibleProducts = useMemo(() => {
-    const marketplaceOnly = products.filter(
-      (p) => p.categoryId !== 'accommodation'
-    );
-    if (!activeSearch) return marketplaceOnly.slice(0, 4);
-    return marketplaceOnly.filter((p) =>
-      matchesHomeQuery(
-        [
-          p.title,
-          p.description,
-          getCategoryName(p.categoryId),
-          p.categoryName,
-          p.subcategory,
-          p.locationName,
-          p.shopName,
-        ],
-        activeSearch
-      )
-    );
-  }, [products, activeSearch]);
+  // Touch Pull-to-Refresh Handlers
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (window.scrollY <= 2 && e.touches.length === 1 && !refreshing) {
+      touchStartYRef.current = e.touches[0].clientY;
+    } else {
+      touchStartYRef.current = null;
+    }
+  };
 
-  const visibleServices = useMemo(() => {
-    if (!activeSearch) return services.slice(0, 4);
-    return services.filter((s) =>
-      matchesHomeQuery(
-        [
-          s.title,
-          s.description,
-          getCategoryName(s.categoryId),
-          s.subcategory,
-          s.locationName,
-          s.shopName,
-        ],
-        activeSearch
-      )
-    );
-  }, [services, activeSearch]);
+  const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+    if (touchStartYRef.current === null || refreshing) return;
+    if (window.scrollY > 2) {
+      touchStartYRef.current = null;
+      setPullDistance(0);
+      return;
+    }
+    const delta = e.touches[0].clientY - touchStartYRef.current;
+    if (delta > 0) {
+      setPullDistance(Math.min(delta * 0.5, 88));
+    } else {
+      setPullDistance(0);
+    }
+  };
 
-  const visibleAccommodations = useMemo(() => {
-    if (!activeSearch) return accommodations.slice(0, 4);
-    return accommodations.filter((a) =>
-      matchesHomeQuery(
-        [
-          a.title,
-          a.description,
-          getAccommodationTypeLabel(a.type),
-          getAccommodationPublicLocation(a),
-          ...(Array.isArray(a.amenities) ? a.amenities : []),
-        ],
-        activeSearch
-      )
-    );
-  }, [accommodations, activeSearch]);
+  const handleTouchEnd = () => {
+    if (touchStartYRef.current !== null && pullDistance >= PULL_REFRESH_THRESHOLD_PX) {
+      void loadFeeds(true);
+    }
+    touchStartYRef.current = null;
+    setPullDistance(0);
+  };
 
-  const marketplaceSectionLink = activeSearch
-    ? buildMarketplaceSearchUrl(activeSearch)
-    : '/marketplace';
+  const isFeedSkeletonVisible = loading || (sortMode === 'trending' && trendingLoading);
 
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-Refresh Indicator */}
+      {(pullDistance > 12 || refreshing) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-center gap-2 py-2.5 bg-primary-50 border-b border-primary-100 text-xs font-semibold text-primary-700 transition-all"
+        >
+          {refreshing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Refreshing campus feed...</span>
+            </>
+          ) : pullDistance >= PULL_REFRESH_THRESHOLD_PX ? (
+            <>
+              <RefreshCw className="w-4 h-4" />
+              <span>Release to refresh</span>
+            </>
+          ) : (
+            <>
+              <ArrowDown className="w-4 h-4" />
+              <span>Pull down to refresh</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 border-b border-slate-200/80">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center space-y-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center space-y-5">
           <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
             Discover Your Campus Marketplace
           </h1>
@@ -236,8 +373,8 @@ export function Home() {
           <form
             onSubmit={handleSearchSubmit}
             role="search"
-            aria-label="Search campus marketplace, services, and accommodation"
-            className="max-w-2xl mx-auto pt-2"
+            aria-label="Search campus marketplace, services, stores, and accommodation"
+            className="max-w-2xl mx-auto pt-1"
           >
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
               <div className="flex items-center gap-2.5 flex-1 px-2.5">
@@ -252,8 +389,8 @@ export function Home() {
                       handleClearHomeSearch();
                     }
                   }}
-                  placeholder="Search products, services, or off-campus lodges..."
-                  aria-label="Search products, services, or accommodation"
+                  placeholder="Search products, services, stores, or lodges..."
+                  aria-label="Search products, services, stores, or accommodation"
                   className="w-full py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
                 />
                 {searchQuery && (
@@ -276,9 +413,7 @@ export function Home() {
           {activeSearch && (
             <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-600">
               <span>
-                Showing results across <strong>Marketplace</strong>,{' '}
-                <strong>Services</strong>, and <strong>Accommodation</strong> for &ldquo;
-                {activeSearch}&rdquo;.
+                Showing matching results for &ldquo;{activeSearch}&rdquo;.
               </span>
               <button
                 type="button"
@@ -292,36 +427,39 @@ export function Home() {
         </div>
       </section>
 
-      {/* Category Grid */}
+      {/* Recently Viewed Row ("Jump Back In") */}
+      <RecentlyViewedRow items={recentlyViewed} />
+
+      {/* Category Quick Browse Grid */}
       {!activeSearch && (
-        <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-12 space-y-6">
+        <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 pt-8 pb-4 space-y-5">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Browse by Category
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
+            <p className="text-sm text-slate-600 mt-0.5">
               Everything students need across campus life in one place.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
             {CATEGORIES.map((category) => {
               const Icon = category.icon;
               return (
                 <Link key={category.path} to={category.path} className="group block h-full">
-                  <Card className="h-full flex flex-col justify-between space-y-4 group-hover:border-primary-100">
-                    <div className="space-y-4">
+                  <Card className="h-full flex flex-col justify-between space-y-3 p-4 sm:p-5 group-hover:border-primary-100">
+                    <div className="space-y-3">
                       <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center ${category.iconBg}`}
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${category.iconBg}`}
                       >
                         <Icon className="w-5 h-5" />
                       </div>
-                      <div className="space-y-1.5">
-                        <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h3 className="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between gap-2">
                           <span>{category.title}</span>
-                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200" />
+                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200 shrink-0" />
                         </h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">
+                        <p className="text-xs sm:text-sm text-slate-500 leading-relaxed line-clamp-2">
                           {category.description}
                         </p>
                       </div>
@@ -334,272 +472,214 @@ export function Home() {
         </section>
       )}
 
-      {/* Featured Products Section (Marketplace — Houses Excluded) */}
-      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
+      {/* Mixed Campus Feed with Sort Tabs, Verified Filter & Infinite Scroll */}
+      <section
+        aria-label="Campus mixed feed"
+        className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-5"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="space-y-1">
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              {activeSearch ? 'Matching Marketplace Items' : 'Fresh in the Marketplace'}
+              {sortMode === 'trending'
+                ? 'Trending Around Campus'
+                : sortMode === 'top_rated'
+                  ? 'Top Rated Sellers & Stores'
+                  : 'Campus Feed'}
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Recently approved campus products from verified community sellers.
+            <p className="text-sm text-slate-600">
+              {sortMode === 'trending'
+                ? 'Hot items and services rotated automatically every 2 hours.'
+                : 'Latest products, student services, campus stores, and rooms.'}
             </p>
           </div>
-          <Link
-            to={marketplaceSectionLink}
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
-          >
-            View all <ArrowRight className="w-4 h-4" />
-          </Link>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadFeeds(true)}
+              disabled={refreshing || loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              <span>Refresh</span>
+            </button>
+            <Link
+              to="/marketplace"
+              className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 px-2 py-2 whitespace-nowrap shrink-0"
+            >
+              Explore Marketplace <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
 
-        {loading ? (
-          <CardSkeletonGrid count={4} columns={4} label="Loading latest products..." />
+        {/* Sort Tabs, Type Filter & Verified Checkbox Toolbar */}
+        <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Sort Tabs */}
+            <div
+              role="tablist"
+              aria-label="Feed sort order"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start max-w-full overflow-x-auto"
+            >
+              {SORT_TABS.map((tab) => {
+                const Icon = tab.icon;
+                const active = sortMode === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => void handleSortTabChange(tab.id)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 transition-all ${
+                      active
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-3.5 h-3.5 ${
+                        active
+                          ? tab.id === 'trending'
+                            ? 'text-orange-500'
+                            : tab.id === 'top_rated'
+                              ? 'text-amber-500'
+                              : 'text-blue-600'
+                          : 'text-slate-400'
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Verified Filter Checkbox */}
+            <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-700 cursor-pointer select-none py-1">
+              <input
+                type="checkbox"
+                checked={verifiedOnly}
+                onChange={(e) => setVerifiedOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                <span>Only show Verified Sellers</span>
+              </span>
+            </label>
+          </div>
+
+          {/* Content Type Filter Row */}
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+              {TYPE_FILTERS.map((opt) => {
+                const active = typeFilter === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setTypeFilter(opt.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 border transition-colors ${
+                      active
+                        ? 'bg-primary-500 text-white border-primary-500'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {!isFeedSkeletonVisible && (
+              <p className="text-xs font-medium text-slate-500 tabular-nums">
+                Showing {displayedFeed.length} of {processedFeed.length}{' '}
+                {processedFeed.length === 1 ? 'listing' : 'listings'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Feed Content */}
+        {isFeedSkeletonVisible ? (
+          <div
+            role="status"
+            aria-label="Loading campus feed"
+            className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5"
+          >
+            {Array.from({ length: 6 }).map((_, index) => (
+              <CardSkeleton key={index} />
+            ))}
+          </div>
         ) : error ? (
-          <ErrorState
-            message={error}
-            onRetry={() => void loadListings(Boolean(activeSearch))}
-          />
-        ) : visibleProducts.length === 0 ? (
+          <ErrorState message={error} onRetry={() => void loadFeeds(false)} />
+        ) : processedFeed.length === 0 ? (
           <EmptyState
-            icon={activeSearch ? SearchX : ShoppingBag}
-            title={activeSearch ? 'No matches found' : 'Nothing here yet'}
-            description={
-              activeSearch
-                ? `No marketplace products matched "${activeSearch}".`
-                : 'Be the first to post in this category and reach students across campus.'
+            icon={activeSearch || verifiedOnly ? SearchX : ShoppingBag}
+            title={
+              activeSearch || verifiedOnly || typeFilter !== 'all'
+                ? 'No matching listings found'
+                : 'Nothing here yet'
             }
-            actionLabel={activeSearch ? 'Try Smart AI Search' : 'Post a Listing'}
-            actionTo={activeSearch ? marketplaceSectionLink : '/marketplace/create'}
-            className="my-4"
+            description={
+              verifiedOnly
+                ? 'No listings from verified sellers matched your current filter. Try turning off the Verified filter.'
+                : activeSearch
+                  ? `No listings matched "${activeSearch}".`
+                  : 'Be the first to post a product, service, store, or room on LASUEDPLUG.'
+            }
+            actionLabel={
+              activeSearch || verifiedOnly || typeFilter !== 'all'
+                ? 'Reset Feed Filters'
+                : 'Post a Listing'
+            }
+            onAction={
+              activeSearch || verifiedOnly || typeFilter !== 'all'
+                ? () => {
+                    setVerifiedOnly(false);
+                    setTypeFilter('all');
+                    handleClearHomeSearch();
+                  }
+                : undefined
+            }
+            actionTo={
+              activeSearch || verifiedOnly || typeFilter !== 'all'
+                ? undefined
+                : '/marketplace/create'
+            }
           />
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
-            {visibleProducts.map((product) => {
-              const priceInfo = getProductPriceDisplay(product);
-              return (
-                <Link
-                  key={product.id || product.title}
-                  to={`/marketplace/${product.id}`}
-                  className="group block h-full transition-all duration-200"
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+              {displayedFeed.map((item) => (
+                <MixedFeedCard key={`${item._type}-${item.id}`} item={item} />
+              ))}
+            </div>
+
+            {/* Infinite Scroll Sentinel */}
+            {hasMore && (
+              <div
+                ref={sentinelRef}
+                className="flex flex-col items-center justify-center gap-3 py-4"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setVisibleCount((prev) =>
+                      Math.min(processedFeed.length, prev + PAGE_BATCH_SIZE)
+                    )
+                  }
                 >
-                  <Card padded={false} className="h-full overflow-hidden flex flex-col">
-                    <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
-                      <ProductImage
-                        src={product.images?.[0]}
-                        alt={product.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        iconClassName="w-8 h-8 text-slate-400"
-                      />
-                    </div>
-                    <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                          {product.title}
-                        </h3>
-                        {(product.sellerSnapshot?.fullName ||
-                          product.sellerSnapshot?.isVerified) && (
-                          <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
-                            <span className="truncate">
-                              {product.sellerSnapshot?.fullName || 'Campus Seller'}
-                            </span>
-                            {product.sellerSnapshot?.isVerified && (
-                              <VerifiedBadge size="xs" />
-                            )}
-                          </p>
-                        )}
-                      </div>
-                      <p
-                        className={`text-sm sm:text-base tabular-nums ${
-                          priceInfo.isContact
-                            ? 'font-semibold text-blue-600'
-                            : 'font-bold text-primary-600'
-                        }`}
-                      >
-                        {priceInfo.text}
-                      </p>
-                    </div>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Featured Services Section */}
-      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              {activeSearch ? 'Matching Campus Services' : 'Top Services Around Campus'}
-            </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Trusted student skills, tutoring, laundry, and technical help.
-            </p>
-          </div>
-          <Link
-            to="/services"
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
-          >
-            View all <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        {loading ? (
-          <CardSkeletonGrid count={4} columns={4} label="Loading campus services..." />
-        ) : error ? (
-          <ErrorState
-            message={error}
-            onRetry={() => void loadListings(Boolean(activeSearch))}
-          />
-        ) : visibleServices.length === 0 ? (
-          <EmptyState
-            icon={activeSearch ? SearchX : Wrench}
-            title={activeSearch ? 'No matching services' : 'Nothing here yet'}
-            description={
-              activeSearch
-                ? `No campus services matched "${activeSearch}".`
-                : 'Be the first to post in this category and offer your skill to the campus community.'
-            }
-            actionLabel={activeSearch ? 'Browse Services' : 'Post a Service'}
-            actionTo={activeSearch ? '/services' : '/marketplace/create?type=service'}
-            className="my-4"
-          />
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
-            {visibleServices.map((service) => (
-              <Link
-                key={service.id || service.title}
-                to={`/marketplace/${service.id}`}
-                className="group block h-full transition-all duration-200"
-              >
-                <Card padded={false} className="h-full overflow-hidden flex flex-col">
-                  <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
-                    <ProductImage
-                      src={service.images?.[0]}
-                      alt={service.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      iconClassName="w-8 h-8 text-slate-400"
-                    />
-                  </div>
-                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {service.title}
-                      </h3>
-                      {(service.sellerSnapshot?.fullName ||
-                        service.sellerSnapshot?.isVerified) && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
-                          <span className="truncate">
-                            {service.sellerSnapshot?.fullName || 'Service Provider'}
-                          </span>
-                          {service.sellerSnapshot?.isVerified && (
-                            <VerifiedBadge size="xs" />
-                          )}
-                        </p>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-accent-600">
-                      {service.priceRange || getProductPriceDisplay(service).text}
-                    </p>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Featured Accommodations Section (Houses stay strictly in Accommodation) */}
-      <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              {activeSearch
-                ? 'Matching Off-Campus Accommodation'
-                : 'Off-Campus Accommodation'}
-            </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Available lodges, rooms, and hostels around Epe and campus gates.
-            </p>
-          </div>
-          <Link
-            to="/accommodation"
-            className="text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 shrink-0 transition-all duration-200"
-          >
-            View all <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        {loading ? (
-          <CardSkeletonGrid count={4} columns={4} label="Loading accommodations..." />
-        ) : error ? (
-          <ErrorState
-            message={error}
-            onRetry={() => void loadListings(Boolean(activeSearch))}
-          />
-        ) : visibleAccommodations.length === 0 ? (
-          <EmptyState
-            icon={activeSearch ? SearchX : Building2}
-            title={activeSearch ? 'No matching accommodation' : 'Nothing here yet'}
-            description={
-              activeSearch
-                ? `No lodges or accommodation matched "${activeSearch}".`
-                : 'Be the first to post in this category and list an available lodge or room!'
-            }
-            actionLabel={activeSearch ? 'Browse Accommodation' : 'List Accommodation'}
-            actionTo={activeSearch ? '/accommodation' : '/accommodation/create'}
-            className="my-4"
-          />
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
-            {visibleAccommodations.map((item) => (
-              <Link
-                key={item.id || item.title}
-                to={`/accommodation/${item.id}`}
-                className="group block h-full transition-all duration-200"
-              >
-                <Card padded={false} className="h-full overflow-hidden flex flex-col">
-                  <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
-                    <ProductImage
-                      src={item.images?.[0]}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      iconClassName="w-8 h-8 text-slate-400"
-                    />
-                  </div>
-                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">
-                          {getAccommodationPublicLocation(item)}
-                        </span>
-                      </p>
-                      {(item.ownerSnapshot?.fullName ||
-                        item.ownerSnapshot?.isVerified) && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
-                          <span className="truncate">
-                            {item.ownerSnapshot?.fullName || 'Campus Host'}
-                          </span>
-                          {item.ownerSnapshot?.isVerified && (
-                            <VerifiedBadge size="xs" />
-                          )}
-                        </p>
-                      )}
-                    </div>
-                    <p className="text-sm sm:text-base font-bold text-primary-600">
-                      {formatNaira(getAccommodationRent(item))}
-                      <span className="text-xs font-normal text-slate-500"> / year</span>
-                    </p>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+                  Load more ({processedFeed.length - displayedFeed.length} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -610,7 +690,7 @@ export function Home() {
           <div className="max-w-2xl space-y-2">
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary-100">
               <ShieldCheck className="w-4 h-4 text-accent-500" />
-              <span>Safety & Community Rules</span>
+              <span>Safety &amp; Community Rules</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Built on Trust

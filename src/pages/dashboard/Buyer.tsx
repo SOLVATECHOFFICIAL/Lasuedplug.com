@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Calendar,
@@ -7,13 +7,14 @@ import {
   MapPin,
   MessageCircle,
   PackageOpen,
-  Store,
   Truck,
   User as UserIcon,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatEnquiryDate } from '../../lib/buyerHelpers';
+import { saveDashboardMode } from '../../lib/dashboardMode';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import {
   FavoriteWithListing,
   getUserEnquiries,
@@ -26,6 +27,7 @@ import {
   getProductPriceDisplay,
 } from '../../lib/marketplaceHelpers';
 import { Enquiry } from '../../types';
+import { DashboardModeSwitcher } from '../../components/dashboard/DashboardModeSwitcher';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
@@ -34,6 +36,129 @@ import { Card } from '../../components/ui/Card';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 
 type BuyerTab = 'saved' | 'enquiries';
+
+const SavedListingCard = memo(function SavedListingCard({
+  entry,
+  isRemoving,
+  onUnsave,
+}: {
+  entry: FavoriteWithListing;
+  isRemoving: boolean;
+  onUnsave: (item: FavoriteWithListing) => void;
+}) {
+  const { favorite, listing } = entry;
+
+  if (!listing) {
+    return (
+      <Card padded={false} className="overflow-hidden flex flex-col justify-between">
+        <div className="relative aspect-[4/3] w-full bg-slate-100 flex flex-col items-center justify-center gap-2 text-slate-400">
+          <PackageOpen className="w-8 h-8" aria-hidden="true" />
+          <span className="text-xs font-medium text-slate-500">
+            Listing unavailable
+          </span>
+          <button
+            type="button"
+            disabled={isRemoving}
+            onClick={() => onUnsave(entry)}
+            aria-label="Remove unavailable listing from favorites"
+            className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 transition-transform"
+          >
+            <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+          </button>
+        </div>
+        <div className="p-3.5 sm:p-4 space-y-1">
+          <p className="text-sm font-semibold text-slate-700">
+            Item no longer available
+          </p>
+          <p className="text-xs text-slate-500">
+            Saved on {formatEnquiryDate(favorite.createdAt)}
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  const priceInfo = getProductPriceDisplay(listing);
+  const locationLabel = getProductLocationLabel(listing);
+  const isOnlineListing =
+    listing.locationType === 'online' || listing.serviceLocation === 'online';
+  const categoryLabel =
+    listing.subcategory ||
+    getCategoryName(listing.categoryId) ||
+    listing.categoryName;
+
+  return (
+    <Card padded={false} className="overflow-hidden flex flex-col group">
+      <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+        <Link to={`/marketplace/${favorite.listingId}`} className="block w-full h-full">
+          <ProductImage
+            src={listing.images?.[0]}
+            alt={listing.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        </Link>
+
+        <button
+          type="button"
+          disabled={isRemoving}
+          onClick={() => onUnsave(entry)}
+          aria-label={`Remove ${listing.title} from favorites`}
+          title="Remove from favorites"
+          className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 backdrop-blur-sm border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
+        >
+          <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+        </button>
+      </div>
+
+      <Link
+        to={`/marketplace/${favorite.listingId}`}
+        className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5"
+      >
+        <div className="space-y-1">
+          {categoryLabel && (
+            <p className="text-xs font-medium text-slate-500 truncate">
+              {categoryLabel}
+            </p>
+          )}
+          <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+            {listing.title}
+          </h3>
+          {(listing.sellerSnapshot?.fullName || listing.sellerSnapshot?.isVerified) && (
+            <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+              <span className="truncate">
+                {listing.sellerSnapshot?.fullName || 'Campus Seller'}
+              </span>
+              {listing.sellerSnapshot?.isVerified && <VerifiedBadge size="xs" />}
+            </p>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">
+            {isOnlineListing ? (
+              <span className="truncate font-medium text-emerald-700 inline-flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                <span>Online / Delivery</span>
+              </span>
+            ) : (
+              <>
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                <span className="truncate">{locationLabel}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <p
+          className={`text-sm sm:text-base tabular-nums truncate ${
+            priceInfo.isContact ? 'font-semibold text-blue-600' : 'font-bold text-slate-900'
+          }`}
+        >
+          {priceInfo.isContact && priceInfo.unitSuffix
+            ? `${priceInfo.text} ${priceInfo.unitSuffix}`
+            : priceInfo.text}
+        </p>
+      </Link>
+    </Card>
+  );
+});
 
 export function BuyerDashboard() {
   const { user } = useAuth();
@@ -46,6 +171,8 @@ export function BuyerDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadBuyerData = useCallback(async () => {
     if (!user?.uid) {
       setSavedItems([]);
@@ -57,10 +184,12 @@ export function BuyerDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [favoritesResult, enquiriesResult] = await Promise.all([
-        getUserFavorites(user.uid),
-        getUserEnquiries(user.uid),
-      ]);
+      const [favoritesResult, enquiriesResult] = await withLoadTimeout(
+        Promise.all([
+          getUserFavorites(user.uid),
+          getUserEnquiries(user.uid),
+        ])
+      );
       setSavedItems(favoritesResult);
       setEnquiries(enquiriesResult);
     } catch (err) {
@@ -73,6 +202,10 @@ export function BuyerDashboard() {
       setLoading(false);
     }
   }, [user?.uid]);
+
+  useEffect(() => {
+    saveDashboardMode('buyer');
+  }, []);
 
   useEffect(() => {
     void loadBuyerData();
@@ -114,7 +247,9 @@ export function BuyerDashboard() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 space-y-6">
+      <DashboardModeSwitcher activeMode="buyer" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
         <div className="space-y-1">
@@ -125,14 +260,6 @@ export function BuyerDashboard() {
             View your saved marketplace items and track sellers you have contacted.
           </p>
         </div>
-
-        <Link
-          to="/dashboard/seller"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap shrink-0 self-start sm:self-auto"
-        >
-          <Store className="w-4 h-4 text-primary-600" aria-hidden="true" />
-          <span>Switch to Seller Dashboard</span>
-        </Link>
       </div>
 
       {/* Tabs */}
@@ -226,138 +353,14 @@ export function BuyerDashboard() {
           />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5">
-            {savedItems.map((entry) => {
-              const { favorite, listing } = entry;
-              const isRemoving = Boolean(removingIds[favorite.listingId]);
-
-              if (!listing) {
-                return (
-                  <Card
-                    key={favorite.id || favorite.listingId}
-                    padded={false}
-                    className="overflow-hidden flex flex-col justify-between"
-                  >
-                    <div className="relative aspect-[4/3] w-full bg-slate-100 flex flex-col items-center justify-center gap-2 text-slate-400">
-                      <PackageOpen className="w-8 h-8" aria-hidden="true" />
-                      <span className="text-xs font-medium text-slate-500">
-                        Listing unavailable
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isRemoving}
-                        onClick={() => void handleUnsaveItem(entry)}
-                        aria-label="Remove unavailable listing from favorites"
-                        className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 transition-transform"
-                      >
-                        <Heart className="w-4 h-4 fill-red-500 text-red-500" />
-                      </button>
-                    </div>
-                    <div className="p-3.5 sm:p-4 space-y-1">
-                      <p className="text-sm font-semibold text-slate-700">
-                        Item no longer available
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Saved on {formatEnquiryDate(favorite.createdAt)}
-                      </p>
-                    </div>
-                  </Card>
-                );
-              }
-
-              const priceInfo = getProductPriceDisplay(listing);
-              const locationLabel = getProductLocationLabel(listing);
-              const isOnlineListing =
-                listing.locationType === 'online' ||
-                listing.serviceLocation === 'online';
-              const categoryLabel =
-                listing.subcategory ||
-                getCategoryName(listing.categoryId) ||
-                listing.categoryName;
-
-              return (
-                <Card
-                  key={favorite.id || favorite.listingId}
-                  padded={false}
-                  className="overflow-hidden flex flex-col group"
-                >
-                  <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
-                    <Link
-                      to={`/marketplace/${favorite.listingId}`}
-                      className="block w-full h-full"
-                    >
-                      <ProductImage
-                        src={listing.images?.[0]}
-                        alt={listing.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </Link>
-
-                    <button
-                      type="button"
-                      disabled={isRemoving}
-                      onClick={() => void handleUnsaveItem(entry)}
-                      aria-label={`Remove ${listing.title} from favorites`}
-                      title="Remove from favorites"
-                      className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 backdrop-blur-sm border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
-                    >
-                      <Heart className="w-4 h-4 fill-red-500 text-red-500" />
-                    </button>
-                  </div>
-
-                  <Link
-                    to={`/marketplace/${favorite.listingId}`}
-                    className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5"
-                  >
-                    <div className="space-y-1">
-                      {categoryLabel && (
-                        <p className="text-xs font-medium text-slate-500 truncate">
-                          {categoryLabel}
-                        </p>
-                      )}
-                      <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                        {listing.title}
-                      </h3>
-                      {(listing.sellerSnapshot?.fullName ||
-                        listing.sellerSnapshot?.isVerified) && (
-                        <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
-                          <span className="truncate">
-                            {listing.sellerSnapshot?.fullName || 'Campus Seller'}
-                          </span>
-                          {listing.sellerSnapshot?.isVerified && (
-                            <VerifiedBadge size="xs" />
-                          )}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">
-                        {isOnlineListing ? (
-                          <span className="truncate font-medium text-emerald-700 inline-flex items-center gap-1">
-                            <Truck className="w-3.5 h-3.5 shrink-0" />
-                            <span>Online / Delivery</span>
-                          </span>
-                        ) : (
-                          <>
-                            <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                            <span className="truncate">{locationLabel}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <p
-                      className={`text-sm sm:text-base tabular-nums truncate ${
-                        priceInfo.isContact
-                          ? 'font-semibold text-blue-600'
-                          : 'font-bold text-slate-900'
-                      }`}
-                    >
-                      {priceInfo.isContact && priceInfo.unitSuffix
-                        ? `${priceInfo.text} ${priceInfo.unitSuffix}`
-                        : priceInfo.text}
-                    </p>
-                  </Link>
-                </Card>
-              );
-            })}
+            {savedItems.map((entry) => (
+              <SavedListingCard
+                key={entry.favorite.id || entry.favorite.listingId}
+                entry={entry}
+                isRemoving={Boolean(removingIds[entry.favorite.listingId])}
+                onUnsave={(item) => void handleUnsaveItem(item)}
+              />
+            ))}
           </div>
         )
       ) : enquiries.length === 0 ? (

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, ShoppingBag, Store, Truck, Wrench } from 'lucide-react';
 import { Product } from '../../types';
@@ -8,6 +9,7 @@ import {
   getProductPriceDisplay,
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
+import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { Card } from '../ui/Card';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { ProductImage } from './ProductImage';
@@ -17,7 +19,10 @@ interface ProductCardProps {
   className?: string;
 }
 
-export function ProductCard({ product, className = '' }: ProductCardProps) {
+export const ProductCard = memo(function ProductCard({
+  product,
+  className = '',
+}: ProductCardProps) {
   const adType = getListingAdType(product);
   const isServiceListing = adType === 'service';
   const priceInfo = getProductPriceDisplay(product);
@@ -39,9 +44,24 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
   const sellerName = product.sellerSnapshot?.fullName;
   const isSellerVerified = Boolean(product.sellerSnapshot?.isVerified);
 
+  const handleTrackClick = () => {
+    if (!product.id) return;
+    saveRecentlyViewed({
+      id: product.id,
+      _type: isServiceListing ? 'service' : 'item',
+      title: product.title,
+      subtitle: categoryLabel || sellerName || 'Campus Listing',
+      priceLabel: isServiceListing ? 'Contact for Price' : priceInfo.text,
+      imageUrl: product.images?.[0],
+      href: `/marketplace/${product.id}`,
+      isVerified: isSellerVerified,
+    });
+  };
+
   return (
     <Link
       to={`/marketplace/${product.id}`}
+      onClick={handleTrackClick}
       className={`group block h-full focus:outline-none ${className}`.trim()}
     >
       <Card
@@ -165,4 +185,5 @@ export function ProductCard({ product, className = '' }: ProductCardProps) {
       </Card>
     </Link>
   );
-}
+});
+

@@ -3,16 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>LASUEDPLUG — Campus Marketplace</title>
+    <title>LASUEDPLUG — The Official LASUED &amp; Epe Campus Marketplace</title>
     <meta
       name="description"
-      content="LASUEDPLUG — Your campus marketplace for products, services & accommodation for LASUED students, LASU students, and the Epe community."
+      content="Buy and sell safely at LASUED, LASU, and Epe. Find verified accommodation, roommates, services, and student businesses in one place."
     />
-    <meta property="og:title" content="LASUEDPLUG — Campus Marketplace" />
+    <meta
+      name="keywords"
+      content="LASUED, LASU Epe, Epe marketplace, student accommodation, buy and sell Nigeria, campus marketplace"
+    />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / WhatsApp Social Sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LASUEDPLUG" />
+    <meta
+      property="og:title"
+      content="LASUEDPLUG — The Official LASUED &amp; Epe Campus Marketplace"
+    />
     <meta
       property="og:description"
-      content="Your campus marketplace for products, services & accommodation."
+      content="Buy and sell safely at LASUED, LASU, and Epe. Find verified accommodation, roommates, services, and student businesses in one place."
     />
+    <meta property="og:image" content="/lasued.png" />
+
+    <!-- Twitter / X Social Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="LASUEDPLUG — The Official LASUED &amp; Epe Campus Marketplace"
+    />
+    <meta
+      name="twitter:description"
+      content="Buy and sell safely at LASUED, LASU, and Epe. Find verified accommodation, roommates, services, and student businesses in one place."
+    />
+    <meta name="twitter:image" content="/lasued.png" />
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "LASUEDPLUG",
+        "url": "https://lasuedplug.com",
+        "applicationCategory": "ShoppingApplication",
+        "operatingSystem": "All",
+        "description": "Buy and sell safely at LASUED, LASU, and Epe. Find verified accommodation, roommates, services, and student businesses in one place.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "NGN"
+        }
+      }
+    </script>
+
     <meta name="theme-color" content="#1d4ed8" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -40,6 +84,7 @@
         color: #0f172a;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         z-index: 9999;
+        animation: lasuedplug-splash-guard 0.3s ease 2.7s forwards;
       }
       #app-splash img {
         width: 72px;
@@ -64,6 +109,13 @@
       @keyframes lasuedplug-spin {
         to {
           transform: rotate(360deg);
+        }
+      }
+      @keyframes lasuedplug-splash-guard {
+        to {
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
         }
       }
     </style>

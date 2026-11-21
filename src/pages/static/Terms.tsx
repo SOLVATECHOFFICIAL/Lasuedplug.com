@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { FileText, Scale, ShieldAlert } from 'lucide-react';
+import { FileText, MessageCircle, Scale, ShieldAlert } from 'lucide-react';
+import { SUPPORT_LINK } from '../../lib/constants';
 import { Card } from '../../components/ui/Card';
 
 export function TermsPage() {
@@ -26,7 +27,7 @@ export function TermsPage() {
         <p className="text-sm sm:text-base leading-relaxed font-medium text-slate-100">
           LASUEDPLUG is a connection platform only. We do not process payments, handle
           deliveries, or guarantee the quality of items. All transactions are strictly
-          between the buyer and seller. LASUEDPLUG and its Admin are not liable for any
+          between the buyer and seller. LASUEDPLUG and its Support team are not liable for any
           financial loss, scam, or dispute that occurs off-platform (e.g., on WhatsApp).
         </p>
       </div>
@@ -63,7 +64,7 @@ export function TermsPage() {
           </h2>
           <p>
             A &ldquo;Verified Student&rdquo; badge indicates only that an account submitted
-            a student ID or school document reviewed by an Admin at the time of approval.
+            a student ID or school document reviewed by Support at the time of approval.
             It is not a financial guarantee, insurance policy, or endorsement of any
             off-platform transaction. Always follow our{' '}
             <Link to="/safety" className="font-semibold text-blue-600 hover:underline">
@@ -78,7 +79,7 @@ export function TermsPage() {
             4. Moderation & Account Termination
           </h2>
           <p>
-            The LASUEDPLUG Admin reserves the right to approve, reject, edit, or delete any
+            LASUEDPLUG Support reserves the right to approve, reject, edit, or delete any
             listing and to suspend or permanently ban any user account that violates these
             terms, receives credible abuse reports, or threatens community safety, without
             prior notice.
@@ -92,11 +93,31 @@ export function TermsPage() {
           <p>
             Every user assumes full personal responsibility when meeting other users,
             inspecting rooms or goods, and exchanging money or property. To the maximum
-            extent permitted by law, LASUEDPLUG and its Admin disclaim all warranties,
+            extent permitted by law, LASUEDPLUG and its Support team disclaim all warranties,
             express or implied, and shall not be held responsible for direct, indirect, or
             incidental damages arising out of user interactions.
           </p>
         </section>
+      </Card>
+
+      <Card hoverable={false} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 border-slate-200">
+        <div className="space-y-1">
+          <h2 className="text-base font-bold text-slate-900">
+            Questions or Account Appeals?
+          </h2>
+          <p className="text-sm text-slate-600">
+            Need help with a listing, verification, or account review? Reach our team directly.
+          </p>
+        </div>
+        <a
+          href={SUPPORT_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors whitespace-nowrap shrink-0"
+        >
+          <MessageCircle className="w-4 h-4" aria-hidden="true" />
+          <span>Contact Support</span>
+        </a>
       </Card>
     </div>
   );

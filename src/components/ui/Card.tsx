@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   padded?: boolean;
   hoverable?: boolean;
 }
 
-export function Card({
+export const Card = memo(function Card({
   padded = true,
   hoverable = true,
   className = '',
@@ -29,4 +29,5 @@ export function Card({
       {children}
     </div>
   );
-}
+});
+

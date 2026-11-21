@@ -13,7 +13,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn()
-        && request.auth.token.get('email', '') == 'awoyinfasolomon1@gmail.com'
+        && request.auth.token.get('email', '').lower() == 'awoyinfasolomon1@gmail.com'
         && request.auth.token.get('email_verified', false) == true;
     }
 
@@ -40,16 +40,30 @@ service cloud.firestore {
         && request.resource.data.get('isVerified', false) == false
         && request.resource.data.get('status', 'active') == 'active'
         && request.resource.data.get('isBanned', false) == false
+        && request.resource.data.get('accountType', 'student') in ['student', 'business']
+        && request.resource.data.get('trustScore', 0) == 0
+        && request.resource.data.get('reviewCount', 0) == 0
         && request.resource.data.get('roles', {}) is map
         && request.resource.data.get('roles', {}).get('admin', false) == false
         && request.resource.data.get('uid', userId) == userId
-        && request.resource.data.get('email', '') == request.auth.token.get('email', '')
+        && request.resource.data.get('email', '').lower() == request.auth.token.get('email', '').lower()
       );
-      allow update: if isAdmin() || (
-        isOwner(userId)
-        && !isSuspendedUser()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified', 'roles', 'status', 'uid', 'email', 'isBanned'])
-      );
+      allow update: if isAdmin()
+        || (
+          isOwner(userId)
+          && !isSuspendedUser()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified', 'roles', 'status', 'uid', 'email', 'isBanned', 'trustScore', 'reviewCount'])
+        )
+        || (
+          isNotSuspended()
+          && request.auth.uid != userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustScore', 'reviewCount'])
+          && request.resource.data.trustScore is number
+          && request.resource.data.trustScore >= 0
+          && request.resource.data.trustScore <= 5
+          && request.resource.data.reviewCount is number
+          && request.resource.data.reviewCount >= 0
+        );
       allow delete: if isAdmin();
 
       // Legacy user-scoped subcollections
@@ -97,13 +111,15 @@ service cloud.firestore {
           )
         )
         || (
-          (!isSignedIn() || !isSuspendedUser())
+          resource.data.isApproved == true
+          && (!isSignedIn() || !isSuspendedUser())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
           && request.resource.data.viewCount is number
           && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
         )
         || (
-          (!isSignedIn() || !isSuspendedUser())
+          resource.data.isApproved == true
+          && (!isSignedIn() || !isSuspendedUser())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
           && request.resource.data.contactCount is number
           && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
@@ -134,13 +150,15 @@ service cloud.firestore {
           )
         )
         || (
-          (!isSignedIn() || !isSuspendedUser())
+          resource.data.isApproved == true
+          && (!isSignedIn() || !isSuspendedUser())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
           && request.resource.data.viewCount is number
           && request.resource.data.viewCount == (resource.data.get('viewCount', 0) is number ? resource.data.get('viewCount', 0) : 0) + 1
         )
         || (
-          (!isSignedIn() || !isSuspendedUser())
+          resource.data.isApproved == true
+          && (!isSignedIn() || !isSuspendedUser())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactCount'])
           && request.resource.data.contactCount is number
           && request.resource.data.contactCount == (resource.data.get('contactCount', 0) is number ? resource.data.get('contactCount', 0) : 0) + 1
@@ -205,18 +223,30 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.isApproved == false
       );
-      allow update: if isAdmin() || (
-        isNotSuspended()
-        && isOwner(resource.data.ownerId)
-        && request.resource.data.ownerId == resource.data.ownerId
-        && (
-          request.resource.data.isApproved == false
-          || (
-            request.resource.data.isApproved == resource.data.isApproved
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive'])
+      allow update: if isAdmin()
+        || (
+          isNotSuspended()
+          && isOwner(resource.data.ownerId)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && (
+            request.resource.data.isApproved == false
+            || (
+              request.resource.data.isApproved == resource.data.isApproved
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive'])
+            )
           )
         )
-      );
+        || (
+          resource.data.isApproved == true
+          && isNotSuspended()
+          && request.auth.uid != resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustScore', 'reviewCount'])
+          && request.resource.data.trustScore is number
+          && request.resource.data.trustScore >= 0
+          && request.resource.data.trustScore <= 5
+          && request.resource.data.reviewCount is number
+          && request.resource.data.reviewCount >= 0
+        );
       allow delete: if (isNotSuspended() && isOwner(resource.data.ownerId)) || isAdmin();
     }
 
@@ -232,7 +262,7 @@ service cloud.firestore {
     match /notifications/{notifId} {
       allow get: if isAdmin() || (isNotSuspended() && (resource == null || resource.data.userId == request.auth.uid));
       allow list: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
-      allow create: if isNotSuspended() && request.resource.data.get('isRead', false) == false;
+      allow create: if isAdmin() || (isNotSuspended() && request.resource.data.get('isRead', false) == false);
       allow update, delete: if isAdmin() || (isNotSuspended() && resource.data.userId == request.auth.uid);
     }
 
@@ -242,6 +272,26 @@ service cloud.firestore {
       allow list: if isAdmin() || (isNotSuspended() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
       allow create: if isNotSuspended() && request.resource.data.buyerId == request.auth.uid;
       allow update, delete: if isAdmin();
+    }
+
+    // --- REVIEWS ---
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isNotSuspended()
+        && request.resource.data.reviewerId == request.auth.uid
+        && request.resource.data.targetType in ['user', 'store']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() > 0
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() >= 3
+        && (
+          request.resource.data.targetType != 'user'
+          || request.resource.data.targetId != request.auth.uid
+        );
+      allow update, delete: if isAdmin() || (isNotSuspended() && resource.data.reviewerId == request.auth.uid);
     }
 
     // --- REPORTS ---

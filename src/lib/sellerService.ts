@@ -4,6 +4,7 @@ import {
   deleteField,
   doc,
   FirestoreError,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -30,7 +31,7 @@ import {
   storeToUnifiedSellerListing,
   UnifiedSellerListing,
 } from './sellerHelpers';
-import { Accommodation, Product, RoommateRequest } from '../types';
+import { Accommodation, Product, RoommateRequest, UserProfile } from '../types';
 
 function mapFirestoreError(err: unknown, fallbackMessage: string): Error {
   const firestoreErr = err as FirestoreError;
@@ -325,5 +326,54 @@ export async function updateSellerListing(
     await updateDoc(doc(db, 'products', productId), payload);
   } catch (err) {
     throw mapFirestoreError(err, 'Failed to save listing updates.');
+  }
+}
+
+export async function getPublicUserProfile(
+  uid: string
+): Promise<UserProfile | null> {
+  if (!db || !uid.trim()) {
+    return null;
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'users', uid.trim()));
+    if (!snap.exists()) {
+      return null;
+    }
+    return {
+      uid: snap.id,
+      ...(snap.data() as Omit<UserProfile, 'uid'>),
+    };
+  } catch (err) {
+    throw mapFirestoreError(err, 'Unable to load seller profile.');
+  }
+}
+
+export async function getApprovedProductsBySeller(
+  sellerId: string
+): Promise<Product[]> {
+  if (!db || !sellerId.trim()) {
+    return [];
+  }
+
+  try {
+    const q = query(
+      collection(db, 'products'),
+      where('sellerId', '==', sellerId.trim()),
+      where('isApproved', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((p) => p.isActive !== false)
+      .sort(
+        (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+      );
+  } catch (err) {
+    throw mapFirestoreError(err, 'Unable to load seller listings.');
   }
 }

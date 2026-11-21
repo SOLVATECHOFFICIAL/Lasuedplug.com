@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getTimestampMillis } from './homeHelpers';
-import { Store } from '../types';
+import { Product, Store } from '../types';
 
 function mapStoreFirestoreError(err: unknown, fallbackMessage: string): Error {
   const firestoreErr = err as FirestoreError;
@@ -123,6 +123,83 @@ export async function getApprovedStores(): Promise<Store[]> {
   }
 }
 
+export async function getStoreById(storeId: string): Promise<Store | null> {
+  if (!db || !storeId.trim()) {
+    return null;
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'stores', storeId.trim()));
+    if (!snap.exists()) {
+      return null;
+    }
+    return {
+      id: snap.id,
+      ...(snap.data() as Omit<Store, 'id'>),
+    };
+  } catch (err) {
+    const firestoreErr = err as FirestoreError;
+    if (firestoreErr?.code === 'permission-denied') {
+      return null;
+    }
+    throw mapStoreFirestoreError(err, 'Unable to load store details.');
+  }
+}
+
+export async function getApprovedStoresByOwner(ownerId: string): Promise<Store[]> {
+  if (!db || !ownerId.trim()) {
+    return [];
+  }
+
+  try {
+    const q = query(
+      collection(db, 'stores'),
+      where('ownerId', '==', ownerId.trim()),
+      where('isApproved', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Store, 'id'>),
+      }))
+      .filter((s) => s.isActive !== false)
+      .sort(
+        (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+      );
+  } catch (err) {
+    throw mapStoreFirestoreError(err, 'Unable to load seller stores.');
+  }
+}
+
+export async function getApprovedProductsByStoreId(
+  storeId: string
+): Promise<Product[]> {
+  if (!db || !storeId.trim()) {
+    return [];
+  }
+
+  try {
+    const q = query(
+      collection(db, 'products'),
+      where('storeId', '==', storeId.trim()),
+      where('isApproved', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter((p) => p.isActive !== false)
+      .sort(
+        (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+      );
+  } catch (err) {
+    throw mapStoreFirestoreError(err, 'Unable to load store listings.');
+  }
+}
+
 /**
  * Creates a new Store document in Firestore with isApproved: false so an Admin must approve
  * before it becomes publicly visible. Includes idempotent already-exists recovery.
@@ -138,6 +215,8 @@ export async function createStore(
   const docRef = doc(storesCol);
   const payload = {
     ...storeData,
+    trustScore: 0,
+    reviewCount: 0,
     isApproved: false,
     isActive: true,
     createdAt: serverTimestamp(),
@@ -148,6 +227,8 @@ export async function createStore(
     return {
       id: docRef.id,
       ...storeData,
+      trustScore: 0,
+      reviewCount: 0,
       isApproved: false,
       isActive: true,
       createdAt: new Date(),
@@ -165,6 +246,8 @@ export async function createStore(
           return {
             id: docRef.id,
             ...storeData,
+            trustScore: 0,
+            reviewCount: 0,
             isApproved: false,
             isActive: true,
             createdAt: new Date(),
@@ -178,6 +261,8 @@ export async function createStore(
       return {
         id: freshRef.id,
         ...storeData,
+        trustScore: 0,
+        reviewCount: 0,
         isApproved: false,
         isActive: true,
         createdAt: new Date(),

@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ImagePlus,
   MapPin,
@@ -30,6 +30,7 @@ import {
   fetchApprovedRoommateRequests,
 } from '../../lib/accommodationService';
 import { getInitials } from '../../lib/authHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { formatNaira } from '../../lib/utils';
@@ -45,6 +46,7 @@ import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
+import { ProductImage } from '../../components/marketplace/ProductImage';
 
 interface LocalImageItem {
   id: string;
@@ -87,11 +89,13 @@ export function Roommates() {
   const previewUrlsRef = useRef<string[]>([]);
   const submittingRef = useRef(false);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadRequests = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const items = await fetchApprovedRoommateRequests();
+      const items = await withLoadTimeout(fetchApprovedRoommateRequests());
       setRequests(items);
     } catch (err) {
       const msg =
@@ -463,11 +467,11 @@ export function Roommates() {
 
                   {req.images && req.images.length > 0 && (
                     <div className="w-full h-36 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-                      <img
+                      <ProductImage
                         src={req.images[0]}
                         alt={req.title}
-                        loading="lazy"
                         className="w-full h-full object-cover"
+                        iconClassName="w-8 h-8 text-slate-400"
                       />
                     </div>
                   )}
@@ -560,11 +564,11 @@ export function Roommates() {
                     key={`${selectedRequest.id || 'req'}-img-${idx}`}
                     className="aspect-square rounded-lg overflow-hidden bg-slate-100 border border-slate-200"
                   >
-                    <img
+                    <ProductImage
                       src={imgSrc}
                       alt={`${selectedRequest.title} photo ${idx + 1}`}
-                      loading="lazy"
                       className="w-full h-full object-cover"
+                      iconClassName="w-6 h-6 text-slate-400"
                     />
                   </div>
                 ))}
@@ -610,7 +614,10 @@ export function Roommates() {
               </p>
             </div>
 
-            <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <Link
+              to={`/seller/${selectedRequest.userId}`}
+              className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
+            >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
                   {getInitials(
@@ -619,7 +626,7 @@ export function Roommates() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                     <span className="truncate">
                       {selectedRequest.userSnapshot?.fullName ||
                         'LASUEDPLUG Student'}
@@ -628,7 +635,9 @@ export function Roommates() {
                       <VerifiedBadge size="sm" />
                     )}
                   </p>
-                  <p className="text-xs text-slate-500">Posted by student</p>
+                  <p className="text-xs text-slate-500">
+                    View student profile &amp; reviews →
+                  </p>
                 </div>
               </div>
               {selectedRequest.userSnapshot?.isVerified && (
@@ -637,7 +646,7 @@ export function Roommates() {
                   Verified
                 </Badge>
               )}
-            </div>
+            </Link>
 
             <div className="pt-1">
               <a
@@ -822,6 +831,7 @@ export function Roommates() {
                         src={img.previewUrl}
                         alt={`Roommate photo ${idx + 1}`}
                         loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                       />
                       <button

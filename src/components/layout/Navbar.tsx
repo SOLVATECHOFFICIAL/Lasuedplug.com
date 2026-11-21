@@ -16,6 +16,10 @@ import {
 import { LOGO_URL, SITE_NAME } from '../../lib/constants';
 import { getInitials } from '../../lib/authHelpers';
 import {
+  DASHBOARD_MODE_EVENT,
+  getPreferredDashboardPath,
+} from '../../lib/dashboardMode';
+import {
   countUnreadNotifications,
   formatNotificationTime,
 } from '../../lib/notificationHelpers';
@@ -44,6 +48,10 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [preferredDashboardPath, setPreferredDashboardPath] = useState<
+    '/dashboard/buyer' | '/dashboard/seller'
+  >(() => getPreferredDashboardPath());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -65,9 +73,26 @@ export function Navbar() {
   );
 
   useEffect(() => {
+    setAvatarLoadError(false);
+  }, [profile?.avatarUrl]);
+
+  useEffect(() => {
     setDropdownOpen(false);
     setNotifDropdownOpen(false);
     setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const syncPreferredPath = () => {
+      setPreferredDashboardPath(getPreferredDashboardPath());
+    };
+    syncPreferredPath();
+    window.addEventListener(DASHBOARD_MODE_EVENT, syncPreferredPath);
+    window.addEventListener('storage', syncPreferredPath);
+    return () => {
+      window.removeEventListener(DASHBOARD_MODE_EVENT, syncPreferredPath);
+      window.removeEventListener('storage', syncPreferredPath);
+    };
   }, [location.pathname]);
 
   useEffect(() => {
@@ -167,6 +192,8 @@ export function Navbar() {
             <img
               src={LOGO_URL}
               alt={SITE_NAME}
+              loading="lazy"
+              decoding="async"
               className="h-8 md:h-10 w-auto object-contain shrink-0"
             />
             <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors duration-200 truncate">
@@ -334,11 +361,13 @@ export function Navbar() {
                     aria-haspopup="menu"
                     className="flex items-center gap-2 p-1 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                  {profile?.avatarUrl ? (
+                  {profile?.avatarUrl && !avatarLoadError ? (
                     <img
                       src={profile.avatarUrl}
                       alt={displayName}
                       loading="lazy"
+                      decoding="async"
+                      onError={() => setAvatarLoadError(true)}
                       className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : (
@@ -388,7 +417,7 @@ export function Navbar() {
                     </Link>
 
                     <Link
-                      to="/dashboard/buyer"
+                      to={preferredDashboardPath}
                       role="menuitem"
                       onClick={() => setDropdownOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
@@ -484,11 +513,13 @@ export function Navbar() {
                   aria-label="Go to profile"
                   className="w-10 h-10 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden transition-all duration-200 active:scale-95"
                 >
-                  {profile?.avatarUrl ? (
+                  {profile?.avatarUrl && !avatarLoadError ? (
                     <img
                       src={profile.avatarUrl}
                       alt={displayName}
                       loading="lazy"
+                      decoding="async"
+                      onError={() => setAvatarLoadError(true)}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -528,6 +559,8 @@ export function Navbar() {
                 <img
                   src={LOGO_URL}
                   alt={SITE_NAME}
+                  loading="lazy"
+                  decoding="async"
                   className="h-10 w-auto object-contain"
                 />
                 <span className="font-extrabold text-lg text-slate-900 tracking-tight">
@@ -622,7 +655,7 @@ export function Navbar() {
                   variant="secondary"
                   size="lg"
                   fullWidth
-                  onClick={() => handleMobileNav('/dashboard/buyer')}
+                  onClick={() => handleMobileNav(preferredDashboardPath)}
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   My Dashboard

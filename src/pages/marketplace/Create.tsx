@@ -920,8 +920,8 @@ export function MarketplaceCreate() {
               >
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>
-                  AI is matching the best{' '}
-                  {adType === 'service' ? 'service' : 'product'} category...
+                  Matching best {adType === 'service' ? 'service' : 'product'}{' '}
+                  category...
                 </span>
               </p>
             )}
@@ -932,7 +932,7 @@ export function MarketplaceCreate() {
                 className="text-xs font-medium text-primary-600 inline-flex items-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span>✨ AI suggested this based on your title.</span>
+                <span>Suggested category based on your title.</span>
               </p>
             )}
           </div>
@@ -974,6 +974,7 @@ export function MarketplaceCreate() {
                     src={item.previewUrl}
                     alt={`Selected preview ${idx + 1}`}
                     loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                   <button

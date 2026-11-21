@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Package,
   PackageOpen,
+  Share2,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -39,6 +40,9 @@ import {
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
 import { getInitials } from '../../lib/authHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { shareListingLink } from '../../lib/shareUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Product } from '../../types';
@@ -69,6 +73,8 @@ export function MarketplaceDetail() {
 
   const trackedViewForIdRef = useRef<string | null>(null);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadProduct = useCallback(async () => {
     if (!id) {
       setProduct(null);
@@ -78,7 +84,7 @@ export function MarketplaceDetail() {
     setLoading(true);
     setError(null);
     try {
-      const row = await getProductById(id);
+      const row = await withLoadTimeout(getProductById(id));
       setProduct(row);
       setSelectedImageIndex(0);
     } catch (err) {
@@ -96,10 +102,31 @@ export function MarketplaceDetail() {
     void loadProduct();
   }, [loadProduct]);
 
-  // Increment viewCount by 1 once when the product detail loads
+  // Increment viewCount by 1 once when the product detail loads and save recentlyViewed
   useEffect(() => {
     const productId = product?.id;
-    if (!productId || trackedViewForIdRef.current === productId) {
+    if (!productId || !product) {
+      return;
+    }
+
+    const adType = getListingAdType(product);
+    const priceInfo = getProductPriceDisplay(product);
+    saveRecentlyViewed({
+      id: productId,
+      _type: adType === 'service' ? 'service' : 'item',
+      title: product.title,
+      subtitle:
+        product.subcategory ||
+        getCategoryName(product.categoryId) ||
+        product.categoryName ||
+        'Campus Listing',
+      priceLabel: adType === 'service' ? 'Contact for Price' : priceInfo.text,
+      imageUrl: product.images?.[0],
+      href: `/marketplace/${productId}`,
+      isVerified: Boolean(product.sellerSnapshot?.isVerified),
+    });
+
+    if (trackedViewForIdRef.current === productId) {
       return;
     }
     trackedViewForIdRef.current = productId;
@@ -109,7 +136,7 @@ export function MarketplaceDetail() {
         : prev
     );
     void incrementProductViewCount(productId);
-  }, [product?.id]);
+  }, [product]);
 
   // Check if current listing is saved in user favorites
   useEffect(() => {
@@ -316,8 +343,8 @@ export function MarketplaceDetail() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
-      {/* Back link */}
-      <div>
+      {/* Back link & Share */}
+      <div className="flex items-center justify-between gap-3">
         <Link
           to={isServiceListing ? '/services' : '/marketplace'}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
@@ -325,6 +352,27 @@ export function MarketplaceDetail() {
           <ArrowLeft className="w-4 h-4" />
           <span>{isServiceListing ? 'Back to Services' : 'Back to Marketplace'}</span>
         </Link>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void shareListingLink({
+              title: product.title,
+              text: `Check out ${product.title} on LASUEDPLUG`,
+            }).then((outcome) => {
+              if (outcome === 'copied') {
+                showToast('Link copied! Share on WhatsApp.', 'success');
+              } else if (outcome === 'failed') {
+                showToast('Could not copy link. Please copy the URL from your browser.', 'error');
+              }
+            });
+          }}
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Share</span>
+        </Button>
       </div>
 
       {/* Main 2-Column Layout */}
@@ -500,7 +548,16 @@ export function MarketplaceDetail() {
                 {storeTitle && (
                   <p className="text-sm text-slate-600 flex items-center gap-1.5">
                     <Store className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>{storeTitle}</span>
+                    {product.storeId ? (
+                      <Link
+                        to={`/store/${product.storeId}`}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        {storeTitle}
+                      </Link>
+                    ) : (
+                      <span>{storeTitle}</span>
+                    )}
                   </p>
                 )}
 
@@ -529,18 +586,21 @@ export function MarketplaceDetail() {
               <h2 className="text-sm font-semibold text-slate-900">
                 Seller Information
               </h2>
-              <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Link
+                to={`/seller/${product.sellerId}`}
+                className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
+              >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-11 h-11 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
                     {sellerInitials}
                   </div>
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{sellerName}</span>
                       {sellerVerified && <VerifiedBadge size="sm" />}
                     </p>
                     <p className="text-xs text-slate-500">
-                      LASUEDPLUG Seller
+                      View seller profile, reviews &amp; listings →
                     </p>
                   </div>
                 </div>
@@ -550,7 +610,7 @@ export function MarketplaceDetail() {
                     Verified
                   </Badge>
                 )}
-              </div>
+              </Link>
             </div>
 
             {/* Desktop WhatsApp Primary Action */}

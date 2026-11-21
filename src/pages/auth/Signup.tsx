@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, UserPlus } from 'lucide-react';
+import { AlertCircle, Building2, GraduationCap, UserPlus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { LOGO_URL, SITE_NAME } from '../../lib/constants';
@@ -9,11 +9,13 @@ import {
   SignupFormErrors,
   validateSignupForm,
 } from '../../lib/authHelpers';
+import { AccountType } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 
 export function SignupPage() {
+  const [accountType, setAccountType] = useState<AccountType>('student');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,20 +41,21 @@ export function SignupPage() {
     });
     setFieldErrors(errors);
 
-    if (Object.keys(errors).length > 0) {
+    if (!agreedToTerms) {
+      const termsError =
+        'Please check the Terms box to agree to our Terms of Service, Privacy Policy, and Safety Rules.';
+      setFormError(termsError);
+      showToast('Please check the Terms box to continue.', 'error');
       return;
     }
 
-    if (!agreedToTerms) {
-      setFormError(
-        'Please agree to the Terms of Service, Privacy Policy, and Safety Rules before creating an account.'
-      );
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
     setSubmitting(true);
     try {
-      await signUp(email, password, fullName);
+      await signUp(email, password, fullName, accountType);
       showToast('Account created! Welcome to LASUEDPLUG.', 'success');
       navigate('/');
     } catch (err) {
@@ -70,6 +73,7 @@ export function SignupPage() {
             src={LOGO_URL}
             alt={SITE_NAME}
             loading="lazy"
+            decoding="async"
             className="h-12 w-auto mx-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -107,6 +111,46 @@ export function SignupPage() {
             error={fieldErrors.fullName}
             required
           />
+
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium text-slate-700">
+              Account Type
+            </span>
+            <div
+              role="radiogroup"
+              aria-label="Account Type"
+              className="grid grid-cols-2 gap-2.5"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={accountType === 'student'}
+                onClick={() => setAccountType('student')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                  accountType === 'student'
+                    ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4 shrink-0" />
+                <span>I am a Student</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={accountType === 'business'}
+                onClick={() => setAccountType('business')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                  accountType === 'business'
+                    ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Building2 className="w-4 h-4 shrink-0" />
+                <span>I am a Business / Landlord</span>
+              </button>
+            </div>
+          </div>
 
           <Input
             label="Email Address"
@@ -223,7 +267,7 @@ export function SignupPage() {
             variant="primary"
             size="lg"
             fullWidth
-            disabled={submitting || !agreedToTerms}
+            disabled={submitting}
           >
             <UserPlus className="w-4 h-4" />
             {submitting ? 'Creating account...' : 'Create Account'}

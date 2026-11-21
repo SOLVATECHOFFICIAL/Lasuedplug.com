@@ -4,6 +4,7 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  ExternalLink,
   Eye,
   EyeOff,
   Loader2,
@@ -35,6 +36,8 @@ import {
   SellerTab,
   UnifiedSellerListing,
 } from '../../lib/sellerHelpers';
+import { saveDashboardMode } from '../../lib/dashboardMode';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import {
   deleteUnifiedSellerListing,
   getAllSellerDashboardItems,
@@ -42,6 +45,7 @@ import {
   toggleSellerListingActive,
 } from '../../lib/sellerService';
 import { Product } from '../../types';
+import { DashboardModeSwitcher } from '../../components/dashboard/DashboardModeSwitcher';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -161,6 +165,8 @@ export function SellerDashboard() {
     }
   }, [authLoading, user, isProfileComplete, navigate, showToast]);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadListings = useCallback(async () => {
     if (!user?.uid) {
       setListings([]);
@@ -171,7 +177,7 @@ export function SellerDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAllSellerDashboardItems(user.uid);
+      const data = await withLoadTimeout(getAllSellerDashboardItems(user.uid));
       setListings(data);
     } catch (err) {
       const message =
@@ -398,8 +404,14 @@ export function SellerDashboard() {
     }
   };
 
+  useEffect(() => {
+    saveDashboardMode('seller');
+  }, []);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 space-y-6">
+      <DashboardModeSwitcher activeMode="seller" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
         <div className="space-y-1">
@@ -412,6 +424,15 @@ export function SellerDashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0 w-full sm:w-auto">
+          {user?.uid && (
+            <Link
+              to={`/seller/${user.uid}`}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap"
+            >
+              <ExternalLink className="w-4 h-4 text-slate-500" aria-hidden="true" />
+              <span>View Public Profile</span>
+            </Link>
+          )}
           <Link
             to="/store/create"
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] md:min-h-[42px] rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-sm font-semibold transition-all duration-200 active:scale-95 shadow-sm whitespace-nowrap"

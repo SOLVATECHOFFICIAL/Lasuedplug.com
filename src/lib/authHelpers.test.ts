@@ -31,10 +31,24 @@ test('buildNewUserProfile sets safe unprivileged defaults', () => {
   assert.equal(profile.uid, 'user-123');
   assert.equal(profile.email, 'student@lasued.edu.ng');
   assert.equal(profile.fullName, 'Ada Okafor');
+  assert.equal(profile.accountType, 'student');
+  assert.equal(profile.trustScore, 0);
+  assert.equal(profile.reviewCount, 0);
   assert.equal(profile.isVerified, false);
   assert.equal(profile.status, 'active');
   assert.equal(profile.roles.buyer, true);
   assert.equal(profile.roles.admin, undefined);
+
+  const bizProfile = buildNewUserProfile({
+    uid: 'biz-123',
+    email: 'shop@lasuedplug.com',
+    fullName: 'Tunde Bello',
+    accountType: 'business',
+    timestamp: ts,
+  });
+  assert.equal(bizProfile.accountType, 'business');
+  assert.equal(bizProfile.trustScore, 0);
+  assert.equal(bizProfile.reviewCount, 0);
 });
 
 test('getProtectedRouteDecision returns loading, redirect, or allow correctly', () => {
@@ -78,7 +92,7 @@ test('isAccountSuspended and isAccountBanned detect suspended/banned states and 
   assert.equal(isAccountBanned({ isBanned: true }), true);
   assert.equal(
     SUSPENDED_ACCOUNT_MESSAGE,
-    'Your account has been suspended. Contact Admin on WhatsApp.'
+    'Your account has been suspended. Contact Support on WhatsApp.'
   );
   assert.ok(BANNED_ACCOUNT_MESSAGE.includes('permanently banned'));
 });
@@ -158,6 +172,25 @@ test('checkProfileCompleteness returns true only when all 5 required profile fie
       campus: 'LASUED',
       department: 'Computer Science Education',
       level: '200L',
+    }),
+    true
+  );
+
+  // Business accounts require fullName, phone, and businessName without student academic fields
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+    }),
+    false
+  );
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Gadgets & Repairs',
     }),
     true
   );

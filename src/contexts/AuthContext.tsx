@@ -43,14 +43,19 @@ import {
   PHONE_UPDATE_COOLDOWN_DAYS,
   SUSPENDED_ACCOUNT_MESSAGE,
 } from '../lib/authHelpers';
-import { UserProfile } from '../types';
+import { AccountType, UserProfile } from '../types';
+import { withLoadTimeout } from '../lib/loadTimeout';
 
 export interface ProfileUpdateFields {
   fullName: string;
   phone?: string;
+  accountType?: AccountType;
   department?: string;
   level?: string;
   campus?: string;
+  businessName?: string;
+  openingHours?: string;
+  isOnlineOnly?: boolean;
 }
 
 export interface AuthContextValue {
@@ -60,7 +65,12 @@ export interface AuthContextValue {
   isSuspended: boolean;
   loading: boolean;
   isProfileComplete: boolean;
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName?: string,
+    accountType?: AccountType
+  ) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -166,15 +176,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    let isMounted = true;
     let unsubscribeProfile: (() => void) | null = null;
+    const authSafetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }, 2500);
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!isMounted) return;
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
       }
 
       if (!firebaseUser) {
+        clearTimeout(authSafetyTimer);
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -182,26 +200,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       suspensionToastUidRef.current = null;
-      const loadedProfile = await fetchUserProfile(
-        firebaseUser.uid,
-        firebaseUser.email
-      );
-
-      if (!auth?.currentUser) {
-        setLoading(false);
-        return;
-      }
-
       setUser(firebaseUser);
-      if (loadedProfile) {
-        setProfile(loadedProfile);
-      }
 
       if (db) {
         unsubscribeProfile = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
           (snap) => {
-            if (!snap.exists()) return;
+            if (!snap.exists() || !isMounted) return;
             const liveProfile = {
               uid: snap.id,
               ...(snap.data() as Omit<UserProfile, 'uid'>),
@@ -218,10 +223,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
 
+      const loadedProfile = await withLoadTimeout(
+        fetchUserProfile(firebaseUser.uid, firebaseUser.email),
+        2000,
+        null
+      );
+
+      if (!isMounted) return;
+      if (!auth?.currentUser) {
+        clearTimeout(authSafetyTimer);
+        setLoading(false);
+        return;
+      }
+
+      if (loadedProfile) {
+        setProfile(loadedProfile);
+      }
+
+      clearTimeout(authSafetyTimer);
       setLoading(false);
     });
 
     return () => {
+      isMounted = false;
+      clearTimeout(authSafetyTimer);
       unsubscribeAuth();
       if (unsubscribeProfile) {
         unsubscribeProfile();
@@ -230,7 +255,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUserProfile, handleSuspendedLogout]);
 
   const signUp = useCallback(
-    async (email: string, password: string, fullName?: string) => {
+    async (
+      email: string,
+      password: string,
+      fullName?: string,
+      accountType: AccountType = 'student'
+    ) => {
       if (!auth || !db) {
         throw new Error('Firebase is not configured. Check .env.local.');
       }
@@ -255,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         uid: credential.user.uid,
         email: credential.user.email || trimmedEmail,
         fullName: trimmedName,
+        accountType,
         timestamp: serverTimestamp(),
       });
       await setDoc(doc(db, 'users', credential.user.uid), newProfile);
@@ -323,11 +354,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('You must be signed in with an active account to update your profile.');
       }
 
+      const effectiveAccountType: AccountType =
+        profile?.accountType || updates.accountType || 'student';
+
       const nextFullName = updates.fullName.trim();
       const nextPhone = (updates.phone || '').trim();
       const nextCampus = (updates.campus || '').trim();
       const nextDepartment = (updates.department || '').trim();
       const nextLevel = (updates.level || '').trim();
+      const nextBusinessName = (updates.businessName || '').trim();
+      const nextOpeningHours = (updates.openingHours || '').trim();
+      const nextIsOnlineOnly = Boolean(updates.isOnlineOnly);
 
       const existingFullName = (profile?.fullName || '').trim();
       const existingPhone = (profile?.phone || '').trim();
@@ -343,10 +380,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (
-        (isAcademicFieldLocked(existingCampus) && nextCampus !== existingCampus) ||
-        (isAcademicFieldLocked(existingDepartment) &&
-          nextDepartment !== existingDepartment) ||
-        (isAcademicFieldLocked(existingLevel) && nextLevel !== existingLevel)
+        effectiveAccountType === 'student' &&
+        ((isAcademicFieldLocked(existingCampus) && nextCampus !== existingCampus) ||
+          (isAcademicFieldLocked(existingDepartment) &&
+            nextDepartment !== existingDepartment) ||
+          (isAcademicFieldLocked(existingLevel) && nextLevel !== existingLevel))
       ) {
         throw new Error(ACADEMIC_LOCK_MESSAGE);
       }
@@ -377,29 +415,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const firestoreUpdates: Record<string, unknown> = {
         fullName: resolvedFullName,
         phone: nextPhone,
-        campus: isAcademicFieldLocked(existingCampus)
-          ? existingCampus
-          : nextCampus,
-        department: isAcademicFieldLocked(existingDepartment)
-          ? existingDepartment
-          : nextDepartment,
-        level: isAcademicFieldLocked(existingLevel) ? existingLevel : nextLevel,
+        accountType: effectiveAccountType,
         updatedAt: serverTimestamp(),
       };
-
-      if (phoneChanged) {
-        firestoreUpdates.lastPhoneUpdate = serverTimestamp();
-      }
 
       const localUpdates: Partial<UserProfile> = {
         fullName: resolvedFullName,
         phone: nextPhone,
-        campus: String(firestoreUpdates.campus),
-        department: String(firestoreUpdates.department),
-        level: String(firestoreUpdates.level),
+        accountType: effectiveAccountType,
         updatedAt: nowLocal,
         ...(phoneChanged ? { lastPhoneUpdate: nowLocal } : {}),
       };
+
+      if (effectiveAccountType === 'business') {
+        firestoreUpdates.businessName = nextBusinessName;
+        firestoreUpdates.openingHours = nextOpeningHours;
+        firestoreUpdates.isOnlineOnly = nextIsOnlineOnly;
+
+        localUpdates.businessName = nextBusinessName;
+        localUpdates.openingHours = nextOpeningHours;
+        localUpdates.isOnlineOnly = nextIsOnlineOnly;
+      } else {
+        const resolvedCampus = isAcademicFieldLocked(existingCampus)
+          ? existingCampus
+          : nextCampus;
+        const resolvedDepartment = isAcademicFieldLocked(existingDepartment)
+          ? existingDepartment
+          : nextDepartment;
+        const resolvedLevel = isAcademicFieldLocked(existingLevel)
+          ? existingLevel
+          : nextLevel;
+
+        firestoreUpdates.campus = resolvedCampus;
+        firestoreUpdates.department = resolvedDepartment;
+        firestoreUpdates.level = resolvedLevel;
+
+        localUpdates.campus = resolvedCampus;
+        localUpdates.department = resolvedDepartment;
+        localUpdates.level = resolvedLevel;
+      }
+
+      if (phoneChanged) {
+        firestoreUpdates.lastPhoneUpdate = serverTimestamp();
+      }
 
       if (resolvedFullName && resolvedFullName !== user.displayName) {
         await updateProfile(user, { displayName: resolvedFullName });
@@ -418,6 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             uid: user.uid,
             email: user.email || '',
             fullName: resolvedFullName,
+            accountType: effectiveAccountType,
             timestamp: serverTimestamp(),
           });
           const fullDoc: Record<string, unknown> = {

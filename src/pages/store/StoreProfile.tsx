@@ -1,0 +1,398 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Clock,
+  ExternalLink,
+  Flag,
+  MapPin,
+  MessageCircle,
+  PackageOpen,
+  Share2,
+  ShieldAlert,
+  Store as StoreIcon,
+  User as UserIcon,
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { fetchReviewsForTarget } from '../../lib/reviewService';
+import { shareListingLink } from '../../lib/shareUtils';
+import { getPublicUserProfile } from '../../lib/sellerService';
+import {
+  getApprovedProductsByStoreId,
+  getStoreById,
+} from '../../lib/storeService';
+import { Product, Review, Store, UserProfile } from '../../types';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { StarRating } from '../../components/ui/StarRating';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { Loading } from '../../components/feedback/Loading';
+import { EmptyState } from '../../components/feedback/EmptyState';
+import { ErrorState } from '../../components/feedback/ErrorState';
+import { ProductCard } from '../../components/marketplace/ProductCard';
+import { ProductImage } from '../../components/marketplace/ProductImage';
+import { ReviewSection } from '../../components/reviews/ReviewSection';
+import { ReportUserModal } from '../../components/reviews/ReportUserModal';
+
+export function StoreProfile() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, profile: currentUserProfile } = useAuth();
+  const { showToast } = useToast();
+
+  const [store, setStore] = useState<Store | null>(null);
+  const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+
+  useLoadCap(loading, () => setLoading(false));
+
+  const loadStoreProfile = useCallback(async () => {
+    if (!id) {
+      setStore(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const storeRecord = await withLoadTimeout(getStoreById(id));
+      if (!storeRecord) {
+        setStore(null);
+        setOwnerProfile(null);
+        setProducts([]);
+        setReviews([]);
+        return;
+      }
+
+      const canViewUnapproved = Boolean(
+        user?.uid &&
+          (user.uid === storeRecord.ownerId || currentUserProfile?.roles?.admin)
+      );
+      if (!storeRecord.isApproved && !canViewUnapproved) {
+        setStore(null);
+        setOwnerProfile(null);
+        setProducts([]);
+        setReviews([]);
+        return;
+      }
+
+      const [ownerData, storeProducts, storeReviews] = await withLoadTimeout(
+        Promise.all([
+          getPublicUserProfile(storeRecord.ownerId).catch(() => null),
+          getApprovedProductsByStoreId(id),
+          fetchReviewsForTarget(id, 'store'),
+        ])
+      );
+
+      setStore(storeRecord);
+      setOwnerProfile(ownerData);
+      setProducts(storeProducts);
+      setReviews(storeReviews);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load this campus store right now.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserProfile?.roles?.admin, id, user?.uid]);
+
+  useEffect(() => {
+    void loadStoreProfile();
+  }, [loadStoreProfile]);
+
+  useEffect(() => {
+    if (!store?.id || !store.isApproved) return;
+    saveRecentlyViewed({
+      id: store.id,
+      _type: 'store',
+      title: store.name,
+      subtitle: store.category || 'Campus Store',
+      priceLabel: store.openingHours?.trim() || store.locationName || 'Storefront',
+      imageUrl: store.logoUrl,
+      href: `/store/${store.id}`,
+      isVerified: Boolean(ownerProfile?.isVerified || store.ownerSnapshot?.isVerified),
+    });
+  }, [store, ownerProfile?.isVerified]);
+
+  if (loading) {
+    return <Loading fullScreen message="Loading store profile..." />;
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <ErrorState message={error} onRetry={() => void loadStoreProfile()} />
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <EmptyState
+          icon={StoreIcon}
+          title="Store not found"
+          description="This campus storefront may have been removed or is awaiting admin approval."
+          actionLabel="Browse Campus Stores"
+          actionTo="/marketplace?tab=stores"
+        />
+      </div>
+    );
+  }
+
+  const ownerName =
+    ownerProfile?.businessName?.trim() ||
+    ownerProfile?.fullName?.trim() ||
+    store.ownerSnapshot?.fullName ||
+    'Campus Seller';
+  const isVerified = Boolean(
+    ownerProfile?.isVerified || store.ownerSnapshot?.isVerified
+  );
+  const openingHours =
+    store.openingHours?.trim() || ownerProfile?.openingHours?.trim() || '';
+  const hasGps =
+    typeof store.latitude === 'number' && typeof store.longitude === 'number';
+  const whatsappDigits = formatNigerianWhatsAppDigits(store.whatsappNumber || '');
+  const whatsappHref = whatsappDigits
+    ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(
+        `Hello ${store.name}, I found your storefront on LASUEDPLUG.`
+      )}`
+    : '';
+  const isOwner = Boolean(user?.uid && user.uid === store.ownerId);
+
+  const handleReportClick = () => {
+    if (!user) {
+      showToast('Please log in to report a user.', 'info');
+      navigate('/login', { state: { from: location.pathname } });
+      return;
+    }
+    setReportModalOpen(true);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to="/marketplace?tab=stores"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Campus Stores</span>
+        </Link>
+      </div>
+
+      {!store.isApproved && (
+        <div
+          role="status"
+          className="flex items-center gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900"
+        >
+          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            This storefront is currently pending admin approval and is not visible to other students yet.
+          </span>
+        </div>
+      )}
+
+      {/* Store Header Card */}
+      <Card hoverable={false} className="p-5 sm:p-7">
+        <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
+          <div className="flex flex-col sm:flex-row gap-5 items-start min-w-0 flex-1">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
+              <ProductImage
+                src={store.logoUrl}
+                alt={store.name}
+                className="w-full h-full object-cover"
+                iconClassName="w-9 h-9 text-slate-400"
+              />
+            </div>
+
+            <div className="space-y-2.5 min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="role">
+                  {store.category || 'Campus Store'}
+                </Badge>
+                {ownerProfile?.accountType === 'business' && (
+                  <Badge variant="verified">Business Account</Badge>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                  {store.name}
+                </h1>
+                {isVerified && <VerifiedBadge size="sm" />}
+              </div>
+
+              <StarRating
+                rating={store.trustScore ?? 0}
+                reviewCount={store.reviewCount ?? 0}
+                size="md"
+              />
+
+              <p className="text-sm text-slate-600 leading-relaxed max-w-2xl whitespace-pre-line">
+                {store.description}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600">
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>{store.locationName || 'LASUED Campus'}</span>
+                </span>
+
+                {openingHours && (
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                    <Clock className="w-4 h-4 text-primary-500 shrink-0" />
+                    <span>Open: {openingHours}</span>
+                  </span>
+                )}
+
+                {hasGps && (
+                  <a
+                    href={`https://www.google.com/maps?q=${store.latitude},${store.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span>View on Map</span>
+                  </a>
+                )}
+              </div>
+
+              <div className="pt-1">
+                <Link
+                  to={`/seller/${store.ownerId}`}
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-primary-600 transition-colors"
+                >
+                  <UserIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>
+                    Owned by <span className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2">{ownerName}</span>
+                  </span>
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2.5 w-full md:w-auto shrink-0">
+            {whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Chat Store on WhatsApp</span>
+              </a>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void shareListingLink({
+                    title: store.name,
+                    text: `Check out ${store.name} on LASUEDPLUG`,
+                  }).then((outcome) => {
+                    if (outcome === 'copied') {
+                      showToast('Link copied! Share on WhatsApp.', 'success');
+                    } else if (outcome === 'failed') {
+                      showToast('Could not copy link. Please copy the URL from your browser.', 'error');
+                    }
+                  });
+                }}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Share</span>
+              </Button>
+
+              {!isOwner && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReportClick}
+                  className="text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>Report User</span>
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Store Products */}
+      <section aria-label="Store listings" className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              Listings from {store.name}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 tabular-nums">
+              {products.length} active {products.length === 1 ? 'listing' : 'listings'}
+            </p>
+          </div>
+        </div>
+
+        {products.length === 0 ? (
+          <EmptyState
+            icon={PackageOpen}
+            title="No active listings yet"
+            description={`${store.name} has not published any active items or services yet.`}
+          />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Reviews Section */}
+      {store.id && (
+        <ReviewSection
+          targetId={store.id}
+          targetType="store"
+          targetName={store.name}
+          ownerId={store.ownerId}
+          reviews={reviews}
+          trustScore={store.trustScore ?? 0}
+          reviewCount={store.reviewCount ?? 0}
+          onReviewSubmitted={({ review, trustScore, reviewCount }) => {
+            setReviews((prev) => [review, ...prev]);
+            setStore((prev) =>
+              prev ? { ...prev, trustScore, reviewCount } : prev
+            );
+          }}
+        />
+      )}
+
+      <ReportUserModal
+        open={reportModalOpen}
+        targetUserId={store.ownerId}
+        targetUserName={ownerName}
+        onClose={() => setReportModalOpen(false)}
+      />
+    </div>
+  );
+}

@@ -35,6 +35,7 @@ export function InstallPWA() {
           src="/pwa-192x192.png"
           alt="LASUEDPLUG"
           loading="lazy"
+          decoding="async"
           className="w-11 h-11 rounded-xl border border-slate-100 object-contain bg-white shrink-0"
         />
 

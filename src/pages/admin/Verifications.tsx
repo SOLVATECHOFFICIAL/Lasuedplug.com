@@ -17,6 +17,7 @@ import {
   fetchPendingVerificationRequests,
   rejectVerificationRequest,
 } from '../../lib/verificationService';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { VerificationRequest } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -32,11 +33,13 @@ export function AdminVerifications() {
   const [previewRequest, setPreviewRequest] =
     useState<VerificationRequest | null>(null);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadPending = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPendingVerificationRequests();
+      const data = await withLoadTimeout(fetchPendingVerificationRequests());
       setRequests(data);
     } catch (err) {
       setError(
@@ -186,6 +189,7 @@ export function AdminVerifications() {
                           src={req.idCardImage}
                           alt={`Student ID document submitted by ${req.fullName}`}
                           loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                         />
                         <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-900/75 text-white text-[11px] font-medium">
@@ -305,6 +309,7 @@ export function AdminVerifications() {
                 src={previewRequest.idCardImage}
                 alt={`Full document for ${previewRequest.fullName}`}
                 loading="lazy"
+                decoding="async"
                 className="max-w-full max-h-[58vh] object-contain rounded-lg"
               />
             </div>

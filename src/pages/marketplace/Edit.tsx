@@ -17,6 +17,7 @@ import {
   getSubcategoriesForCategory,
 } from '../../lib/categories';
 import { getListingAdType } from '../../lib/marketplaceHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -27,6 +28,7 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
+import { ProductImage } from '../../components/marketplace/ProductImage';
 
 const MAX_IMAGES = 4;
 const MAX_DOCUMENT_IMAGE_BYTES = 850_000;
@@ -76,6 +78,8 @@ export function MarketplaceEdit() {
   const submittingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadListing = useCallback(async () => {
     if (!id) {
       setListing(null);
@@ -86,7 +90,7 @@ export function MarketplaceEdit() {
     setLoading(true);
     setLoadError(null);
     try {
-      const record = await getProductById(id);
+      const record = await withLoadTimeout(getProductById(id));
       setListing(record);
       if (record) {
         const adType = getListingAdType(record);
@@ -518,11 +522,11 @@ export function MarketplaceEdit() {
                   key={`${imgUrl.slice(0, 20)}-${idx}`}
                   className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100"
                 >
-                  <img
+                  <ProductImage
                     src={imgUrl}
                     alt={`Listing photo ${idx + 1}`}
-                    loading="lazy"
                     className="w-full h-full object-cover"
+                    iconClassName="w-6 h-6 text-slate-400"
                   />
                   <button
                     type="button"

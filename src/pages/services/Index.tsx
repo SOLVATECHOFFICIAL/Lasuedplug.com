@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   MapPin,
@@ -12,6 +12,8 @@ import { SERVICE_CATEGORIES, getCategoryName } from '../../lib/categories';
 import { fetchApprovedActiveServices } from '../../lib/marketplaceService';
 import { getLatestServices } from '../../lib/homeService';
 import { getListingAdType, getProductPriceDisplay } from '../../lib/marketplaceHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
+import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { Product, Service } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -22,6 +24,80 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 
+const LegacyServiceCard = memo(function LegacyServiceCard({
+  service,
+}: {
+  service: Service;
+}) {
+  const priceLabel = service.priceRange || getProductPriceDisplay(service).text;
+
+  const handleTrackClick = () => {
+    if (!service.id) return;
+    saveRecentlyViewed({
+      id: service.id,
+      _type: 'service',
+      title: service.title,
+      subtitle: service.subcategory || getCategoryName(service.categoryId),
+      priceLabel,
+      imageUrl: service.images?.[0],
+      href: `/marketplace/${service.id}`,
+      isVerified: Boolean(service.sellerSnapshot?.isVerified),
+    });
+  };
+
+  return (
+    <Link
+      to={`/marketplace/${service.id}`}
+      onClick={handleTrackClick}
+      className="group block h-full focus:outline-none"
+    >
+      <Card
+        padded={false}
+        className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+      >
+        <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+          <ProductImage
+            src={service.images?.[0]}
+            alt={service.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border shadow-sm backdrop-blur-sm bg-blue-600/95 text-white border-blue-500">
+            <Wrench className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span>Service</span>
+          </span>
+        </div>
+        <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5">
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-medium text-slate-500 truncate">
+              {service.subcategory || getCategoryName(service.categoryId)}
+            </p>
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+              {service.title}
+            </h3>
+            {(service.sellerSnapshot?.fullName || service.sellerSnapshot?.isVerified) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+                <span className="truncate">
+                  {service.sellerSnapshot?.fullName || 'Service Provider'}
+                </span>
+                {service.sellerSnapshot?.isVerified && <VerifiedBadge size="xs" />}
+              </p>
+            )}
+            {service.locationName && (
+              <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                <span className="truncate">{service.locationName}</span>
+              </p>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-blue-600 truncate">
+            {priceLabel}
+          </p>
+        </div>
+      </Card>
+    </Link>
+  );
+});
+
 export function ServicesIndex() {
   const [productServices, setProductServices] = useState<Product[]>([]);
   const [legacyServices, setLegacyServices] = useState<Service[]>([]);
@@ -31,14 +107,15 @@ export function ServicesIndex() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadServices = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [serviceProducts, rawServices] = await Promise.all([
-        fetchApprovedActiveServices(),
-        getLatestServices(60),
-      ]);
+      const [serviceProducts, rawServices] = await withLoadTimeout(
+        Promise.all([fetchApprovedActiveServices(), getLatestServices(60)])
+      );
       const filteredServiceProducts = serviceProducts.filter(
         (item) => getListingAdType(item) === 'service'
       );
@@ -256,58 +333,10 @@ export function ServicesIndex() {
             ))}
 
             {filteredLegacyServices.map((service) => (
-              <Link
+              <LegacyServiceCard
                 key={service.id || service.title}
-                to={`/marketplace/${service.id}`}
-                className="group block h-full focus:outline-none"
-              >
-                <Card
-                  padded={false}
-                  className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
-                >
-                  <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
-                    <ProductImage
-                      src={service.images?.[0]}
-                      alt={service.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border shadow-sm backdrop-blur-sm bg-blue-600/95 text-white border-blue-500">
-                      <Wrench className="w-3 h-3 shrink-0" aria-hidden="true" />
-                      <span>Service</span>
-                    </span>
-                  </div>
-                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5">
-                    <div className="space-y-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-500 truncate">
-                        {service.subcategory || getCategoryName(service.categoryId)}
-                      </p>
-                      <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                        {service.title}
-                      </h3>
-                      {(service.sellerSnapshot?.fullName ||
-                        service.sellerSnapshot?.isVerified) && (
-                        <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
-                          <span className="truncate">
-                            {service.sellerSnapshot?.fullName || 'Service Provider'}
-                          </span>
-                          {service.sellerSnapshot?.isVerified && (
-                            <VerifiedBadge size="xs" />
-                          )}
-                        </p>
-                      )}
-                      {service.locationName && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
-                          <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                          <span className="truncate">{service.locationName}</span>
-                        </p>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-blue-600 truncate">
-                      {service.priceRange || getProductPriceDisplay(service).text}
-                    </p>
-                  </div>
-                </Card>
-              </Link>
+                service={service}
+              />
             ))}
           </div>
         </div>

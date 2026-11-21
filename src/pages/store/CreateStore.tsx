@@ -44,6 +44,7 @@ export function CreateStore() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('General Campus Store');
+  const [openingHours, setOpeningHours] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
@@ -77,7 +78,10 @@ export function CreateStore() {
       setWhatsappNumber(profile.phone);
       phonePrefilledRef.current = true;
     }
-  }, [profile?.phone]);
+    if (!openingHours && profile?.openingHours) {
+      setOpeningHours(profile.openingHours);
+    }
+  }, [profile?.phone, profile?.openingHours, openingHours]);
 
   useEffect(() => {
     return () => {
@@ -207,6 +211,7 @@ export function CreateStore() {
         name: name.trim(),
         description: description.trim(),
         category: category.trim(),
+        ...(openingHours.trim() ? { openingHours: openingHours.trim() } : {}),
         ...(logoUrl ? { logoUrl } : {}),
         whatsappNumber: whatsappNumber.trim(),
         locationName: locationName.trim(),
@@ -301,6 +306,16 @@ export function CreateStore() {
             required
           />
 
+          <Input
+            label="Opening Hours"
+            name="openingHours"
+            type="text"
+            placeholder="e.g. 8am - 6pm (Mon - Sat)"
+            value={openingHours}
+            onChange={(e) => setOpeningHours(e.target.value)}
+            helperText="Optional. Let students know when your store is open."
+          />
+
           <div className="w-full space-y-1.5">
             <label
               htmlFor="store-description"
@@ -353,6 +368,7 @@ export function CreateStore() {
                   src={logoPreviewUrl}
                   alt="Store logo preview"
                   loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 <button

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
-  MapPin,
   Plus,
   Search,
   SearchX,
@@ -15,19 +14,14 @@ import {
   ACCOMMODATION_TYPE_OPTIONS,
   AccommodationPriceRange,
   filterAccommodations,
-  getAccommodationPublicLocation,
-  getAccommodationRent,
-  getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
-import { formatNaira } from '../../lib/utils';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { Accommodation } from '../../types';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
-import { ProductImage } from '../../components/marketplace/ProductImage';
+import { AccommodationCard } from '../../components/marketplace/AccommodationCard';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
 
 export function AccommodationIndex() {
@@ -40,11 +34,13 @@ export function AccommodationIndex() {
     useState<AccommodationPriceRange>('all');
   const [locationQuery, setLocationQuery] = useState<string>('');
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadAccommodations = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const items = await fetchApprovedAccommodations();
+      const items = await withLoadTimeout(fetchApprovedAccommodations());
       setAccommodations(items);
     } catch (err) {
       const msg =
@@ -236,86 +232,12 @@ export function AccommodationIndex() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredListings.map((item) => {
-            const typeLabel = getAccommodationTypeLabel(item.type);
-            const publicLocation = getAccommodationPublicLocation(item);
-            const rent = getAccommodationRent(item);
-            const amenitiesPreview = Array.isArray(item.amenities)
-              ? item.amenities.slice(0, 3).join(' · ')
-              : '';
-
-            return (
-              <Card
-                key={item.id || item.title}
-                padded={false}
-                className="overflow-hidden flex flex-col justify-between group"
-              >
-                <div>
-                  <Link
-                    to={`/accommodation/${item.id}`}
-                    className="block aspect-[4/3] w-full bg-slate-100 overflow-hidden"
-                  >
-                    <ProductImage
-                      src={item.images?.[0]}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      iconClassName="w-10 h-10 text-slate-400"
-                    />
-                  </Link>
-
-                  <div className="p-5 space-y-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      {typeLabel}
-                    </p>
-
-                    <Link to={`/accommodation/${item.id}`} className="block">
-                      <h2 className="text-base font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                        {item.title}
-                      </h2>
-                    </Link>
-
-                    <p className="text-xs text-slate-600 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{publicLocation}</span>
-                    </p>
-
-                    {amenitiesPreview && (
-                      <p className="text-xs text-slate-500 truncate">
-                        {amenitiesPreview}
-                      </p>
-                    )}
-
-                    {(item.ownerSnapshot?.fullName ||
-                      item.ownerSnapshot?.isVerified) && (
-                      <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0 pt-0.5">
-                        <span className="truncate">
-                          {item.ownerSnapshot?.fullName || 'Campus Host'}
-                        </span>
-                        {item.ownerSnapshot?.isVerified && (
-                          <VerifiedBadge size="xs" />
-                        )}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="px-5 pb-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <p className="text-lg font-extrabold text-slate-900 tabular-nums">
-                    {formatNaira(rent)}
-                    <span className="text-xs font-normal text-slate-500">
-                      {' '}
-                      / year
-                    </span>
-                  </p>
-                  <Link to={`/accommodation/${item.id}`}>
-                    <Button variant="outline" size="sm">
-                      View Details
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            );
-          })}
+          {filteredListings.map((item) => (
+            <AccommodationCard
+              key={item.id || item.title}
+              accommodation={item}
+            />
+          ))}
         </div>
       )}
     </div>

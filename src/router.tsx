@@ -25,6 +25,8 @@ import { SellerDashboard } from './pages/dashboard/Seller';
 import { BuyerDashboard } from './pages/dashboard/Buyer';
 import { ProfilePage } from './pages/dashboard/Profile';
 import { CreateStore } from './pages/store/CreateStore';
+import { StoreProfile } from './pages/store/StoreProfile';
+import { SellerProfile } from './pages/seller/Profile';
 
 import { NotificationsIndex } from './pages/notifications/Index';
 
@@ -137,6 +139,11 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route path="/store/:id" element={<StoreProfile />} />
+      <Route path="/stores/:id" element={<StoreProfile />} />
+
+      {/* Public Seller Profile */}
+      <Route path="/seller/:uid" element={<SellerProfile />} />
 
 
       {/* Notifications (Protected) */}

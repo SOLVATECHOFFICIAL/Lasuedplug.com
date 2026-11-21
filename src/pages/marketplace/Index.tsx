@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import {
   ChevronRight,
+  Clock,
   Info,
   Loader2,
   MapPin,
@@ -11,7 +12,6 @@ import {
   Search,
   SearchX,
   ShoppingBag,
-  Sparkles,
   Store as StoreIcon,
   TrendingUp,
   X,
@@ -30,6 +30,7 @@ import {
 } from '../../lib/aiSearchService';
 import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
+import { useLoadCap } from '../../lib/loadTimeout';
 import {
   getListingAdType,
   hasActiveMarketplaceFilters,
@@ -42,7 +43,7 @@ import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
-import { ProductImage } from '../../components/marketplace/ProductImage';
+import { StoreCard } from '../../components/marketplace/StoreCard';
 
 const SEARCH_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest to Oldest' },
@@ -74,6 +75,7 @@ function sortSearchResults(
 }
 
 export function MarketplaceIndex() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const initialCategoryParam = searchParams.get('category') || '';
@@ -100,9 +102,6 @@ export function MarketplaceIndex() {
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [sortBy, setSortBy] = useState<SearchSortValue>(initialSort);
 
-  const [aiKeywords, setAiKeywords] = useState<string[]>([]);
-  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  const [aiCorrectedQuery, setAiCorrectedQuery] = useState<string | null>(null);
   const [usedRelatedFallback, setUsedRelatedFallback] = useState(false);
   const [aiSearching, setAiSearching] = useState(false);
 
@@ -116,6 +115,14 @@ export function MarketplaceIndex() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useLoadCap(loading, () => {
+    setLoading(false);
+    setAiSearching(false);
+  });
+  useLoadCap(trendingLoading, () => setTrendingLoading(false));
+  useLoadCap(storesLoading, () => setStoresLoading(false));
+  useLoadCap(aiSearching, () => setAiSearching(false));
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const requestIdRef = useRef(0);
@@ -231,9 +238,6 @@ export function MarketplaceIndex() {
       searchAbortRef.current = controller;
 
       setAiSearching(true);
-      setAiKeywords([]);
-      setAiAnswer(null);
-      setAiCorrectedQuery(null);
       setUsedRelatedFallback(false);
 
       try {
@@ -250,7 +254,7 @@ export function MarketplaceIndex() {
         setUsedRelatedFallback(instantResult.usedRelatedFallback);
         setLoading(false);
 
-        // Phase 2: Groq AI search expansion (cached in localStorage)
+        // Phase 2: Background smart search expansion (cached in localStorage)
         const catalogSummary = buildCatalogSummaryForAi(allProducts);
         const aiResult = await expandSearchQuery(
           trimmedQuery,
@@ -259,10 +263,6 @@ export function MarketplaceIndex() {
         );
 
         if (reqId !== requestIdRef.current) return;
-
-        setAiKeywords(aiResult.keywords);
-        setAiAnswer(aiResult.answer || null);
-        setAiCorrectedQuery(aiResult.correctedQuery || null);
 
         const effectiveQuery =
           trimmedQuery || aiResult.correctedQuery || aiResult.keywords.join(' ');
@@ -295,9 +295,6 @@ export function MarketplaceIndex() {
     }
 
     setAiSearching(false);
-    setAiKeywords([]);
-    setAiAnswer(null);
-    setAiCorrectedQuery(null);
     setUsedRelatedFallback(false);
     setRawSearchProducts([]);
 
@@ -430,9 +427,6 @@ export function MarketplaceIndex() {
     setSearchQuery('');
     setDebouncedSearch('');
     setSelectedCategory('');
-    setAiKeywords([]);
-    setAiAnswer(null);
-    setAiCorrectedQuery(null);
     setUsedRelatedFallback(false);
     setSortBy('newest');
   };
@@ -576,7 +570,7 @@ export function MarketplaceIndex() {
                     placeholder={
                       activeBrowseTab === 'stores'
                         ? 'Search stores by name or category...'
-                        : 'Search items or ask AI (e.g. eat bread)...'
+                        : 'Search items, food, books, electronics...'
                     }
                     aria-label="Search marketplace products"
                     className="w-full min-w-0 pl-9 pr-10 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
@@ -649,50 +643,16 @@ export function MarketplaceIndex() {
             )}
           </div>
 
-          {/* AI Search Status & Expanded Terms */}
+          {/* Stealth Smart Search Status */}
           {activeBrowseTab === 'items' && isTypingSearch && aiSearching && (
             <div
               role="status"
-              className="flex items-center gap-2 text-sm font-medium text-primary-600 pt-1"
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 pt-1"
             >
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              <span>AI is finding the best matches...</span>
+              <Loader2 className="w-4 h-4 animate-spin shrink-0 text-primary-600" />
+              <span>Searching marketplace...</span>
             </div>
           )}
-
-          {activeBrowseTab === 'items' &&
-            isSearchActive &&
-            !aiSearching &&
-            (aiAnswer || aiCorrectedQuery || aiKeywords.length > 0) && (
-              <div className="space-y-1.5 pt-1">
-                {aiAnswer && (
-                  <div className="flex items-start gap-2 rounded-lg bg-blue-50/70 border border-blue-100 px-3 py-2 text-xs text-slate-800">
-                    <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0 mt-0.5" />
-                    <span>{aiAnswer}</span>
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-                  {aiCorrectedQuery &&
-                    aiCorrectedQuery.toLowerCase() !== debouncedSearch.trim().toLowerCase() && (
-                      <span>
-                        <strong className="font-semibold text-slate-700">
-                          Interpreted as:
-                        </strong>{' '}
-                        {aiCorrectedQuery}
-                      </span>
-                    )}
-                  {aiKeywords.length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 flex-wrap">
-                      <Sparkles className="w-3.5 h-3.5 text-primary-600 shrink-0" />
-                      <span className="font-medium text-slate-700">
-                        AI related terms:
-                      </span>
-                      <span>{aiKeywords.join(', ')}</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
 
           {activeBrowseTab === 'items' && isSearchActive && !aiSearching && usedRelatedFallback && (
             <div
@@ -740,50 +700,7 @@ export function MarketplaceIndex() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
               {filteredStores.map((store) => (
-                <Card
-                  key={store.id || store.name}
-                  padded={false}
-                  className="overflow-hidden flex flex-col justify-between"
-                >
-                  <div className="aspect-[16/9] w-full bg-slate-100 overflow-hidden">
-                    <ProductImage
-                      src={store.logoUrl}
-                      alt={store.name}
-                      className="w-full h-full object-cover"
-                      iconClassName="w-10 h-10 text-slate-400"
-                    />
-                  </div>
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                    <div className="space-y-1.5 min-w-0">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-primary-50 text-primary-700 border border-primary-100">
-                        {store.category || 'Campus Store'}
-                      </span>
-                      <h3 className="text-base font-bold text-slate-900 truncate">
-                        {store.name}
-                      </h3>
-                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                        {store.description}
-                      </p>
-                    </div>
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1 min-w-0 truncate">
-                        <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                        <span className="truncate">{store.locationName || 'Campus'}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveBrowseTab('items');
-                          setSearchQuery(store.name);
-                          setDebouncedSearch(store.name);
-                        }}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 shrink-0 transition-all duration-200"
-                      >
-                        Browse items →
-                      </button>
-                    </div>
-                  </div>
-                </Card>
+                <StoreCard key={store.id || store.name} store={store} />
               ))}
             </div>
           </div>
@@ -792,11 +709,7 @@ export function MarketplaceIndex() {
         <CardSkeletonGrid
           count={8}
           columns={4}
-          label={
-            aiSearching
-              ? 'AI is finding the best matches...'
-              : 'Loading campus products...'
-          }
+          label="Loading campus products..."
         />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void loadInitialProducts()} />
@@ -810,7 +723,7 @@ export function MarketplaceIndex() {
             onAction={handleClearFilters}
             secondaryActionLabel="Post a Listing"
             onSecondaryAction={() => {
-              window.location.assign('/marketplace/create');
+              navigate('/marketplace/create');
             }}
           />
         ) : (

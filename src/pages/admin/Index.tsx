@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AdminDashboardStats } from '../../lib/adminHelpers';
 import { getAdminDashboardStats } from '../../lib/adminService';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -26,11 +27,13 @@ export function AdminIndex() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadStats = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAdminDashboardStats();
+      const data = await withLoadTimeout(getAdminDashboardStats());
       setStats(data);
     } catch (err) {
       setError(

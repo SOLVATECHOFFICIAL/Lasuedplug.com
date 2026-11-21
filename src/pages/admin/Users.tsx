@@ -18,6 +18,7 @@ import {
   getPrimaryUserRoleBadge,
 } from '../../lib/adminHelpers';
 import { getAllUsers, updateUserAccountStatus } from '../../lib/adminService';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { UserProfile } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
@@ -54,11 +55,13 @@ export function AdminUsers() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAllUsers();
+      const data = await withLoadTimeout(getAllUsers());
       setUsers(data);
     } catch (err) {
       setError(

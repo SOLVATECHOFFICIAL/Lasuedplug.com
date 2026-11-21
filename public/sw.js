@@ -41,9 +41,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never intercept API routes or Vite HMR internals
+  // Never intercept Vite HMR internals
   if (
-    url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/@vite/') ||
     url.pathname.startsWith('/@react-refresh')
   ) {

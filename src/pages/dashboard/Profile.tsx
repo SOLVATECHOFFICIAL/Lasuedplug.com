@@ -3,9 +3,11 @@ import { useLocation } from 'react-router-dom';
 import {
   AlertCircle,
   BadgeCheck,
+  Building2,
   Check,
   CheckCircle2,
   Clock,
+  Globe,
   GraduationCap,
   ImagePlus,
   Loader2,
@@ -14,13 +16,13 @@ import {
   MessageCircle,
   Save,
   ShieldCheck,
+  Store,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
-  ADMIN_WHATSAPP_NUMBER,
   getFieldCooldownStatus,
   getInitials,
   getPrimaryRoleLabel,
@@ -28,7 +30,7 @@ import {
   NAME_LOCK_MESSAGE,
   PHONE_UPDATE_COOLDOWN_DAYS,
 } from '../../lib/authHelpers';
-import { buildAdminWhatsAppUrl } from '../../lib/marketplaceHelpers';
+import { SUPPORT_LINK } from '../../lib/constants';
 import {
   CAMPUS_OPTIONS,
   getLevelsForCampus,
@@ -46,6 +48,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
+import { StarRating } from '../../components/ui/StarRating';
 
 interface FieldErrors {
   fullName?: string;
@@ -53,6 +56,7 @@ interface FieldErrors {
   campus?: string;
   department?: string;
   level?: string;
+  businessName?: string;
 }
 
 function formatUnlockDate(date: Date | null): string {
@@ -85,11 +89,15 @@ export function ProfilePage() {
   const [campus, setCampus] = useState('');
   const [department, setDepartment] = useState('');
   const [level, setLevel] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [openingHours, setOpeningHours] = useState('');
+  const [hasPhysicalShop, setHasPhysicalShop] = useState(true);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   // Student Verification workflow state
   const [verificationRequests, setVerificationRequests] = useState<
@@ -116,11 +124,18 @@ export function ProfilePage() {
   }, [location.state, showToast]);
 
   useEffect(() => {
+    setAvatarLoadError(false);
+  }, [profile?.avatarUrl]);
+
+  useEffect(() => {
     setFullName(profile?.fullName || user?.displayName || '');
     setPhone(profile?.phone || '');
     setCampus(profile?.campus || '');
     setDepartment(profile?.department || '');
     setLevel(profile?.level || '');
+    setBusinessName(profile?.businessName || '');
+    setOpeningHours(profile?.openingHours || '');
+    setHasPhysicalShop(profile?.isOnlineOnly !== true);
   }, [profile, user]);
 
   const loadVerificationHistory = useCallback(async () => {
@@ -143,6 +158,8 @@ export function ProfilePage() {
     void loadVerificationHistory();
   }, [loadVerificationHistory]);
 
+  const accountType = profile?.accountType || 'student';
+  const isBusinessAccount = accountType === 'business';
   const isNameLocked = isAcademicFieldLocked(profile?.fullName);
   const isCampusLocked = isAcademicFieldLocked(profile?.campus);
   const isDepartmentLocked = isAcademicFieldLocked(profile?.department);
@@ -178,18 +195,14 @@ export function ProfilePage() {
     () => getVerificationUiState(isVerified, verificationRequests),
     [isVerified, verificationRequests]
   );
-  const adminWhatsAppUrl = buildAdminWhatsAppUrl(
-    ADMIN_WHATSAPP_NUMBER,
-    email,
-    displayName
-  );
 
-  const allEditableFieldsLocked =
-    isNameLocked &&
-    phoneCooldown.isLocked &&
-    isCampusLocked &&
-    isDepartmentLocked &&
-    isLevelLocked;
+  const allEditableFieldsLocked = isBusinessAccount
+    ? false
+    : isNameLocked &&
+      phoneCooldown.isLocked &&
+      isCampusLocked &&
+      isDepartmentLocked &&
+      isLevelLocked;
 
   const clearFieldError = (key: keyof FieldErrors) => {
     setFieldErrors((prev) => {
@@ -223,14 +236,21 @@ export function ProfilePage() {
     if (!phone.trim() || phone.trim().length < 7) {
       errors.phone = 'A valid phone/WhatsApp number is required.';
     }
-    if (!campus.trim()) {
-      errors.campus = 'Please select your campus.';
-    }
-    if (!department.trim() || department.trim().length < 2) {
-      errors.department = 'Please enter your department.';
-    }
-    if (!level.trim()) {
-      errors.level = 'Please select your level.';
+
+    if (isBusinessAccount) {
+      if (!businessName.trim() || businessName.trim().length < 2) {
+        errors.businessName = 'Business name is required (at least 2 characters).';
+      }
+    } else {
+      if (!campus.trim()) {
+        errors.campus = 'Please select your campus.';
+      }
+      if (!department.trim() || department.trim().length < 2) {
+        errors.department = 'Please enter your department.';
+      }
+      if (!level.trim()) {
+        errors.level = 'Please select your level.';
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -243,9 +263,18 @@ export function ProfilePage() {
       await updateUserProfile({
         fullName,
         phone,
-        campus,
-        department,
-        level,
+        accountType,
+        ...(isBusinessAccount
+          ? {
+              businessName,
+              openingHours,
+              isOnlineOnly: !hasPhysicalShop,
+            }
+          : {
+              campus,
+              department,
+              level,
+            }),
       });
       const msg = 'Profile updated successfully.';
       setSavedNotice(msg);
@@ -318,7 +347,7 @@ export function ProfilePage() {
       setVerifyImageBase64(null);
       setVerifyImageName('');
       showToast(
-        'Verification request submitted! An Admin will review your document shortly.',
+        'Verification request submitted! Support will review your document shortly.',
         'success'
       );
     } catch (err) {
@@ -350,11 +379,13 @@ export function ProfilePage() {
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-5"
       >
         <div className="flex items-center gap-4 min-w-0">
-          {profile?.avatarUrl ? (
+          {profile?.avatarUrl && !avatarLoadError ? (
             <img
               src={profile.avatarUrl}
               alt={displayName}
               loading="lazy"
+              decoding="async"
+              onError={() => setAvatarLoadError(true)}
               className="w-16 h-16 rounded-full object-cover border border-slate-200 shrink-0"
             />
           ) : (
@@ -380,7 +411,9 @@ export function ProfilePage() {
               <span className="truncate">{email}</span>
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Badge variant="role">{roleLabel}</Badge>
+              <Badge variant="role">
+                {isBusinessAccount ? 'Business / Landlord' : roleLabel}
+              </Badge>
               {isVerified ? (
                 <Badge variant="verified">
                   <Check className="w-3.5 h-3.5 mr-1" />
@@ -401,9 +434,16 @@ export function ProfilePage() {
                 {isProfileComplete ? 'Profile Complete' : 'Incomplete Profile'}
               </Badge>
             </div>
+            <div className="pt-1">
+              <StarRating
+                rating={profile?.trustScore ?? 0}
+                reviewCount={profile?.reviewCount ?? 0}
+                size="xs"
+              />
+            </div>
             {!isVerified && verificationUiState === 'pending' && (
               <p className="text-xs text-amber-700 pt-0.5">
-                Your verification document is awaiting Admin approval.
+                Your verification document is awaiting Support review.
               </p>
             )}
             {!isVerified && verificationUiState === 'rejected' && (
@@ -509,100 +549,180 @@ export function ProfilePage() {
             />
           </div>
 
-          {/* Sealed Academic Details */}
-          <div className="pt-4 border-t border-slate-200 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          {isBusinessAccount ? (
+            <div className="pt-4 border-t border-slate-200 space-y-4">
               <div className="flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-primary-600" />
+                <Building2 className="w-5 h-5 text-primary-600" />
                 <h4 className="text-base font-semibold text-slate-900">
-                  Academic Details
+                  Business / Landlord Details
                 </h4>
               </div>
-              {anyAcademicLocked && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  Sealed
-                </span>
-              )}
-            </div>
 
-            {anyAcademicLocked ? (
-              <div
-                role="note"
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700"
-              >
-                <div className="flex items-start gap-2.5">
-                  <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                  <span>{ACADEMIC_LOCK_MESSAGE}</span>
-                </div>
-                <a
-                  href={adminWhatsAppUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap shrink-0"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  <span>WhatsApp Admin</span>
-                </a>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Business Name"
+                  name="businessName"
+                  type="text"
+                  placeholder="e.g. Deji Tech Ventures or Ojo Estates"
+                  value={businessName}
+                  onChange={(e) => {
+                    setBusinessName(e.target.value);
+                    clearFieldError('businessName');
+                  }}
+                  error={fieldErrors.businessName}
+                  required
+                />
+
+                <Input
+                  label="Opening Hours"
+                  name="openingHours"
+                  type="text"
+                  placeholder="e.g. 8am - 6pm (Mon - Sat)"
+                  value={openingHours}
+                  onChange={(e) => setOpeningHours(e.target.value)}
+                />
               </div>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Verify your campus, department, and level carefully — academic
-                fields lock permanently once saved.
-              </p>
-            )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Select
-                label="Campus"
-                name="campus"
-                placeholder="Select campus"
-                options={campusOptions}
-                value={campus}
-                disabled={isCampusLocked}
-                onChange={(e) => handleCampusChange(e.target.value)}
-                error={fieldErrors.campus}
-                required
-              />
-
-              <Input
-                label="Department"
-                name="department"
-                type="text"
-                placeholder="e.g. Computer Science Education"
-                value={department}
-                disabled={isDepartmentLocked}
-                onChange={(e) => {
-                  setDepartment(e.target.value);
-                  clearFieldError('department');
-                }}
-                error={fieldErrors.department}
-                required
-              />
-
-              <Select
-                label="Level"
-                name="level"
-                placeholder={campus ? 'Select level' : 'Select campus first'}
-                options={levelOptions}
-                value={level}
-                disabled={isLevelLocked || !campus}
-                onChange={(e) => {
-                  setLevel(e.target.value);
-                  clearFieldError('level');
-                }}
-                error={fieldErrors.level}
-                helperText={
-                  campus === 'LASUED'
-                    ? 'LASUED levels range from 100L to 400L.'
-                    : campus === 'LASU'
-                      ? 'LASU levels range from 100L to 600L.'
-                      : undefined
-                }
-                required
-              />
+              <div className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700">
+                  Do you have a physical shop?
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label="Do you have a physical shop?"
+                  className="grid grid-cols-2 gap-2.5 max-w-md"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={hasPhysicalShop}
+                    onClick={() => setHasPhysicalShop(true)}
+                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                      hasPhysicalShop
+                        ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Store className="w-4 h-4 shrink-0" />
+                    <span>Yes, Physical Shop</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!hasPhysicalShop}
+                    onClick={() => setHasPhysicalShop(false)}
+                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                      !hasPhysicalShop
+                        ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Globe className="w-4 h-4 shrink-0" />
+                    <span>No, Online Only</span>
+                  </button>
+                </div>
+                {!hasPhysicalShop && (
+                  <p className="text-xs text-slate-500">
+                    Your profile will be marked as Online Only (delivery / virtual appointments).
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="pt-4 border-t border-slate-200 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-primary-600" />
+                  <h4 className="text-base font-semibold text-slate-900">
+                    Academic Details
+                  </h4>
+                </div>
+                {anyAcademicLocked && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                    Sealed
+                  </span>
+                )}
+              </div>
+
+              {anyAcademicLocked ? (
+                <div
+                  role="note"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                    <span>{ACADEMIC_LOCK_MESSAGE}</span>
+                  </div>
+                  <a
+                    href={SUPPORT_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap shrink-0"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Contact Support</span>
+                  </a>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Verify your campus, department, and level carefully — academic
+                  fields lock permanently once saved.
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Select
+                  label="Campus"
+                  name="campus"
+                  placeholder="Select campus"
+                  options={campusOptions}
+                  value={campus}
+                  disabled={isCampusLocked}
+                  onChange={(e) => handleCampusChange(e.target.value)}
+                  error={fieldErrors.campus}
+                  required
+                />
+
+                <Input
+                  label="Department"
+                  name="department"
+                  type="text"
+                  placeholder="e.g. Computer Science Education"
+                  value={department}
+                  disabled={isDepartmentLocked}
+                  onChange={(e) => {
+                    setDepartment(e.target.value);
+                    clearFieldError('department');
+                  }}
+                  error={fieldErrors.department}
+                  required
+                />
+
+                <Select
+                  label="Level"
+                  name="level"
+                  placeholder={campus ? 'Select level' : 'Select campus first'}
+                  options={levelOptions}
+                  value={level}
+                  disabled={isLevelLocked || !campus}
+                  onChange={(e) => {
+                    setLevel(e.target.value);
+                    clearFieldError('level');
+                  }}
+                  error={fieldErrors.level}
+                  helperText={
+                    campus === 'LASUED'
+                      ? 'LASUED levels range from 100L to 400L.'
+                      : campus === 'LASU'
+                        ? 'LASU levels range from 100L to 600L.'
+                        : undefined
+                  }
+                  required
+                />
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 flex justify-end">
             <Button
@@ -699,6 +819,7 @@ export function ProfilePage() {
                       src={verifyImageBase64}
                       alt="Uploaded student ID or fee receipt preview"
                       loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-contain"
                     />
                     <button

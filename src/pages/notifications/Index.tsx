@@ -17,6 +17,7 @@ import {
   countUnreadNotifications,
   formatNotificationTime,
 } from '../../lib/notificationHelpers';
+import { useLoadCap, withLoadTimeout } from '../../lib/loadTimeout';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AppNotification } from '../../types';
@@ -50,6 +51,8 @@ export function NotificationsIndex() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [markingAll, setMarkingAll] = useState(false);
 
+  useLoadCap(loading, () => setLoading(false));
+
   const loadNotifications = useCallback(async () => {
     if (!user?.uid) {
       setNotifications([]);
@@ -60,7 +63,7 @@ export function NotificationsIndex() {
     setLoading(true);
     setError(null);
     try {
-      const items = await getUserNotifications(user.uid, 50);
+      const items = await withLoadTimeout(getUserNotifications(user.uid, 50));
       setNotifications(items);
     } catch (err) {
       const msg =

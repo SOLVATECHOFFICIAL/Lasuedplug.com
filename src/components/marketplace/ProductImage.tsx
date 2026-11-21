@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Camera } from 'lucide-react';
 import { resolveListingImageUrl } from '../../lib/seedAssets';
 
@@ -9,7 +9,7 @@ interface ProductImageProps {
   iconClassName?: string;
 }
 
-export function ProductImage({
+export const ProductImage = memo(function ProductImage({
   src,
   alt,
   className = 'w-full h-full object-cover',
@@ -38,9 +38,11 @@ export function ProductImage({
       src={resolvedSrc}
       alt={alt}
       loading="lazy"
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}
     />
   );
-}
+});
+

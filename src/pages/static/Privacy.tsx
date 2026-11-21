@@ -48,7 +48,7 @@ export function PrivacyPage() {
             </li>
             <li>
               <strong>Verification Documents (ID Cards / Fee Receipts):</strong> Collected
-              exclusively when you request a Verified Student badge so the Admin can
+              exclusively when you request a Verified Student badge so Support can
               confirm your student status.
             </li>
             <li>
@@ -81,7 +81,7 @@ export function PrivacyPage() {
           <p>
             Student ID uploads and verification requests are restricted by strict
             database security rules so they can only be viewed by the submitting user and
-            the authorized LASUEDPLUG Admin during verification review. They are never
+            authorized LASUEDPLUG Support during verification review. They are never
             published publicly on listings.
           </p>
         </section>

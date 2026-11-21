@@ -1,5 +1,6 @@
 import {
   collection,
+  documentId,
   getDocs,
   limit,
   orderBy,
@@ -10,7 +11,21 @@ import {
 import { db } from './firebase';
 import { filterAndSortListings, getTimestampMillis } from './homeHelpers';
 import { getListingAdType } from './marketplaceHelpers';
-import { Accommodation, Product, Service } from '../types';
+import { getApprovedStores } from './storeService';
+import {
+  accommodationToMixedFeedItem,
+  MixedFeedItem,
+  productToMixedFeedItem,
+  serviceToMixedFeedItem,
+  storeToMixedFeedItem,
+} from './trendingHelpers';
+import { Accommodation, Product, Service, UserProfile } from '../types';
+
+export interface PublicSellerStats {
+  trustScore: number;
+  reviewCount: number;
+  isVerified: boolean;
+}
 
 async function fetchLatestFromCollection<
   T extends { id?: string; isApproved: boolean; isActive: boolean; createdAt: unknown }
@@ -36,7 +51,6 @@ async function fetchLatestFromCollection<
     })) as T[];
   } catch (err) {
     const firestoreErr = err as FirestoreError;
-    // Fallback when composite index has not yet been deployed to the Firebase project.
     if (firestoreErr?.code === 'failed-precondition') {
       const fallbackQ = query(colRef, where('isApproved', '==', true));
       const snapshot = await getDocs(fallbackQ);
@@ -112,6 +126,55 @@ async function fetchLatestProductsByAdType(
   }
 }
 
+export async function fetchPublicUserTrustMap(
+  uids: ReadonlyArray<string>
+): Promise<Record<string, PublicSellerStats>> {
+  const result: Record<string, PublicSellerStats> = {};
+  if (!db || uids.length === 0) {
+    return result;
+  }
+
+  const uniqueUids = Array.from(
+    new Set(uids.map((id) => id.trim()).filter(Boolean))
+  );
+  const usersCol = collection(db, 'users');
+
+  // Firestore 'in' queries allow up to 30 document IDs per batch
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueUids.length; i += 30) {
+    chunks.push(uniqueUids.slice(i, i + 30));
+  }
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const q = query(usersCol, where(documentId(), 'in', chunk));
+        const snapshot = await getDocs(q);
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data() as Partial<UserProfile>;
+          result[docSnap.id] = {
+            trustScore:
+              typeof data.trustScore === 'number' &&
+              Number.isFinite(data.trustScore)
+                ? data.trustScore
+                : 0,
+            reviewCount:
+              typeof data.reviewCount === 'number' &&
+              Number.isFinite(data.reviewCount)
+                ? data.reviewCount
+                : 0,
+            isVerified: Boolean(data.isVerified),
+          };
+        });
+      } catch {
+        // Non-blocking fallback when offline or restricted
+      }
+    })
+  );
+
+  return result;
+}
+
 export async function getLatestProducts(limitCount = 4): Promise<Product[]> {
   const rows = await fetchLatestProductsByAdType(
     'item',
@@ -170,3 +233,60 @@ export async function getLatestAccommodations(
 ): Promise<Accommodation[]> {
   return fetchLatestFromCollection<Accommodation>('accommodations', limitCount);
 }
+
+export async function getHomeMixedFeed(
+  limitPerCollection = 40
+): Promise<MixedFeedItem[]> {
+  if (!db) {
+    return [];
+  }
+
+  const [allProducts, legacyServices, stores, accommodations] =
+    await Promise.all([
+      fetchLatestFromCollection<Product>('products', limitPerCollection * 2),
+      fetchLatestFromCollection<Service>('services', limitPerCollection),
+      getApprovedStores(),
+      fetchLatestFromCollection<Accommodation>(
+        'accommodations',
+        limitPerCollection
+      ),
+    ]);
+
+  const marketplaceProducts = allProducts.filter(
+    (p) => p.categoryId !== 'accommodation'
+  );
+  const seenProductIds = new Set(
+    marketplaceProducts.map((p) => p.id).filter(Boolean) as string[]
+  );
+  const uniqueLegacyServices = legacyServices.filter(
+    (s) => !s.id || !seenProductIds.has(s.id)
+  );
+
+  const sellerIds: string[] = [
+    ...marketplaceProducts.map((p) => p.sellerId),
+    ...uniqueLegacyServices.map((s) => s.providerId),
+    ...stores.map((st) => st.ownerId),
+    ...accommodations.map((a) => a.ownerId),
+  ];
+
+  const userTrustMap = await fetchPublicUserTrustMap(sellerIds);
+
+  const mixed: MixedFeedItem[] = [
+    ...marketplaceProducts.map((p) =>
+      productToMixedFeedItem(p, userTrustMap[p.sellerId])
+    ),
+    ...uniqueLegacyServices.map((s) =>
+      serviceToMixedFeedItem(s, userTrustMap[s.providerId])
+    ),
+    ...stores.map((st) => storeToMixedFeedItem(st, userTrustMap[st.ownerId])),
+    ...accommodations.map((acc) =>
+      accommodationToMixedFeedItem(acc, userTrustMap[acc.ownerId])
+    ),
+  ];
+
+  mixed.sort(
+    (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
+  );
+  return mixed;
+}
+

@@ -1,5 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, ShoppingBag, Wrench, Building2, LayoutDashboard } from 'lucide-react';
+import {
+  DASHBOARD_MODE_EVENT,
+  getPreferredDashboardPath,
+} from '../../lib/dashboardMode';
 
 const TABS = [
   { name: 'Home', path: '/', icon: Home },
@@ -11,6 +16,22 @@ const TABS = [
 
 export function MobileNav() {
   const location = useLocation();
+  const [preferredDashboardPath, setPreferredDashboardPath] = useState<
+    '/dashboard/buyer' | '/dashboard/seller'
+  >(() => getPreferredDashboardPath());
+
+  useEffect(() => {
+    const syncPreferredPath = () => {
+      setPreferredDashboardPath(getPreferredDashboardPath());
+    };
+    syncPreferredPath();
+    window.addEventListener(DASHBOARD_MODE_EVENT, syncPreferredPath);
+    window.addEventListener('storage', syncPreferredPath);
+    return () => {
+      window.removeEventListener(DASHBOARD_MODE_EVENT, syncPreferredPath);
+      window.removeEventListener('storage', syncPreferredPath);
+    };
+  }, [location.pathname]);
 
   return (
     <nav
@@ -19,10 +40,12 @@ export function MobileNav() {
     >
       {TABS.map((tab) => {
         const Icon = tab.icon;
+        const targetPath =
+          tab.name === 'Dashboard' ? preferredDashboardPath : tab.path;
         const isActive =
           tab.path === '/'
             ? location.pathname === '/'
-            : tab.path === '/dashboard/buyer'
+            : tab.name === 'Dashboard'
               ? location.pathname === '/dashboard/buyer' ||
                 location.pathname === '/dashboard/seller'
               : tab.path === '/accommodation'
@@ -31,8 +54,8 @@ export function MobileNav() {
                 : location.pathname.startsWith(tab.path);
         return (
           <Link
-            key={tab.path}
-            to={tab.path}
+            key={tab.name}
+            to={targetPath}
             className={`flex-1 min-w-0 min-h-[48px] flex flex-col items-center justify-center px-1 py-1 rounded-xl transition-all duration-200 active:scale-95 ${
               isActive
                 ? 'text-blue-600 font-semibold bg-blue-50/60'
