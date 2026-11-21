@@ -35,9 +35,9 @@ import { auth, db } from '../lib/firebase';
 import { useToast } from './ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
+  areMarketerProfileFieldsLocked,
   BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
-  canSwitchAccountTypeOnProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
   getFieldCooldownStatus,
@@ -45,6 +45,7 @@ import {
   getUserAvatarUrl,
   isAcademicFieldLocked,
   isAccountSuspended,
+  MARKETER_LOCK_MESSAGE,
   NAME_LOCK_MESSAGE,
   PHONE_UPDATE_COOLDOWN_DAYS,
   resolveAccountType,
@@ -400,17 +401,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setProfile(recoveredProfile);
             } else {
               const existingData = existingSnap.data() as Partial<UserProfile>;
-              if (
-                canSwitchAccountTypeOnProfile(existingData) &&
-                existingData.accountType !== accountType
-              ) {
+              if (trimmedName && !existingData.fullName) {
                 await setDoc(
                   userRef,
                   {
-                    accountType,
-                    ...(trimmedName && !existingData.fullName
-                      ? { fullName: trimmedName }
-                      : {}),
+                    fullName: trimmedName,
                     updatedAt: serverTimestamp(),
                   },
                   { merge: true }
@@ -588,13 +583,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('You must be signed in with an active account to update your profile.');
       }
 
-      const canSwitchType = canSwitchAccountTypeOnProfile(profile);
-      const effectiveAccountType: AccountType =
-        canSwitchType && updates.accountType
-          ? updates.accountType
-          : profile
-            ? resolveAccountType(profile)
-            : updates.accountType || 'student';
+      const effectiveAccountType: AccountType = profile
+        ? resolveAccountType(profile)
+        : updates.accountType || 'student';
 
       const nextFullName = updates.fullName.trim();
       const nextPhone = (updates.phone || '').trim();
@@ -672,42 +663,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       if (effectiveAccountType === 'business') {
-        firestoreUpdates.businessName = nextBusinessName;
-        firestoreUpdates.isOnlineOnly = nextIsOnlineOnly;
+        const marketerLocked = areMarketerProfileFieldsLocked(profile);
+        if (marketerLocked && profile) {
+          const existingOnlineOnly = profile.isOnlineOnly === true;
+          const existingBusinessName = (profile.businessName || '').trim();
+          const existingShopAddress = (profile.shopAddress || '').trim();
+          const existingOpeningStart = (profile.openingTimeStart || '').trim();
+          const existingOpeningEnd = (profile.openingTimeEnd || '').trim();
+          const coordsChanged =
+            !existingOnlineOnly &&
+            ((typeof profile.latitude === 'number' &&
+              nextLatitude !== profile.latitude) ||
+              (typeof profile.longitude === 'number' &&
+                nextLongitude !== profile.longitude));
 
-        localUpdates.businessName = nextBusinessName;
-        localUpdates.isOnlineOnly = nextIsOnlineOnly;
-
-        if (nextIsOnlineOnly) {
-          firestoreUpdates.openingHours = '';
-          firestoreUpdates.openingTimeStart = '';
-          firestoreUpdates.openingTimeEnd = '';
-          firestoreUpdates.shopAddress = '';
-          firestoreUpdates.latitude = deleteField();
-          firestoreUpdates.longitude = deleteField();
-          localUpdates.openingHours = '';
-          localUpdates.openingTimeStart = '';
-          localUpdates.openingTimeEnd = '';
-          localUpdates.shopAddress = '';
-          localUpdates.latitude = undefined;
-          localUpdates.longitude = undefined;
-        } else {
-          firestoreUpdates.openingHours = nextOpeningHours;
-          firestoreUpdates.openingTimeStart = nextOpeningTimeStart;
-          firestoreUpdates.openingTimeEnd = nextOpeningTimeEnd;
-          firestoreUpdates.shopAddress = nextShopAddress;
-          localUpdates.openingHours = nextOpeningHours;
-          localUpdates.openingTimeStart = nextOpeningTimeStart;
-          localUpdates.openingTimeEnd = nextOpeningTimeEnd;
-          localUpdates.shopAddress = nextShopAddress;
           if (
-            typeof nextLatitude === 'number' &&
-            typeof nextLongitude === 'number'
+            nextBusinessName !== existingBusinessName ||
+            nextIsOnlineOnly !== existingOnlineOnly ||
+            (!existingOnlineOnly &&
+              (nextShopAddress !== existingShopAddress ||
+                (existingOpeningStart && nextOpeningTimeStart !== existingOpeningStart) ||
+                (existingOpeningEnd && nextOpeningTimeEnd !== existingOpeningEnd) ||
+                coordsChanged))
           ) {
-            firestoreUpdates.latitude = nextLatitude;
-            firestoreUpdates.longitude = nextLongitude;
-            localUpdates.latitude = nextLatitude;
-            localUpdates.longitude = nextLongitude;
+            throw new Error(MARKETER_LOCK_MESSAGE);
+          }
+        } else {
+          firestoreUpdates.businessName = nextBusinessName;
+          firestoreUpdates.isOnlineOnly = nextIsOnlineOnly;
+
+          localUpdates.businessName = nextBusinessName;
+          localUpdates.isOnlineOnly = nextIsOnlineOnly;
+
+          if (nextIsOnlineOnly) {
+            firestoreUpdates.openingHours = '';
+            firestoreUpdates.openingTimeStart = '';
+            firestoreUpdates.openingTimeEnd = '';
+            firestoreUpdates.shopAddress = '';
+            firestoreUpdates.latitude = deleteField();
+            firestoreUpdates.longitude = deleteField();
+            localUpdates.openingHours = '';
+            localUpdates.openingTimeStart = '';
+            localUpdates.openingTimeEnd = '';
+            localUpdates.shopAddress = '';
+            localUpdates.latitude = undefined;
+            localUpdates.longitude = undefined;
+          } else {
+            firestoreUpdates.openingHours = nextOpeningHours;
+            firestoreUpdates.openingTimeStart = nextOpeningTimeStart;
+            firestoreUpdates.openingTimeEnd = nextOpeningTimeEnd;
+            firestoreUpdates.shopAddress = nextShopAddress;
+            localUpdates.openingHours = nextOpeningHours;
+            localUpdates.openingTimeStart = nextOpeningTimeStart;
+            localUpdates.openingTimeEnd = nextOpeningTimeEnd;
+            localUpdates.shopAddress = nextShopAddress;
+            if (
+              typeof nextLatitude === 'number' &&
+              typeof nextLongitude === 'number'
+            ) {
+              firestoreUpdates.latitude = nextLatitude;
+              firestoreUpdates.longitude = nextLongitude;
+              localUpdates.latitude = nextLatitude;
+              localUpdates.longitude = nextLongitude;
+            }
           }
         }
       } else {

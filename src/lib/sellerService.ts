@@ -12,13 +12,26 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { invalidateFastCachePrefix } from './fastCache';
+import { getUserAvatarUrl } from './authHelpers';
+import {
+  getFastCacheEnvelope,
+  invalidateFastCachePrefix,
+  setFastCache,
+} from './fastCache';
+import { runDeduplicatedQuery } from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
+import { warmImages } from './imageCache';
 import {
   getProductLocationLabel,
   getProductPriceDisplay,
 } from './marketplaceHelpers';
 import { getUserStores } from './storeService';
+import {
+  DETAIL_FRESH_MS,
+  invalidatePublicFeedCaches,
+  primeProductIntoCache,
+} from './syncCache';
+import { primeUserProfilePic } from './userAvatarCache';
 import {
   accommodationToUnifiedSellerListing,
   buildEditedListingUpdatePayload,
@@ -370,24 +383,47 @@ export async function updateSellerListing(
 }
 
 export async function getPublicUserProfile(
-  uid: string
+  uid: string,
+  options?: { force?: boolean }
 ): Promise<UserProfile | null> {
-  if (!db || !uid.trim()) {
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
     return null;
   }
 
-  try {
-    const snap = await getDoc(doc(db, 'users', uid.trim()));
-    if (!snap.exists()) {
-      return null;
+  const cacheKey = `seller_public_user:${cleanUid}`;
+  if (!options?.force) {
+    const cached = getFastCacheEnvelope<UserProfile>(cacheKey, DETAIL_FRESH_MS);
+    if (cached) {
+      return cached.data;
     }
-    return {
-      uid: snap.id,
-      ...(snap.data() as Omit<UserProfile, 'uid'>),
-    };
-  } catch (err) {
-    throw mapFirestoreError(err, 'Unable to load seller profile.');
   }
+
+  if (!db) {
+    return null;
+  }
+
+  return runDeduplicatedQuery(`public_user:get:${cleanUid}`, async () => {
+    try {
+      const snap = await getDoc(doc(db!, 'users', cleanUid));
+      if (!snap.exists()) {
+        return null;
+      }
+      const profile: UserProfile = {
+        uid: snap.id,
+        ...(snap.data() as Omit<UserProfile, 'uid'>),
+      };
+      setFastCache(cacheKey, profile, { idbOnly: true });
+      primeUserProfilePic(cleanUid, getUserAvatarUrl(profile));
+      return profile;
+    } catch (err) {
+      const stale = getFastCacheEnvelope<UserProfile>(cacheKey, 0);
+      if (stale) {
+        return stale.data;
+      }
+      throw mapFirestoreError(err, 'Unable to load seller profile.');
+    }
+  });
 }
 
 export async function getApprovedProductsBySeller(
@@ -404,7 +440,7 @@ export async function getApprovedProductsBySeller(
       where('isApproved', '==', true)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs
+    const rows = snapshot.docs
       .map((docSnap) => ({
         id: docSnap.id,
         ...(docSnap.data() as Omit<Product, 'id'>),
@@ -413,6 +449,9 @@ export async function getApprovedProductsBySeller(
       .sort(
         (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
       );
+    rows.forEach((p) => primeProductIntoCache(p, { isFull: true, idbOnly: true }));
+    warmImages(rows.map((p) => p.images?.[0]), 12);
+    return rows;
   } catch (err) {
     throw mapFirestoreError(err, 'Unable to load seller listings.');
   }

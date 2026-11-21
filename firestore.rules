@@ -112,6 +112,10 @@ service cloud.firestore {
         || (
           isOwner(userId)
           && !isSuspendedUser()
+          && (
+            !('accountType' in resource.data)
+            || request.resource.data.accountType == resource.data.accountType
+          )
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'isVerified',
             'roles',

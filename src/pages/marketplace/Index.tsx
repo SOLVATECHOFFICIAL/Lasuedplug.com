@@ -19,10 +19,16 @@ import {
 import {
   fetchAllApprovedActiveProducts,
   fetchMarketplaceProducts,
+  fetchMarketplaceProductsDelta,
   fetchTrendingProducts,
   MARKETPLACE_PAGE_SIZE,
+  primeProductsListIntoCache,
 } from '../../lib/marketplaceService';
-import { getApprovedStores } from '../../lib/storeService';
+import {
+  getApprovedStores,
+  getApprovedStoresDelta,
+  primeStoresIntoCache,
+} from '../../lib/storeService';
 import {
   buildCatalogSummaryForAi,
   expandSearchQuery,
@@ -31,7 +37,19 @@ import {
 import { PRODUCT_CATEGORIES } from '../../lib/categories';
 import { getTimestampMillis } from '../../lib/homeHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+  touchFastCache,
+} from '../../lib/fastCache';
+import {
+  FEED_FRESH_MS,
+  getNewestCreatedAtMs,
+  mergeDeltaEntities,
+  resolveSyncStrategy,
+} from '../../lib/syncCache';
 import {
   getListingAdType,
   hasActiveMarketplaceFilters,
@@ -168,21 +186,117 @@ export function MarketplaceIndex() {
     }
   }, [activeBrowseTab, debouncedSearch, selectedCategory, sortBy, searchParams, setSearchParams]);
 
-  const loadStores = useCallback(async () => {
-    const cachedStores = getFastCache<Store[]>('approved_stores');
-    if (cachedStores && cachedStores.length > 0) {
+  useEffect(() => {
+    const handleHydrated = () => {
+      const hydratedTrending = getFastCacheEnvelope<Product[]>('mkt_trending');
+      if (hydratedTrending && hydratedTrending.data.length > 0) {
+        setTrendingProducts((prev) =>
+          hydratedTrending.isFull !== false || prev.length === 0
+            ? hydratedTrending.data
+            : prev
+        );
+        setTrendingLoading(false);
+        primeProductsListIntoCache(
+          hydratedTrending.data,
+          hydratedTrending.isFull !== false
+        );
+      }
+
+      if (!debouncedSearch.trim() && !selectedCategory) {
+        const hydratedBrowse = getFastCacheEnvelope<Product[]>('mkt_browse_default');
+        if (hydratedBrowse && hydratedBrowse.data.length > 0) {
+          setBrowseProducts((prev) =>
+            hydratedBrowse.isFull !== false || prev.length === 0
+              ? hydratedBrowse.data
+              : prev
+          );
+          setLoading(false);
+          primeProductsListIntoCache(
+            hydratedBrowse.data,
+            hydratedBrowse.isFull !== false
+          );
+        }
+      }
+
+      const hydratedStores = getFastCacheEnvelope<Store[]>('approved_stores');
+      if (hydratedStores && hydratedStores.data.length > 0) {
+        setStores((prev) =>
+          hydratedStores.isFull !== false || prev.length === 0
+            ? hydratedStores.data
+            : prev
+        );
+        setStoresLoaded(true);
+        setStoresLoading(false);
+        primeStoresIntoCache(
+          hydratedStores.data,
+          hydratedStores.isFull !== false
+        );
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [debouncedSearch, selectedCategory]);
+
+  const loadStores = useCallback(async (forceRefresh = false) => {
+    const env = getFastCacheEnvelope<Store[]>('approved_stores');
+    const cachedStores = env?.data || [];
+    const hasCached = cachedStores.length > 0;
+
+    if (hasCached) {
       setStores(cachedStores);
       setStoresLoading(false);
+      primeStoresIntoCache(cachedStores, env?.isFull !== false);
     } else {
       setStoresLoading(true);
     }
     setStoresError(null);
+
+    const strategy = resolveSyncStrategy({
+      hasCached,
+      lastSyncedAt: env?.syncedAt,
+      lastFullSyncAt: env?.fullSyncAt,
+      forceRefresh,
+    });
+
+    if (strategy === 'fresh-skip') {
+      setStoresLoading(false);
+      setStoresLoaded(true);
+      return;
+    }
+
     try {
-      const list = await getApprovedStores();
-      setStores(list);
-      setFastCache('approved_stores', compactListingsForCache(list, 24));
+      if (strategy === 'delta-sync' && hasCached) {
+        const newestMs = getNewestCreatedAtMs(cachedStores);
+        const delta = await getApprovedStoresDelta(newestMs);
+        if (delta.length === 0) {
+          touchFastCache('approved_stores');
+        } else {
+          const merged = mergeDeltaEntities(
+            cachedStores,
+            delta,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            60
+          );
+          setStores(merged);
+          setFastCache('approved_stores', merged, {
+            localData: compactListingsForCache(merged, 24),
+            isFull: true,
+          });
+        }
+      } else {
+        const list = await getApprovedStores();
+        setStores(list);
+        setFastCache('approved_stores', list, {
+          localData: compactListingsForCache(list, 24),
+          isFull: true,
+        });
+      }
     } catch (err) {
-      if (!cachedStores || cachedStores.length === 0) {
+      if (!hasCached) {
         setStoresError(
           err instanceof Error ? err.message : 'Unable to load campus stores.'
         );
@@ -209,14 +323,33 @@ export function MarketplaceIndex() {
     [selectedCategory, searchQuery, sortBy]
   );
 
-  // Fetch Trending Carousel (Top 8 sorted by viewCount, excluding houses) once on mount
+  // Fetch Trending Carousel (Top 8 sorted by viewCount, excluding houses) respecting freshness cooldown
   useEffect(() => {
     let cancelled = false;
     async function loadTrending() {
-      const cached = getFastCache<Product[]>('mkt_trending');
-      if (!cached || cached.length === 0) {
+      const env = getFastCacheEnvelope<Product[]>('mkt_trending');
+      const cached = env?.data || [];
+      const hasCached = cached.length > 0;
+
+      if (hasCached) {
+        primeProductsListIntoCache(cached, env?.isFull !== false);
+        setTrendingLoading(false);
+      } else {
         setTrendingLoading(true);
       }
+
+      const strategy = resolveSyncStrategy({
+        hasCached,
+        lastSyncedAt: env?.syncedAt,
+        lastFullSyncAt: env?.fullSyncAt,
+        freshWindowMs: 10 * 60_000,
+        fullReconcileMs: 60 * 60_000,
+      });
+
+      if (strategy === 'fresh-skip') {
+        return;
+      }
+
       try {
         const rows = await fetchTrendingProducts(8);
         if (!cancelled) {
@@ -226,10 +359,13 @@ export function MarketplaceIndex() {
               getListingAdType(item) === 'item'
           );
           setTrendingProducts(clean);
-          setFastCache('mkt_trending', compactListingsForCache(clean, 8));
+          setFastCache('mkt_trending', clean, {
+            localData: compactListingsForCache(clean, 8),
+            isFull: true,
+          });
         }
       } catch {
-        if (!cancelled && (!cached || cached.length === 0)) {
+        if (!cancelled && !hasCached) {
           setTrendingProducts([]);
         }
       } finally {
@@ -249,13 +385,16 @@ export function MarketplaceIndex() {
     const reqId = ++requestIdRef.current;
     const trimmedQuery = debouncedSearch.trim();
     const isDefaultBrowse = !trimmedQuery && !selectedCategory;
-    const cachedBrowse = isDefaultBrowse
-      ? getFastCache<Product[]>('mkt_browse_default')
+    const browseEnv = isDefaultBrowse
+      ? getFastCacheEnvelope<Product[]>('mkt_browse_default')
       : null;
+    const cachedBrowse = browseEnv?.data || [];
+    const hasCachedBrowse = cachedBrowse.length > 0;
 
-    if (cachedBrowse && cachedBrowse.length > 0) {
+    if (hasCachedBrowse) {
       setBrowseProducts(cachedBrowse);
       setLoading(false);
+      primeProductsListIntoCache(cachedBrowse, browseEnv?.isFull !== false);
     } else {
       setLoading(true);
     }
@@ -277,11 +416,21 @@ export function MarketplaceIndex() {
       setUsedRelatedFallback(false);
 
       try {
-        const allProducts = (await fetchAllApprovedActiveProducts('item')).filter(
-          (item) =>
-            item.categoryId !== 'accommodation' &&
-            getListingAdType(item) === 'item'
+        const cachedAllEnv = getFastCacheEnvelope<Product[]>(
+          'mkt_all_items',
+          FEED_FRESH_MS
         );
+        let allProducts: Product[];
+        if (cachedAllEnv && cachedAllEnv.data.length > 0) {
+          allProducts = cachedAllEnv.data;
+        } else {
+          allProducts = (await fetchAllApprovedActiveProducts('item')).filter(
+            (item) =>
+              item.categoryId !== 'accommodation' &&
+              getListingAdType(item) === 'item'
+          );
+          setFastCache('mkt_all_items', allProducts, { idbOnly: true });
+        }
         if (reqId !== requestIdRef.current) return;
 
         // Phase 1: Instant client-side typo-tolerant & compound-word results
@@ -334,6 +483,50 @@ export function MarketplaceIndex() {
     setUsedRelatedFallback(false);
     setRawSearchProducts([]);
 
+    if (isDefaultBrowse) {
+      const strategy = resolveSyncStrategy({
+        hasCached: hasCachedBrowse,
+        lastSyncedAt: browseEnv?.syncedAt,
+        lastFullSyncAt: browseEnv?.fullSyncAt,
+      });
+
+      if (strategy === 'fresh-skip') {
+        setLoading(false);
+        return;
+      }
+
+      if (strategy === 'delta-sync' && hasCachedBrowse) {
+        try {
+          const newestMs = getNewestCreatedAtMs(cachedBrowse);
+          const delta = await fetchMarketplaceProductsDelta(newestMs, {
+            adType: 'item',
+          });
+          if (reqId !== requestIdRef.current) return;
+
+          if (delta.length === 0) {
+            touchFastCache('mkt_browse_default');
+          } else {
+            const merged = mergeDeltaEntities(
+              cachedBrowse,
+              delta,
+              (item) => item.id,
+              (item) => getTimestampMillis(item.createdAt),
+              60
+            );
+            setBrowseProducts(merged);
+            setFastCache('mkt_browse_default', merged, {
+              localData: compactListingsForCache(merged, 24),
+              isFull: true,
+            });
+          }
+          setLoading(false);
+          return;
+        } catch {
+          // Fall back to full fetch below if delta errors transiently
+        }
+      }
+    }
+
     try {
       const result = await fetchMarketplaceProducts(MARKETPLACE_PAGE_SIZE, null, {
         adType: 'item',
@@ -348,16 +541,16 @@ export function MarketplaceIndex() {
       );
       setBrowseProducts(cleanProducts);
       if (isDefaultBrowse) {
-        setFastCache(
-          'mkt_browse_default',
-          compactListingsForCache(cleanProducts, 24)
-        );
+        setFastCache('mkt_browse_default', cleanProducts, {
+          localData: compactListingsForCache(cleanProducts, 24),
+          isFull: true,
+        });
       }
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
-      if (!cachedBrowse || cachedBrowse.length === 0) {
+      if (!hasCachedBrowse) {
         const msg =
           err instanceof Error
             ? err.message

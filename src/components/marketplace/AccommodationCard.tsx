@@ -9,6 +9,8 @@ import {
 } from '../../lib/accommodationHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListing } from '../../lib/shareUtils';
+import { warmImages } from '../../lib/imageCache';
+import { primeAccommodationIntoCache } from '../../lib/syncCache';
 import { formatNaira } from '../../lib/utils';
 import { Card } from '../ui/Card';
 import { UserAvatar } from '../ui/UserAvatar';
@@ -36,7 +38,13 @@ export const AccommodationCard = memo(function AccommodationCard({
   );
   const ownerName = accommodation.ownerSnapshot?.fullName;
 
+  const handleWarmEntity = () => {
+    primeAccommodationIntoCache(accommodation, { idbOnly: true });
+    warmImages(accommodation.images, 4);
+  };
+
   const handleTrackClick = () => {
+    handleWarmEntity();
     if (!accommodation.id) return;
     saveRecentlyViewed({
       id: accommodation.id,
@@ -73,6 +81,9 @@ export const AccommodationCard = memo(function AccommodationCard({
       <Link
         to={`/accommodation/${accommodation.id}`}
         onClick={handleTrackClick}
+        onMouseEnter={handleWarmEntity}
+        onTouchStart={handleWarmEntity}
+        onFocus={handleWarmEntity}
         className="block h-full focus:outline-none"
       >
         <Card

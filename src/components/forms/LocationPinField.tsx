@@ -22,6 +22,7 @@ interface LocationPinFieldProps {
   helperText?: string;
   error?: string;
   required?: boolean;
+  disabled?: boolean;
 }
 
 export function LocationPinField({
@@ -33,6 +34,7 @@ export function LocationPinField({
   helperText = 'Required for physical locations so students can find you accurately.',
   error,
   required = true,
+  disabled = false,
 }: LocationPinFieldProps) {
   const { showToast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -126,8 +128,10 @@ export function LocationPinField({
           type="button"
           variant={isPinned ? 'outline' : 'secondary'}
           size="md"
-          disabled={pinning}
-          onClick={() => setConfirmOpen(true)}
+          disabled={pinning || disabled}
+          onClick={() => {
+            if (!disabled) setConfirmOpen(true);
+          }}
         >
           {pinning ? (
             <>
@@ -141,7 +145,7 @@ export function LocationPinField({
           )}
         </Button>
 
-        {isPinned && (
+        {isPinned && !disabled && (
           <button
             type="button"
             onClick={handleRemovePin}

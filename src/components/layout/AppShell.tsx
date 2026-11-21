@@ -26,6 +26,12 @@ export function AppShell({ children }: AppShellProps) {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+  }, [location.pathname, location.search]);
+
   const isAdminSession = isAuthorizedAdminSession(user);
   const showMaintenanceGate = shouldShowMaintenanceScreen({
     maintenanceMode,

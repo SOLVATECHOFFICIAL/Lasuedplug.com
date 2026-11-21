@@ -29,10 +29,24 @@ import {
 import {
   createRoommateRequest,
   fetchApprovedRoommateRequests,
+  fetchApprovedRoommateRequestsDelta,
 } from '../../lib/accommodationService';
 import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import { getTimestampMillis } from '../../lib/homeHelpers';
+import { warmImages } from '../../lib/imageCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+  touchFastCache,
+} from '../../lib/fastCache';
+import {
+  getNewestCreatedAtMs,
+  mergeDeltaEntities,
+  resolveSyncStrategy,
+} from '../../lib/syncCache';
 import {
   MAX_LISTING_IMAGES,
   validateRoommateCreateInput,
@@ -95,18 +109,88 @@ export function Roommates() {
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  const loadRequests = useCallback(async () => {
-    const cached = getFastCache<RoommateRequest[]>('roommates_feed');
-    if (!cached || cached.length === 0) {
+  useEffect(() => {
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<RoommateRequest[]>('roommates_feed');
+      if (hydrated && hydrated.data.length > 0) {
+        setRequests((prev) =>
+          hydrated.isFull !== false || prev.length === 0
+            ? hydrated.data
+            : prev
+        );
+        setLoading(false);
+        warmImages(
+          hydrated.data.map((r) => r.images?.[0]),
+          12
+        );
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, []);
+
+  const loadRequests = useCallback(async (forceRefresh = false) => {
+    const env = getFastCacheEnvelope<RoommateRequest[]>('roommates_feed');
+    const cached = env?.data || [];
+    const hasCached = cached.length > 0;
+
+    if (hasCached) {
+      warmImages(
+        cached.map((r) => r.images?.[0]),
+        12
+      );
+      setLoading(false);
+    } else {
       setLoading(true);
     }
+
+    const strategy = resolveSyncStrategy({
+      hasCached,
+      lastSyncedAt: env?.syncedAt,
+      lastFullSyncAt: env?.fullSyncAt,
+      forceRefresh,
+    });
+
+    if (strategy === 'fresh-skip') {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setError(null);
     try {
-      const items = await fetchApprovedRoommateRequests();
-      setRequests(items);
-      setFastCache('roommates_feed', compactListingsForCache(items, 24));
+      if (strategy === 'delta-sync' && hasCached) {
+        const newestMs = getNewestCreatedAtMs(cached);
+        const delta = await fetchApprovedRoommateRequestsDelta(newestMs);
+        if (delta.length === 0) {
+          touchFastCache('roommates_feed');
+        } else {
+          const merged = mergeDeltaEntities(
+            cached,
+            delta,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            60
+          );
+          setRequests(merged);
+          setFastCache('roommates_feed', merged, {
+            localData: compactListingsForCache(merged, 24),
+            isFull: true,
+          });
+        }
+      } else {
+        const items = await fetchApprovedRoommateRequests();
+        setRequests(items);
+        setFastCache('roommates_feed', items, {
+          localData: compactListingsForCache(items, 24),
+          isFull: true,
+        });
+      }
     } catch (err) {
-      if (!cached || cached.length === 0) {
+      if (!hasCached) {
         const msg =
           err instanceof Error
             ? err.message

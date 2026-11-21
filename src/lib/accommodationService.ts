@@ -9,16 +9,23 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { sanitizePublicAccommodation } from './accommodationHelpers';
+import { invalidateFastCachePrefix } from './fastCache';
 import {
   hasKnownMissingIndex,
   markMissingIndex,
   runDeduplicatedQuery,
 } from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
-import { sanitizePublicAccommodation } from './accommodationHelpers';
+import { warmImages } from './imageCache';
+import {
+  primeAccommodationIntoCache,
+  shouldSkipDetailNetworkFetch,
+} from './syncCache';
 import {
   Accommodation,
   AccommodationType,
@@ -70,6 +77,18 @@ export interface CreateRoommateRequestInput {
   };
 }
 
+export function primeAccommodationsIntoCache(
+  items: ReadonlyArray<Omit<Accommodation, 'exactAddress'>>,
+  isFull = true
+): void {
+  const coverUrls: Array<string | undefined> = [];
+  for (const item of items) {
+    primeAccommodationIntoCache(item, { isFull, idbOnly: true });
+    coverUrls.push(item.images?.[0]);
+  }
+  warmImages(coverUrls, 12);
+}
+
 export async function fetchApprovedAccommodations(): Promise<
   Omit<Accommodation, 'exactAddress'>[]
 > {
@@ -88,7 +107,7 @@ export async function fetchApprovedAccommodations(): Promise<
         limit(60)
       );
       const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) =>
           sanitizePublicAccommodation({
             id: docSnap.id,
@@ -100,6 +119,8 @@ export async function fetchApprovedAccommodations(): Promise<
           (a, b) =>
             getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+      primeAccommodationsIntoCache(rows, true);
+      return rows;
     };
 
     if (hasKnownMissingIndex(indexKey)) {
@@ -115,12 +136,14 @@ export async function fetchApprovedAccommodations(): Promise<
         limit(60)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((docSnap) =>
+      const rows = snapshot.docs.map((docSnap) =>
         sanitizePublicAccommodation({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Accommodation, 'id'>),
         })
       );
+      primeAccommodationsIntoCache(rows, true);
+      return rows;
     } catch (err) {
       const firestoreErr = err as FirestoreError;
       if (firestoreErr?.code === 'failed-precondition') {
@@ -137,34 +160,93 @@ export async function fetchApprovedAccommodations(): Promise<
   });
 }
 
-export async function getPublicAccommodationById(
-  id: string
-): Promise<Omit<Accommodation, 'exactAddress'> | null> {
-  if (!db || !id.trim()) {
-    return null;
+export async function fetchApprovedAccommodationsDelta(
+  afterCreatedAtMs: number
+): Promise<Omit<Accommodation, 'exactAddress'>[]> {
+  if (!db || afterCreatedAtMs <= 0) {
+    return [];
+  }
+
+  const indexKey = 'accommodations:approved_active_createdAt';
+  if (hasKnownMissingIndex(indexKey)) {
+    return [];
   }
 
   try {
-    const snap = await getDoc(doc(db, 'accommodations', id));
-    if (!snap.exists()) {
-      return null;
-    }
-    return sanitizePublicAccommodation({
-      id: snap.id,
-      ...(snap.data() as Omit<Accommodation, 'id'>),
-    });
+    const q = query(
+      collection(db, 'accommodations'),
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('createdAt', '>', Timestamp.fromMillis(afterCreatedAtMs + 1)),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+    const snapshot = await getDocs(q);
+    const rows = snapshot.docs.map((docSnap) =>
+      sanitizePublicAccommodation({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Accommodation, 'id'>),
+      })
+    );
+    primeAccommodationsIntoCache(rows, true);
+    return rows;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the accommodation database. Check your internet connection and try again.'
-      );
+    if (firestoreErr?.code === 'failed-precondition') {
+      markMissingIndex(indexKey);
     }
-    if (firestoreErr?.code === 'permission-denied') {
-      return null;
-    }
-    throw err;
+    return [];
   }
+}
+
+export async function getPublicAccommodationById(
+  id: string,
+  options?: { force?: boolean }
+): Promise<Omit<Accommodation, 'exactAddress'> | null> {
+  const cleanId = id.trim();
+  if (!cleanId) {
+    return null;
+  }
+
+  const cacheCheck = shouldSkipDetailNetworkFetch<
+    Omit<Accommodation, 'exactAddress'>
+  >(`accommodation:${cleanId}`, {
+    force: options?.force,
+  });
+  if (cacheCheck.skip && cacheCheck.cached) {
+    return cacheCheck.cached;
+  }
+
+  if (!db) {
+    return cacheCheck.cached;
+  }
+
+  return runDeduplicatedQuery(`accommodation:get:${cleanId}`, async () => {
+    try {
+      const snap = await getDoc(doc(db!, 'accommodations', cleanId));
+      if (!snap.exists()) {
+        return null;
+      }
+      const record = sanitizePublicAccommodation({
+        id: snap.id,
+        ...(snap.data() as Omit<Accommodation, 'id'>),
+      });
+      primeAccommodationIntoCache(record, { isFull: true, idbOnly: false });
+      return record;
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'unavailable') {
+        if (cacheCheck.cached) return cacheCheck.cached;
+        throw new Error(
+          'Could not reach the accommodation database. Check your internet connection and try again.'
+        );
+      }
+      if (firestoreErr?.code === 'permission-denied') {
+        return null;
+      }
+      throw err;
+    }
+  });
 }
 
 export async function createAccommodation(
@@ -202,6 +284,7 @@ export async function createAccommodation(
 
   try {
     await setDoc(newDocRef, payload);
+    invalidateFastCachePrefix('seller_dash:');
     return newDocRef.id;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
@@ -211,10 +294,12 @@ export async function createAccommodation(
         existingSnap.exists() &&
         existingSnap.data()?.ownerId === input.ownerId
       ) {
+        invalidateFastCachePrefix('seller_dash:');
         return newDocRef.id;
       }
       const fallbackRef = doc(colRef);
       await setDoc(fallbackRef, payload);
+      invalidateFastCachePrefix('seller_dash:');
       return fallbackRef.id;
     }
     throw err;
@@ -239,7 +324,7 @@ export async function fetchApprovedRoommateRequests(): Promise<
         limit(60)
       );
       const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) => {
           const data = docSnap.data() as Partial<RoommateRequest>;
           return {
@@ -253,6 +338,8 @@ export async function fetchApprovedRoommateRequests(): Promise<
           (a, b) =>
             getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+      warmImages(rows.map((r) => r.images?.[0]), 12);
+      return rows;
     };
 
     if (hasKnownMissingIndex(indexKey)) {
@@ -268,7 +355,7 @@ export async function fetchApprovedRoommateRequests(): Promise<
         limit(60)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((docSnap) => {
+      const rows = snapshot.docs.map((docSnap) => {
         const data = docSnap.data() as Partial<RoommateRequest>;
         return {
           id: docSnap.id,
@@ -276,6 +363,8 @@ export async function fetchApprovedRoommateRequests(): Promise<
           images: Array.isArray(data.images) ? data.images : [],
         };
       });
+      warmImages(rows.map((r) => r.images?.[0]), 12);
+      return rows;
     } catch (err) {
       const firestoreErr = err as FirestoreError;
       if (firestoreErr?.code === 'failed-precondition') {
@@ -290,6 +379,47 @@ export async function fetchApprovedRoommateRequests(): Promise<
       throw err;
     }
   });
+}
+
+export async function fetchApprovedRoommateRequestsDelta(
+  afterCreatedAtMs: number
+): Promise<RoommateRequest[]> {
+  if (!db || afterCreatedAtMs <= 0) {
+    return [];
+  }
+
+  const indexKey = 'roommate_requests:approved_active_createdAt';
+  if (hasKnownMissingIndex(indexKey)) {
+    return [];
+  }
+
+  try {
+    const q = query(
+      collection(db, 'roommate_requests'),
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('createdAt', '>', Timestamp.fromMillis(afterCreatedAtMs + 1)),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+    const snapshot = await getDocs(q);
+    const rows = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as Partial<RoommateRequest>;
+      return {
+        id: docSnap.id,
+        ...(data as Omit<RoommateRequest, 'id'>),
+        images: Array.isArray(data.images) ? data.images : [],
+      };
+    });
+    warmImages(rows.map((r) => r.images?.[0]), 12);
+    return rows;
+  } catch (err) {
+    const firestoreErr = err as FirestoreError;
+    if (firestoreErr?.code === 'failed-precondition') {
+      markMissingIndex(indexKey);
+    }
+    return [];
+  }
 }
 
 export async function createRoommateRequest(
@@ -323,6 +453,7 @@ export async function createRoommateRequest(
 
   try {
     await setDoc(newDocRef, payload);
+    invalidateFastCachePrefix('seller_dash:');
     return newDocRef.id;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
@@ -332,10 +463,12 @@ export async function createRoommateRequest(
         existingSnap.exists() &&
         existingSnap.data()?.userId === input.userId
       ) {
+        invalidateFastCachePrefix('seller_dash:');
         return newDocRef.id;
       }
       const fallbackRef = doc(colRef);
       await setDoc(fallbackRef, payload);
+      invalidateFastCachePrefix('seller_dash:');
       return fallbackRef.id;
     }
     throw err;

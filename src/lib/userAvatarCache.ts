@@ -9,9 +9,10 @@ import {
 import { db } from './firebase';
 import { getUserAvatarUrl } from './authHelpers';
 import { getFastCache, setFastCache } from './fastCache';
+import { USER_DP_TTL_MS } from './syncCache';
 import { UserProfile } from '../types';
 
-const AVATAR_CACHE_TTL_MS = 15 * 60_000;
+const AVATAR_CACHE_TTL_MS = USER_DP_TTL_MS;
 const memoryAvatarCache = new Map<string, string>();
 const inflightRequests = new Map<string, Promise<string>>();
 const subscribers = new Map<string, Set<(url: string) => void>>();
@@ -31,6 +32,18 @@ function isPlaceholderUid(uid: string): boolean {
   return uid.startsWith('test_') || uid.startsWith('seed_');
 }
 
+export function hasCachedUserProfilePic(uid?: string | null): boolean {
+  const cleanUid = (uid || '').trim();
+  if (!cleanUid || isPlaceholderUid(cleanUid)) return true;
+  if (memoryAvatarCache.has(cleanUid)) return true;
+  const cached = getFastCache<string>(`user_dp:${cleanUid}`, AVATAR_CACHE_TTL_MS);
+  if (typeof cached === 'string') {
+    memoryAvatarCache.set(cleanUid, cached);
+    return true;
+  }
+  return false;
+}
+
 export function primeUserProfilePic(
   uid?: string | null,
   avatarUrl?: string | null
@@ -39,7 +52,9 @@ export function primeUserProfilePic(
   if (!cleanUid) return;
   const cleanUrl = (avatarUrl || '').trim();
   memoryAvatarCache.set(cleanUid, cleanUrl);
-  setFastCache(`user_dp:${cleanUid}`, cleanUrl);
+  // Keep Base64 data URIs in IndexedDB + RAM so localStorage quota never fills up
+  const isHeavyDataUri = cleanUrl.startsWith('data:') && cleanUrl.length > 1024;
+  setFastCache(`user_dp:${cleanUid}`, cleanUrl, { idbOnly: isHeavyDataUri });
   notifySubscribers(cleanUid, cleanUrl);
 }
 

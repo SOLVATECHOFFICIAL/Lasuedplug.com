@@ -8,7 +8,11 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
-import { fetchApprovedAccommodations } from '../../lib/accommodationService';
+import {
+  fetchApprovedAccommodations,
+  fetchApprovedAccommodationsDelta,
+  primeAccommodationsIntoCache,
+} from '../../lib/accommodationService';
 import {
   ACCOMMODATION_PRICE_RANGES,
   ACCOMMODATION_TYPE_OPTIONS,
@@ -16,7 +20,19 @@ import {
   filterAccommodations,
 } from '../../lib/accommodationHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import { getTimestampMillis } from '../../lib/homeHelpers';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+  touchFastCache,
+} from '../../lib/fastCache';
+import {
+  getNewestCreatedAtMs,
+  mergeDeltaEntities,
+  resolveSyncStrategy,
+} from '../../lib/syncCache';
 import { Accommodation } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
@@ -39,18 +55,85 @@ export function AccommodationIndex() {
     useState<AccommodationPriceRange>('all');
   const [locationQuery, setLocationQuery] = useState<string>('');
 
-  const loadAccommodations = useCallback(async () => {
-    const cached = getFastCache<Accommodation[]>('accommodations_feed');
-    if (!cached || cached.length === 0) {
+  useEffect(() => {
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<Accommodation[]>('accommodations_feed');
+      if (hydrated && hydrated.data.length > 0) {
+        setAccommodations((prev) =>
+          hydrated.isFull !== false || prev.length === 0
+            ? hydrated.data
+            : prev
+        );
+        setLoading(false);
+        primeAccommodationsIntoCache(
+          hydrated.data,
+          hydrated.isFull !== false
+        );
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, []);
+
+  const loadAccommodations = useCallback(async (forceRefresh = false) => {
+    const env = getFastCacheEnvelope<Accommodation[]>('accommodations_feed');
+    const cached = env?.data || [];
+    const hasCached = cached.length > 0;
+
+    if (hasCached) {
+      primeAccommodationsIntoCache(cached, env?.isFull !== false);
+      setLoading(false);
+    } else {
       setLoading(true);
     }
+
+    const strategy = resolveSyncStrategy({
+      hasCached,
+      lastSyncedAt: env?.syncedAt,
+      lastFullSyncAt: env?.fullSyncAt,
+      forceRefresh,
+    });
+
+    if (strategy === 'fresh-skip') {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setError(null);
     try {
-      const items = await fetchApprovedAccommodations();
-      setAccommodations(items);
-      setFastCache('accommodations_feed', compactListingsForCache(items, 24));
+      if (strategy === 'delta-sync' && hasCached) {
+        const newestMs = getNewestCreatedAtMs(cached);
+        const delta = await fetchApprovedAccommodationsDelta(newestMs);
+        if (delta.length === 0) {
+          touchFastCache('accommodations_feed');
+        } else {
+          const merged = mergeDeltaEntities(
+            cached,
+            delta,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            60
+          );
+          setAccommodations(merged);
+          setFastCache('accommodations_feed', merged, {
+            localData: compactListingsForCache(merged, 24),
+            isFull: true,
+          });
+        }
+      } else {
+        const items = await fetchApprovedAccommodations();
+        setAccommodations(items);
+        setFastCache('accommodations_feed', items, {
+          localData: compactListingsForCache(items, 24),
+          isFull: true,
+        });
+      }
     } catch (err) {
-      if (!cached || cached.length === 0) {
+      if (!hasCached) {
         const msg =
           err instanceof Error
             ? err.message

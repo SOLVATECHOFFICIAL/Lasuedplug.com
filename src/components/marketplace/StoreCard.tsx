@@ -4,6 +4,8 @@ import { Clock, MapPin, Share2, Store as StoreIcon } from 'lucide-react';
 import { Store } from '../../types';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListing } from '../../lib/shareUtils';
+import { warmImages } from '../../lib/imageCache';
+import { primeStoreIntoCache } from '../../lib/syncCache';
 import { Card } from '../ui/Card';
 import { StarRating } from '../ui/StarRating';
 import { UserAvatar } from '../ui/UserAvatar';
@@ -28,7 +30,16 @@ export const StoreCard = memo(function StoreCard({
 
   const storePrimaryImage = store.images?.[0] || store.logoUrl;
 
+  const handleWarmEntity = () => {
+    primeStoreIntoCache(store, { idbOnly: true });
+    warmImages(
+      store.images && store.images.length > 0 ? store.images : [store.logoUrl],
+      4
+    );
+  };
+
   const handleTrackClick = () => {
+    handleWarmEntity();
     if (!store.id) return;
     saveRecentlyViewed({
       id: store.id,
@@ -58,6 +69,9 @@ export const StoreCard = memo(function StoreCard({
       <Link
         to={storeHref}
         onClick={handleTrackClick}
+        onMouseEnter={handleWarmEntity}
+        onTouchStart={handleWarmEntity}
+        onFocus={handleWarmEntity}
         className="block h-full focus:outline-none"
       >
         <Card

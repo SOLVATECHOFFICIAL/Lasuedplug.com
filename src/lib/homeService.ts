@@ -5,19 +5,34 @@ import {
   limit,
   orderBy,
   query,
+  QueryConstraint,
+  Timestamp,
   where,
   FirestoreError,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getUserAvatarUrl } from './authHelpers';
 import {
+  getFastCacheEnvelope,
+  setFastCache,
+} from './fastCache';
+import {
   hasKnownMissingIndex,
   markMissingIndex,
   runDeduplicatedQuery,
 } from './firestoreQueryCache';
 import { filterAndSortListings, getTimestampMillis } from './homeHelpers';
+import { warmImages } from './imageCache';
 import { getListingAdType } from './marketplaceHelpers';
-import { getApprovedStores } from './storeService';
+import { getApprovedStores, getApprovedStoresDelta } from './storeService';
+import {
+  FEED_FRESH_MS,
+  getNewestCreatedAtMs,
+  mergeMixedFeedDelta,
+  primeAccommodationIntoCache,
+  primeProductIntoCache,
+  primeStoreIntoCache,
+} from './syncCache';
 import {
   accommodationToMixedFeedItem,
   MixedFeedItem,
@@ -34,9 +49,15 @@ export interface PublicSellerStats {
   isVerified: boolean;
 }
 
+const TRUST_CACHE_TTL_MS = 15 * 60_000;
+
 async function fetchLatestFromCollection<
   T extends { id?: string; isApproved: boolean; isActive: boolean; createdAt: unknown }
->(collectionName: string, limitCount: number): Promise<T[]> {
+>(
+  collectionName: string,
+  limitCount: number,
+  afterCreatedAtMs = 0
+): Promise<T[]> {
   if (!db) {
     return [];
   }
@@ -56,7 +77,13 @@ async function fetchLatestFromCollection<
       id: docSnap.id,
       ...(docSnap.data() as Omit<T, 'id'>),
     })) as T[];
-    return filterAndSortListings(docs, limitCount);
+    const sorted = filterAndSortListings(docs, limitCount);
+    if (afterCreatedAtMs > 0) {
+      return sorted.filter(
+        (doc) => getTimestampMillis(doc.createdAt) > afterCreatedAtMs
+      );
+    }
+    return sorted;
   };
 
   if (hasKnownMissingIndex(indexKey)) {
@@ -64,13 +91,18 @@ async function fetchLatestFromCollection<
   }
 
   try {
-    const q = query(
-      colRef,
+    const constraints: QueryConstraint[] = [
       where('isApproved', '==', true),
       where('isActive', '==', true),
-      orderBy('createdAt', 'desc'),
-      limit(limitCount)
-    );
+    ];
+    if (afterCreatedAtMs > 0) {
+      constraints.push(
+        where('createdAt', '>', Timestamp.fromMillis(afterCreatedAtMs + 1))
+      );
+    }
+    constraints.push(orderBy('createdAt', 'desc'), limit(limitCount));
+
+    const q = query(colRef, ...constraints);
     const snapshot = await getDocs(q);
     return snapshot.docs.map((docSnap) => ({
       id: docSnap.id,
@@ -164,10 +196,11 @@ async function fetchLatestProductsByAdType(
 }
 
 export async function fetchPublicUserTrustMap(
-  uids: ReadonlyArray<string>
+  uids: ReadonlyArray<string>,
+  force = false
 ): Promise<Record<string, PublicSellerStats>> {
   const result: Record<string, PublicSellerStats> = {};
-  if (!db || uids.length === 0) {
+  if (uids.length === 0) {
     return result;
   }
 
@@ -182,12 +215,31 @@ export async function fetchPublicUserTrustMap(
     return result;
   }
 
+  const uncachedUids: string[] = [];
+  for (const uid of uniqueUids) {
+    if (!force) {
+      const cached = getFastCacheEnvelope<PublicSellerStats>(
+        `user_trust:${uid}`,
+        TRUST_CACHE_TTL_MS
+      );
+      if (cached) {
+        result[uid] = cached.data;
+        continue;
+      }
+    }
+    uncachedUids.push(uid);
+  }
+
+  if (!db || uncachedUids.length === 0) {
+    return result;
+  }
+
   const usersCol = collection(db, 'users');
 
   // Firestore 'in' queries allow up to 30 document IDs per batch
   const chunks: string[][] = [];
-  for (let i = 0; i < uniqueUids.length; i += 30) {
-    chunks.push(uniqueUids.slice(i, i + 30));
+  for (let i = 0; i < uncachedUids.length; i += 30) {
+    chunks.push(uncachedUids.slice(i, i + 30));
   }
 
   await Promise.all(
@@ -200,7 +252,7 @@ export async function fetchPublicUserTrustMap(
           foundIds.add(docSnap.id);
           const data = docSnap.data() as Partial<UserProfile>;
           primeUserProfilePic(docSnap.id, getUserAvatarUrl(data));
-          result[docSnap.id] = {
+          const stats: PublicSellerStats = {
             trustScore:
               typeof data.trustScore === 'number' &&
               Number.isFinite(data.trustScore)
@@ -213,6 +265,8 @@ export async function fetchPublicUserTrustMap(
                 : 0,
             isVerified: Boolean(data.isVerified),
           };
+          result[docSnap.id] = stats;
+          setFastCache(`user_trust:${docSnap.id}`, stats, { idbOnly: true });
         });
         chunk.forEach((uid) => {
           if (!foundIds.has(uid)) {
@@ -228,22 +282,51 @@ export async function fetchPublicUserTrustMap(
   return result;
 }
 
+export function primeMixedFeedEntities(
+  items: ReadonlyArray<MixedFeedItem>,
+  isFull: boolean
+): void {
+  const coverUrls: Array<string | undefined> = [];
+
+  for (const item of items) {
+    if (item.product) {
+      primeProductIntoCache(item.product, { isFull, idbOnly: true });
+      coverUrls.push(item.product.images?.[0]);
+    } else if (item.store) {
+      primeStoreIntoCache(item.store, { isFull, idbOnly: true });
+      coverUrls.push(item.store.images?.[0] || item.store.logoUrl);
+    } else if (item.accommodation) {
+      primeAccommodationIntoCache(item.accommodation, { isFull, idbOnly: true });
+      coverUrls.push(item.accommodation.images?.[0]);
+    } else if (item.service) {
+      coverUrls.push(item.service.images?.[0]);
+    }
+  }
+
+  warmImages(coverUrls, 16);
+}
+
 export async function getLatestProducts(limitCount = 4): Promise<Product[]> {
   return runDeduplicatedQuery(`home:latest_products:${limitCount}`, async () => {
     const rows = await fetchLatestProductsByAdType(
       'item',
       Math.max(limitCount * 2, limitCount)
     );
-    return rows.slice(0, limitCount);
+    const sliced = rows.slice(0, limitCount);
+    sliced.forEach((item) =>
+      primeProductIntoCache(item, { isFull: true, idbOnly: true })
+    );
+    return sliced;
   });
 }
 
 export async function getLatestLegacyServices(
-  limitCount = 40
+  limitCount = 40,
+  afterCreatedAtMs = 0
 ): Promise<Service[]> {
   return runDeduplicatedQuery(
-    `home:legacy_services:${limitCount}`,
-    () => fetchLatestFromCollection<Service>('services', limitCount)
+    `home:legacy_services:${limitCount}:${afterCreatedAtMs}`,
+    () => fetchLatestFromCollection<Service>('services', limitCount, afterCreatedAtMs)
   );
 }
 
@@ -253,6 +336,10 @@ export async function getLatestServices(limitCount = 4): Promise<Service[]> {
       fetchLatestProductsByAdType('service', limitCount),
       fetchLatestFromCollection<Service>('services', limitCount),
     ]);
+
+    productServices.forEach((p) =>
+      primeProductIntoCache(p, { isFull: true, idbOnly: true })
+    );
 
     const seenIds = new Set<string>();
     const normalizedProductServices: Service[] = productServices.map((p) => ({
@@ -356,6 +443,115 @@ export async function getHomeMixedFeed(
     mixed.sort(
       (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
     );
+
+    primeMixedFeedEntities(mixed, true);
     return mixed;
   });
 }
+
+/**
+ * Incremental delta sync for the Home feed: queries ONLY records newer than
+ * the newest cached item per collection (`0` reads if nothing new was posted).
+ */
+export async function getHomeMixedFeedDelta(
+  cachedItems: ReadonlyArray<MixedFeedItem>,
+  limitPerCollection = 20
+): Promise<{ items: MixedFeedItem[]; addedCount: number }> {
+  if (!db || cachedItems.length === 0) {
+    const full = await getHomeMixedFeed(limitPerCollection);
+    return { items: full, addedCount: full.length };
+  }
+
+  return runDeduplicatedQuery(
+    `home:mixed:delta:${cachedItems.length}`,
+    async () => {
+      const productItems = cachedItems.filter(
+        (i) => (i._type === 'item' || i._type === 'service') && i.product
+      );
+      const serviceItems = cachedItems.filter(
+        (i) => i._type === 'service' && i.service
+      );
+      const storeItems = cachedItems.filter((i) => i._type === 'store' && i.store);
+      const accItems = cachedItems.filter(
+        (i) => i._type === 'accommodation' && i.accommodation
+      );
+
+      const newestProductMs = getNewestCreatedAtMs(productItems);
+      const newestServiceMs = getNewestCreatedAtMs(serviceItems);
+      const newestStoreMs = getNewestCreatedAtMs(storeItems);
+      const newestAccMs = getNewestCreatedAtMs(accItems);
+
+      const [newProducts, newLegacyServices, newStores, newAccommodations] =
+        await Promise.all([
+          fetchLatestFromCollection<Product>(
+            'products',
+            limitPerCollection,
+            newestProductMs
+          ),
+          fetchLatestFromCollection<Service>(
+            'services',
+            limitPerCollection,
+            newestServiceMs
+          ),
+          newestStoreMs > 0
+            ? getApprovedStoresDelta(newestStoreMs)
+            : getApprovedStores(),
+          fetchLatestFromCollection<Accommodation>(
+            'accommodations',
+            limitPerCollection,
+            newestAccMs
+          ),
+        ]);
+
+      const marketplaceProducts = newProducts.filter(
+        (p) => p.categoryId !== 'accommodation'
+      );
+      const seenProductIds = new Set(
+        marketplaceProducts.map((p) => p.id).filter(Boolean) as string[]
+      );
+      const uniqueLegacyServices = newLegacyServices.filter(
+        (s) => !s.id || !seenProductIds.has(s.id)
+      );
+
+      const totalIncoming =
+        marketplaceProducts.length +
+        uniqueLegacyServices.length +
+        newStores.length +
+        newAccommodations.length;
+
+      if (totalIncoming === 0) {
+        return { items: [...cachedItems], addedCount: 0 };
+      }
+
+      const newSellerIds: string[] = [
+        ...marketplaceProducts.map((p) => p.sellerId),
+        ...uniqueLegacyServices.map((s) => s.providerId),
+        ...newStores.map((st) => st.ownerId),
+        ...newAccommodations.map((a) => a.ownerId),
+      ];
+
+      const userTrustMap = await fetchPublicUserTrustMap(newSellerIds);
+
+      const incomingMixed: MixedFeedItem[] = [
+        ...marketplaceProducts.map((p) =>
+          productToMixedFeedItem(p, userTrustMap[p.sellerId])
+        ),
+        ...uniqueLegacyServices.map((s) =>
+          serviceToMixedFeedItem(s, userTrustMap[s.providerId])
+        ),
+        ...newStores.map((st) =>
+          storeToMixedFeedItem(st, userTrustMap[st.ownerId])
+        ),
+        ...newAccommodations.map((acc) =>
+          accommodationToMixedFeedItem(acc, userTrustMap[acc.ownerId])
+        ),
+      ];
+
+      primeMixedFeedEntities(incomingMixed, true);
+      const merged = mergeMixedFeedDelta(cachedItems, incomingMixed, 80);
+      return { items: merged, addedCount: incomingMixed.length };
+    }
+  );
+}
+
+export { FEED_FRESH_MS };

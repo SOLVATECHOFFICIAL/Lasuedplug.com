@@ -13,15 +13,24 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { invalidateFastCachePrefix } from './fastCache';
+import {
+  getFastCacheEnvelope,
+  invalidateFastCachePrefix,
+  setFastCache,
+} from './fastCache';
 import { buildFavoriteDocId, sortByCreatedAtDesc } from './buyerHelpers';
 import { SEED_PRODUCTS } from './homeHelpers';
+import { warmImages } from './imageCache';
+import { FAVORITES_FRESH_MS, primeProductIntoCache } from './syncCache';
 import { Enquiry, Favorite, Product } from '../types';
 
 export interface FavoriteWithListing {
   favorite: Favorite;
   listing: Product | null;
 }
+
+const USER_FAV_MAP_PREFIX = 'user_fav_ids:';
+const USER_FAV_ITEM_PREFIX = 'user_fav:';
 
 function mapBuyerFirestoreError(err: unknown, fallbackMessage: string): Error {
   const firestoreErr = err as FirestoreError;
@@ -39,25 +48,83 @@ function mapBuyerFirestoreError(err: unknown, fallbackMessage: string): Error {
   return new Error(fallbackMessage);
 }
 
+function updateCachedFavoriteState(
+  userId: string,
+  listingId: string,
+  favorited: boolean
+): void {
+  setFastCache(`${USER_FAV_ITEM_PREFIX}${userId}:${listingId}`, favorited, {
+    idbOnly: true,
+  });
+  const mapKey = `${USER_FAV_MAP_PREFIX}${userId}`;
+  const fullMap = getFastCacheEnvelope<Record<string, boolean>>(mapKey, 0);
+  if (fullMap) {
+    const nextMap = { ...fullMap.data };
+    if (favorited) {
+      nextMap[listingId] = true;
+    } else {
+      delete nextMap[listingId];
+    }
+    setFastCache(mapKey, nextMap, { idbOnly: true });
+  }
+}
+
 /**
  * Checks whether a listing is currently saved in the user's favorites.
+ * Uses cached favorite map / item cache first to avoid Firestore reads on revisit,
+ * then checks deterministic favorite doc ID before falling back to query.
  */
 export async function isListingFavorited(
   userId: string,
   listingId: string
 ): Promise<boolean> {
-  if (!db || !userId.trim() || !listingId.trim()) {
+  const cleanUser = userId.trim();
+  const cleanListing = listingId.trim();
+  if (!cleanUser || !cleanListing) {
+    return false;
+  }
+
+  const fullMap = getFastCacheEnvelope<Record<string, boolean>>(
+    `${USER_FAV_MAP_PREFIX}${cleanUser}`,
+    FAVORITES_FRESH_MS
+  );
+  if (fullMap) {
+    return Boolean(fullMap.data[cleanListing]);
+  }
+
+  const itemCache = getFastCacheEnvelope<boolean>(
+    `${USER_FAV_ITEM_PREFIX}${cleanUser}:${cleanListing}`,
+    FAVORITES_FRESH_MS
+  );
+  if (itemCache !== null) {
+    return Boolean(itemCache.data);
+  }
+
+  if (!db) {
     return false;
   }
 
   try {
+    const deterministicId = buildFavoriteDocId(cleanUser, cleanListing);
+    const deterministicSnap = await getDoc(doc(db, 'favorites', deterministicId));
+    if (deterministicSnap.exists()) {
+      setFastCache(`${USER_FAV_ITEM_PREFIX}${cleanUser}:${cleanListing}`, true, {
+        idbOnly: true,
+      });
+      return true;
+    }
+
     const q = query(
       collection(db, 'favorites'),
-      where('userId', '==', userId),
-      where('listingId', '==', listingId)
+      where('userId', '==', cleanUser),
+      where('listingId', '==', cleanListing)
     );
     const snapshot = await getDocs(q);
-    return !snapshot.empty;
+    const result = !snapshot.empty;
+    setFastCache(`${USER_FAV_ITEM_PREFIX}${cleanUser}:${cleanListing}`, result, {
+      idbOnly: true,
+    });
+    return result;
   } catch (err) {
     console.warn('Unable to check favorite state:', err);
     return false;
@@ -77,19 +144,21 @@ export async function toggleFavorite(
   if (!db) {
     throw new Error('Firebase is not configured. Check .env.local.');
   }
-  if (!userId.trim() || !listingId.trim()) {
+  const cleanUser = userId.trim();
+  const cleanListing = listingId.trim();
+  if (!cleanUser || !cleanListing) {
     throw new Error('User and listing IDs are required.');
   }
 
   const colRef = collection(db, 'favorites');
-  const deterministicId = buildFavoriteDocId(userId, listingId);
+  const deterministicId = buildFavoriteDocId(cleanUser, cleanListing);
 
   try {
     if (isFavorited) {
       const existingQuery = query(
         colRef,
-        where('userId', '==', userId),
-        where('listingId', '==', listingId)
+        where('userId', '==', cleanUser),
+        where('listingId', '==', cleanListing)
       );
       const snapshot = await getDocs(existingQuery);
       if (!snapshot.empty) {
@@ -99,18 +168,20 @@ export async function toggleFavorite(
       } else {
         await deleteDoc(doc(db, 'favorites', deterministicId));
       }
-      invalidateFastCachePrefix(`buyer_dash:${userId}`);
+      updateCachedFavoriteState(cleanUser, cleanListing, false);
+      invalidateFastCachePrefix(`buyer_dash:${cleanUser}`);
       return false;
     }
 
     const payload: Omit<Favorite, 'id'> = {
-      userId,
-      listingId,
+      userId: cleanUser,
+      listingId: cleanListing,
       listingType,
       createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, 'favorites', deterministicId), payload);
-    invalidateFastCachePrefix(`buyer_dash:${userId}`);
+    updateCachedFavoriteState(cleanUser, cleanListing, true);
+    invalidateFastCachePrefix(`buyer_dash:${cleanUser}`);
     return true;
   } catch (err) {
     throw mapBuyerFirestoreError(err, 'Unable to update saved items right now.');
@@ -120,6 +191,11 @@ export async function toggleFavorite(
 async function fetchListingForFavorite(favorite: Favorite): Promise<Product | null> {
   if (!db) {
     return null;
+  }
+
+  const cached = getFastCacheEnvelope<Product>(`product:${favorite.listingId}`, 0);
+  if (cached && cached.isFull !== false) {
+    return cached.data;
   }
 
   const targetCollections: Array<'products' | 'services'> =
@@ -132,7 +208,7 @@ async function fetchListingForFavorite(favorite: Favorite): Promise<Product | nu
       const snap = await getDoc(doc(db, colName, favorite.listingId));
       if (snap.exists()) {
         const data = snap.data() as Omit<Product, 'id'>;
-        return {
+        const resolved: Product = {
           id: snap.id,
           ...data,
           adType:
@@ -141,6 +217,8 @@ async function fetchListingForFavorite(favorite: Favorite): Promise<Product | nu
               ? 'service'
               : 'item'),
         };
+        primeProductIntoCache(resolved, { isFull: true, idbOnly: true });
+        return resolved;
       }
     } catch {
       // If a favorited item was unpublished or deleted, treat gracefully below.
@@ -155,7 +233,7 @@ async function fetchListingForFavorite(favorite: Favorite): Promise<Product | nu
     };
   }
 
-  return null;
+  return cached?.data ?? null;
 }
 
 /**
@@ -168,13 +246,14 @@ export async function getUserFavorites(
     return [];
   }
 
+  const cleanUser = userId.trim();
   const colRef = collection(db, 'favorites');
   let favorites: Favorite[] = [];
 
   try {
     const q = query(
       colRef,
-      where('userId', '==', userId),
+      where('userId', '==', cleanUser),
       orderBy('createdAt', 'desc')
     );
     const snapshot = await getDocs(q);
@@ -185,7 +264,7 @@ export async function getUserFavorites(
   } catch (err) {
     const firestoreErr = err as FirestoreError;
     if (firestoreErr?.code === 'failed-precondition') {
-      const fallbackQ = query(colRef, where('userId', '==', userId));
+      const fallbackQ = query(colRef, where('userId', '==', cleanUser));
       const snapshot = await getDocs(fallbackQ);
       favorites = sortByCreatedAtDesc(
         snapshot.docs.map((docSnap) => ({
@@ -198,8 +277,21 @@ export async function getUserFavorites(
     }
   }
 
+  const favMap: Record<string, boolean> = {};
+  favorites.forEach((fav) => {
+    if (fav.listingId) {
+      favMap[fav.listingId] = true;
+    }
+  });
+  setFastCache(`${USER_FAV_MAP_PREFIX}${cleanUser}`, favMap, { idbOnly: true });
+
   const listings = await Promise.all(
     favorites.map((favorite) => fetchListingForFavorite(favorite))
+  );
+
+  warmImages(
+    listings.map((item) => item?.images?.[0]),
+    12
   );
 
   return favorites.map((favorite, idx) => ({

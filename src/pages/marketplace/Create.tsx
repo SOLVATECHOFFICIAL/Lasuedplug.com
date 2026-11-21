@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
+import { invalidateFastCachePrefix } from '../../lib/fastCache';
 import { db } from '../../lib/firebase';
 import {
   getCategoriesForAdType,
@@ -506,6 +507,7 @@ export function MarketplaceCreate() {
         }
       }
 
+      invalidateFastCachePrefix('seller_dash:');
       showToast(
         'Listing submitted! It will be visible once approved by an admin.',
         'success'

@@ -28,8 +28,15 @@ import {
 } from 'lucide-react';
 import { SITE_TAGLINE } from '../lib/constants';
 import { compactMixedFeedForCache } from '../lib/firestoreQueryCache';
-import { getHomeMixedFeed } from '../lib/homeService';
-import { getFastCache, setFastCache } from '../lib/fastCache';
+import { getHomeMixedFeed, getHomeMixedFeedDelta, primeMixedFeedEntities } from '../lib/homeService';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+  touchFastCache,
+} from '../lib/fastCache';
+import { resolveSyncStrategy } from '../lib/syncCache';
 import { getTrendingItems } from '../lib/trendingService';
 import {
   applyTwoHourTrendingShuffle,
@@ -50,6 +57,7 @@ import { EmptyState } from '../components/feedback/EmptyState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { MixedFeedCard } from '../components/marketplace/MixedFeedCard';
 import { RecentlyViewedRow } from '../components/marketplace/RecentlyViewedRow';
+import { SeoHead } from '../components/seo/SeoHead';
 
 const PAGE_BATCH_SIZE = 12;
 const PULL_REFRESH_THRESHOLD_PX = 64;
@@ -179,9 +187,59 @@ export function Home() {
     };
   }, [syncRecentlyViewed]);
 
+  useEffect(() => {
+    const handleHydrated = () => {
+      const hydratedMixed = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed');
+      if (hydratedMixed && hydratedMixed.data.length > 0) {
+        setMixedItems((prev) =>
+          hydratedMixed.isFull !== false || prev.length === 0
+            ? hydratedMixed.data
+            : prev
+        );
+        setLoading(false);
+        primeMixedFeedEntities(
+          hydratedMixed.data,
+          hydratedMixed.isFull !== false
+        );
+      }
+      const hydratedTrending = getFastCacheEnvelope<MixedFeedItem[]>('home_trending_feed');
+      if (hydratedTrending && hydratedTrending.data.length > 0) {
+        setTrendingItems((prev) =>
+          hydratedTrending.isFull !== false || prev.length === 0
+            ? hydratedTrending.data
+            : prev
+        );
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, []);
+
   const loadFeeds = useCallback(async (isRefresh = false) => {
-    const cachedMixed = getFastCache<MixedFeedItem[]>('home_mixed_feed');
-    const hasCached = Boolean(cachedMixed && cachedMixed.length > 0);
+    const env = getFastCacheEnvelope<MixedFeedItem[]>('home_mixed_feed');
+    const cachedMixed = env?.data || [];
+    const hasCached = cachedMixed.length > 0;
+
+    if (hasCached) {
+      primeMixedFeedEntities(cachedMixed, env?.isFull !== false);
+    }
+
+    const strategy = resolveSyncStrategy({
+      hasCached,
+      lastSyncedAt: env?.syncedAt,
+      lastFullSyncAt: env?.fullSyncAt,
+      forceRefresh: isRefresh,
+    });
+
+    if (strategy === 'fresh-skip') {
+      setLoading(false);
+      setRefreshing(false);
+      setError(null);
+      return;
+    }
 
     if (isRefresh) {
       setRefreshing(true);
@@ -192,12 +250,32 @@ export function Home() {
     setError(null);
 
     try {
-      const mixedResult = await getHomeMixedFeed(20);
-      setMixedItems(mixedResult);
-      setFastCache('home_mixed_feed', compactMixedFeedForCache(mixedResult, 24));
+      let nextMixed: MixedFeedItem[] = cachedMixed;
+
+      if (strategy === 'delta-sync' && hasCached) {
+        const { items, addedCount } = await getHomeMixedFeedDelta(cachedMixed, 20);
+        nextMixed = items;
+        if (addedCount === 0) {
+          touchFastCache('home_mixed_feed');
+        } else {
+          setMixedItems(items);
+          setFastCache('home_mixed_feed', items, {
+            localData: compactMixedFeedForCache(items, 24),
+            isFull: true,
+          });
+        }
+      } else {
+        const mixedResult = await getHomeMixedFeed(20);
+        nextMixed = mixedResult;
+        setMixedItems(mixedResult);
+        setFastCache('home_mixed_feed', mixedResult, {
+          localData: compactMixedFeedForCache(mixedResult, 24),
+          isFull: true,
+        });
+      }
 
       const derivedTrending = applyTwoHourTrendingShuffle(
-        mixedResult.filter(
+        nextMixed.filter(
           (item) => item._type === 'item' || item._type === 'service'
         ),
         Date.now(),
@@ -206,10 +284,10 @@ export function Home() {
       if (derivedTrending.length > 0) {
         setTrendingItems((prev) => (prev.length === 0 ? derivedTrending : prev));
         if (!getFastCache<MixedFeedItem[]>('home_trending_feed')?.length) {
-          setFastCache(
-            'home_trending_feed',
-            compactMixedFeedForCache(derivedTrending, 24)
-          );
+          setFastCache('home_trending_feed', derivedTrending, {
+            localData: compactMixedFeedForCache(derivedTrending, 24),
+            isFull: true,
+          });
         }
       }
     } catch (err) {
@@ -236,6 +314,23 @@ export function Home() {
 
     if (nextMode === 'trending' && !hasFetchedTrendingRef.current && !loading) {
       hasFetchedTrendingRef.current = true;
+      const trendingEnv = getFastCacheEnvelope<MixedFeedItem[]>('home_trending_feed');
+      const strategy = resolveSyncStrategy({
+        hasCached: Boolean(trendingEnv?.data?.length),
+        lastSyncedAt: trendingEnv?.syncedAt,
+        lastFullSyncAt: trendingEnv?.fullSyncAt,
+        freshWindowMs: 10 * 60_000,
+        fullReconcileMs: 60 * 60_000,
+      });
+
+      if (strategy === 'fresh-skip' && trendingEnv?.data) {
+        primeMixedFeedEntities(
+          trendingEnv.data,
+          trendingEnv.isFull !== false
+        );
+        return;
+      }
+
       const shouldShowSpinner = trendingItems.length === 0;
       if (shouldShowSpinner) {
         setTrendingLoading(true);
@@ -244,10 +339,10 @@ export function Home() {
         const freshTrending = await getTrendingItems();
         if (freshTrending.length > 0) {
           setTrendingItems(freshTrending);
-          setFastCache(
-            'home_trending_feed',
-            compactMixedFeedForCache(freshTrending, 24)
-          );
+          setFastCache('home_trending_feed', freshTrending, {
+            localData: compactMixedFeedForCache(freshTrending, 24),
+            isFull: true,
+          });
         }
       } catch {
         // Keep derived/cached trending items if refresh fails transiently
@@ -368,6 +463,10 @@ export function Home() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      <SeoHead
+        title="LASUEDPLUG — The Official LASUED & Epe Campus Marketplace"
+        description={SITE_TAGLINE}
+      />
       {/* Pull-to-Refresh Indicator */}
       {(pullDistance > 12 || refreshing) && (
         <div

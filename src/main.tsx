@@ -1,8 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { hydrateFastCacheFromIDB } from './lib/fastCache';
 import App from './App';
 import './styles/globals.css';
+
+void hydrateFastCacheFromIDB();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

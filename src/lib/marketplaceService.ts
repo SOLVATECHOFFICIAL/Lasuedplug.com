@@ -12,6 +12,7 @@ import {
   QueryConstraint,
   QueryDocumentSnapshot,
   startAfter,
+  Timestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -22,17 +23,34 @@ import {
   runDeduplicatedQuery,
 } from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
+import { warmImages } from './imageCache';
 import {
   applyLocalMarketplaceFiltersAndSort,
   filterProductsByQuery,
+  getListingAdType,
   MarketplaceFilters,
   MarketplaceSortOption,
 } from './marketplaceHelpers';
 import { matchProductsBySearchKeywords } from './aiSearchService';
+import {
+  primeProductIntoCache,
+  shouldSkipDetailNetworkFetch,
+} from './syncCache';
 import { AdType, Product } from '../types';
-import { getListingAdType } from './marketplaceHelpers';
 
 export const MARKETPLACE_PAGE_SIZE = 12;
+
+export function primeProductsListIntoCache(
+  items: ReadonlyArray<Product>,
+  isFull = true
+): void {
+  const coverUrls: Array<string | undefined> = [];
+  for (const product of items) {
+    primeProductIntoCache(product, { isFull, idbOnly: true });
+    coverUrls.push(product.images?.[0]);
+  }
+  warmImages(coverUrls, 16);
+}
 
 export interface PaginatedProductsResult {
   products: Product[];
@@ -94,7 +112,9 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
           if (contactDiff !== 0) return contactDiff;
           return getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt);
         });
-      return docs.slice(0, limitCount);
+      const sliced = docs.slice(0, limitCount);
+      primeProductsListIntoCache(sliced, true);
+      return sliced;
     };
 
     if (hasKnownMissingIndex(indexKey)) {
@@ -111,7 +131,7 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
         limit(limitCount)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
@@ -120,6 +140,8 @@ export async function fetchTrendingProducts(limitCount = 8): Promise<Product[]> 
           (item) =>
             item.categoryId !== 'accommodation' && getListingAdType(item) === 'item'
         );
+      primeProductsListIntoCache(rows, true);
+      return rows;
     } catch (err) {
       const firestoreErr = err as FirestoreError;
       if (firestoreErr?.code === 'failed-precondition') {
@@ -158,7 +180,7 @@ export async function fetchAllApprovedActiveProducts(
         limit(120)
       );
       const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
@@ -170,6 +192,8 @@ export async function fetchAllApprovedActiveProducts(
             item.categoryId !== 'accommodation' &&
             getListingAdType(item) === targetAdType
         );
+      primeProductsListIntoCache(rows, true);
+      return rows;
     };
 
     if (hasKnownMissingIndex(indexKey)) {
@@ -188,7 +212,7 @@ export async function fetchAllApprovedActiveProducts(
 
       const q = query(colRef, ...constraints);
       const snapshot = await getDocs(q);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Product, 'id'>),
@@ -198,6 +222,8 @@ export async function fetchAllApprovedActiveProducts(
             item.categoryId !== 'accommodation' &&
             getListingAdType(item) === targetAdType
         );
+      primeProductsListIntoCache(rows, true);
+      return rows;
     } catch (err) {
       const firestoreErr = err as FirestoreError;
       if (firestoreErr?.code === 'failed-precondition') {
@@ -216,6 +242,64 @@ export async function fetchAllApprovedActiveProducts(
 
 export async function fetchApprovedActiveServices(): Promise<Product[]> {
   return fetchAllApprovedActiveProducts('service');
+}
+
+/**
+ * Queries ONLY newly added approved & active products (`createdAt > afterCreatedAtMs`)
+ * for lightweight incremental sync without re-reading unchanged items.
+ */
+export async function fetchMarketplaceProductsDelta(
+  afterCreatedAtMs: number,
+  options: { adType?: AdType; categoryId?: string; limitCount?: number } = {}
+): Promise<Product[]> {
+  if (!db || afterCreatedAtMs <= 0) {
+    return [];
+  }
+
+  const targetAdType: AdType = options.adType || 'item';
+  const trimmedCat = options.categoryId?.trim() || '';
+  const limitCount = options.limitCount ?? 20;
+  const indexKey = `products:delta:${targetAdType}:${trimmedCat}`;
+
+  if (hasKnownMissingIndex(indexKey)) {
+    return [];
+  }
+
+  try {
+    const constraints: QueryConstraint[] = [
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('adType', '==', targetAdType),
+    ];
+    if (trimmedCat) {
+      constraints.push(where('categoryId', '==', trimmedCat));
+    }
+    constraints.push(
+      where('createdAt', '>', Timestamp.fromMillis(afterCreatedAtMs + 1)),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+
+    const snapshot = await getDocs(query(collection(db, 'products'), ...constraints));
+    const rows = snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Product, 'id'>),
+      }))
+      .filter(
+        (item) =>
+          item.categoryId !== 'accommodation' &&
+          getListingAdType(item) === targetAdType
+      );
+    primeProductsListIntoCache(rows, true);
+    return rows;
+  } catch (err) {
+    const firestoreErr = err as FirestoreError;
+    if (firestoreErr?.code === 'failed-precondition') {
+      markMissingIndex(indexKey);
+    }
+    return [];
+  }
 }
 
 /**
@@ -300,6 +384,7 @@ export async function fetchMarketplaceProducts(
       });
 
       if (trimmedSearch) {
+        primeProductsListIntoCache(filtered, true);
         return {
           products: filtered,
           lastVisibleDoc: null,
@@ -317,6 +402,7 @@ export async function fetchMarketplaceProducts(
       const nextLastDoc =
         lastItem?.id ? snapById.get(lastItem.id) || null : null;
 
+      primeProductsListIntoCache(pageItems, true);
       return {
         products: pageItems,
         lastVisibleDoc: nextLastDoc,
@@ -343,6 +429,7 @@ export async function fetchMarketplaceProducts(
               getListingAdType(item) === targetAdType
           );
         const matched = filterProductsByQuery(rawDocs, trimmedSearch);
+        primeProductsListIntoCache(matched, true);
         return {
           products: matched,
           lastVisibleDoc: null,
@@ -374,6 +461,8 @@ export async function fetchMarketplaceProducts(
             item.categoryId !== 'accommodation' &&
             getListingAdType(item) === targetAdType
         );
+
+      primeProductsListIntoCache(products, true);
 
       return {
         products,
@@ -417,50 +506,72 @@ export async function getApprovedProducts(): Promise<Product[]> {
   return result.products;
 }
 
-export async function getProductById(id: string): Promise<Product | null> {
-  if (!db || !id.trim()) {
+export async function getProductById(
+  id: string,
+  options?: { force?: boolean }
+): Promise<Product | null> {
+  const cleanId = id.trim();
+  if (!cleanId) {
     return null;
   }
 
-  try {
-    const snap = await getDoc(doc(db, 'products', id));
-    if (snap.exists()) {
-      return {
-        id: snap.id,
-        ...(snap.data() as Omit<Product, 'id'>),
-      };
-    }
+  const cacheCheck = shouldSkipDetailNetworkFetch<Product>(`product:${cleanId}`, {
+    force: options?.force,
+  });
+  if (cacheCheck.skip && cacheCheck.cached) {
+    return cacheCheck.cached;
+  }
 
-    // Fallback for legacy documents in `services` collection now routed to /marketplace/:id
-    const legacyServiceSnap = await getDoc(doc(db, 'services', id));
-    if (legacyServiceSnap.exists()) {
-      const data = legacyServiceSnap.data() as Record<string, unknown>;
-      return {
-        ...(data as Omit<Product, 'id'>),
-        id: legacyServiceSnap.id,
-        sellerId:
-          typeof data.providerId === 'string'
-            ? data.providerId
-            : typeof data.sellerId === 'string'
-              ? data.sellerId
-              : '',
-        adType: 'service',
-      };
-    }
+  if (!db) {
+    return cacheCheck.cached;
+  }
 
-    return null;
-  } catch (err) {
-    const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'unavailable') {
-      throw new Error(
-        'Could not reach the marketplace database. Check your internet connection and try again.'
-      );
-    }
-    if (firestoreErr?.code === 'permission-denied') {
+  return runDeduplicatedQuery(`product:get:${cleanId}`, async () => {
+    try {
+      const snap = await getDoc(doc(db!, 'products', cleanId));
+      if (snap.exists()) {
+        const product: Product = {
+          id: snap.id,
+          ...(snap.data() as Omit<Product, 'id'>),
+        };
+        primeProductIntoCache(product, { isFull: true, idbOnly: false });
+        return product;
+      }
+
+      // Fallback for legacy documents in `services` collection now routed to /marketplace/:id
+      const legacyServiceSnap = await getDoc(doc(db!, 'services', cleanId));
+      if (legacyServiceSnap.exists()) {
+        const data = legacyServiceSnap.data() as Record<string, unknown>;
+        const legacyProduct: Product = {
+          ...(data as Omit<Product, 'id'>),
+          id: legacyServiceSnap.id,
+          sellerId:
+            typeof data.providerId === 'string'
+              ? data.providerId
+              : typeof data.sellerId === 'string'
+                ? data.sellerId
+                : '',
+          adType: 'service',
+        };
+        primeProductIntoCache(legacyProduct, { isFull: true, idbOnly: false });
+        return legacyProduct;
+      }
+
       return null;
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'unavailable') {
+        if (cacheCheck.cached) return cacheCheck.cached;
+        throw new Error(
+          'Could not reach the marketplace database. Check your internet connection and try again.'
+        );
+      }
+      if (firestoreErr?.code === 'permission-denied') {
+        return null;
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 export async function incrementProductViewCount(productId: string): Promise<void> {

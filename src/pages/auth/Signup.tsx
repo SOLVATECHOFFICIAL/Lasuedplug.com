@@ -186,7 +186,10 @@ export function SignupPage() {
             <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200/80 rounded-lg px-3 py-2 leading-relaxed">
               {accountType === 'business'
                 ? 'Marketer account: Physical shops set opening/closing hours, address & GPS pin (online marketers can be contacted anytime). Verify identity with NIN, Driver’s License, Voter’s Card, or Passport.'
-                : 'Student account: Complete your campus academic details and verify with your Student ID Card or School Fee Receipt.'}
+                : 'Student account: Complete your campus academic details and verify with your Student ID Card or School Fee Receipt.'}{' '}
+              <span className="font-medium text-slate-700">
+                Choose carefully — this can only be selected once at signup unless Admin changes it for you.
+              </span>
             </p>
           </div>
 

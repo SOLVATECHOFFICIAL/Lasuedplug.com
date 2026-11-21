@@ -16,7 +16,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+} from '../../lib/fastCache';
+import { warmImages } from '../../lib/imageCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
 import { shareListing } from '../../lib/shareUtils';
@@ -25,6 +31,7 @@ import {
   getApprovedProductsByStoreId,
   getStoreById,
 } from '../../lib/storeService';
+import { DETAIL_FRESH_MS, primeStoreIntoCache } from '../../lib/syncCache';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -54,24 +61,58 @@ export function StoreProfile() {
     products: Product[];
     reviews: Review[];
   }
-  const initialCached = id
+  const initialProfile = id
     ? getFastCache<CachedStoreProfile>(`store_profile:${id}`)
     : null;
+  const initialStoreSummary =
+    !initialProfile && id ? getFastCache<Store>(`store:${id}`) : null;
 
-  const [store, setStore] = useState<Store | null>(() => initialCached?.store ?? null);
+  const [store, setStore] = useState<Store | null>(
+    () => initialProfile?.store ?? initialStoreSummary ?? null
+  );
   const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(
-    () => initialCached?.ownerProfile ?? null
+    () => initialProfile?.ownerProfile ?? null
   );
   const [products, setProducts] = useState<Product[]>(
-    () => initialCached?.products ?? []
+    () => initialProfile?.products ?? []
   );
   const [reviews, setReviews] = useState<Review[]>(
-    () => initialCached?.reviews ?? []
+    () => initialProfile?.reviews ?? []
   );
-  const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
+  const [loading, setLoading] = useState(
+    () => Boolean(id) && !initialProfile && !initialStoreSummary
+  );
   const [error, setError] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedStoreImageIndex, setSelectedStoreImageIndex] = useState(0);
+
+  useEffect(() => {
+    if (!id) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<CachedStoreProfile>(
+        `store_profile:${id}`,
+        0
+      );
+      if (hydrated?.data) {
+        setStore(hydrated.data.store);
+        setOwnerProfile(hydrated.data.ownerProfile);
+        setProducts(hydrated.data.products);
+        setReviews(hydrated.data.reviews);
+        setLoading(false);
+        return;
+      }
+      const hydratedStore = getFastCacheEnvelope<Store>(`store:${id}`, 0);
+      if (hydratedStore?.data) {
+        setStore((prev) => prev ?? hydratedStore.data);
+        setLoading(false);
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [id]);
 
   const loadStoreProfile = useCallback(async () => {
     if (!id) {
@@ -80,20 +121,51 @@ export function StoreProfile() {
       return;
     }
 
-    const cached = getFastCache<CachedStoreProfile>(`store_profile:${id}`);
-    if (cached) {
-      setStore(cached.store);
-      setOwnerProfile(cached.ownerProfile);
-      setProducts(cached.products);
-      setReviews(cached.reviews);
+    const freshProfileEnv = getFastCacheEnvelope<CachedStoreProfile>(
+      `store_profile:${id}`,
+      DETAIL_FRESH_MS
+    );
+    const anyProfileCached =
+      freshProfileEnv?.data ||
+      getFastCache<CachedStoreProfile>(`store_profile:${id}`);
+    const fallbackStore = anyProfileCached
+      ? null
+      : getFastCache<Store>(`store:${id}`);
+
+    if (anyProfileCached) {
+      setStore(anyProfileCached.store);
+      setOwnerProfile(anyProfileCached.ownerProfile);
+      setProducts(anyProfileCached.products);
+      setReviews(anyProfileCached.reviews);
       setLoading(false);
+      warmImages(
+        anyProfileCached.store.images?.length
+          ? anyProfileCached.store.images
+          : [anyProfileCached.store.logoUrl],
+        4
+      );
+    } else if (fallbackStore) {
+      setStore(fallbackStore);
+      setLoading(false);
+      warmImages(
+        fallbackStore.images?.length
+          ? fallbackStore.images
+          : [fallbackStore.logoUrl],
+        4
+      );
     } else {
       setLoading(true);
     }
     setError(null);
 
+    if (freshProfileEnv) {
+      return;
+    }
+
     try {
-      const storeRecord = await getStoreById(id);
+      const storeRecord = await getStoreById(id, {
+        force: Boolean(!fallbackStore),
+      });
       if (!storeRecord) {
         setStore(null);
         setOwnerProfile(null);
@@ -125,15 +197,20 @@ export function StoreProfile() {
       setProducts(storeProducts);
       setReviews(storeReviews);
       if (storeRecord.isApproved) {
-        setFastCache(`store_profile:${id}`, {
-          store: storeRecord,
-          ownerProfile: ownerData,
-          products: storeProducts,
-          reviews: storeReviews,
-        });
+        primeStoreIntoCache(storeRecord, { isFull: true, idbOnly: false });
+        setFastCache(
+          `store_profile:${id}`,
+          {
+            store: storeRecord,
+            ownerProfile: ownerData,
+            products: storeProducts,
+            reviews: storeReviews,
+          },
+          { idbOnly: true, isFull: true }
+        );
       }
     } catch (err) {
-      if (!cached) {
+      if (!anyProfileCached && !fallbackStore) {
         setError(
           err instanceof Error
             ? err.message
@@ -277,6 +354,7 @@ export function StoreProfile() {
                 <ProductImage
                   src={activeStoreImage}
                   alt={store.name}
+                  priority
                   className="w-full h-full object-cover"
                   iconClassName="w-9 h-9 text-slate-400"
                 />

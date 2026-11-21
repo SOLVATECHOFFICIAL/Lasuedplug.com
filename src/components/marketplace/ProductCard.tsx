@@ -11,6 +11,8 @@ import {
 } from '../../lib/marketplaceHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
+import { warmImages } from '../../lib/imageCache';
+import { primeProductIntoCache } from '../../lib/syncCache';
 import { Card } from '../ui/Card';
 import { UserAvatar } from '../ui/UserAvatar';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
@@ -48,7 +50,13 @@ export const ProductCard = memo(function ProductCard({
   const sellerName = product.sellerSnapshot?.fullName;
   const isSellerVerified = Boolean(product.sellerSnapshot?.isVerified);
 
+  const handleWarmEntity = () => {
+    primeProductIntoCache(product, { idbOnly: true });
+    warmImages(product.images, 4);
+  };
+
   const handleTrackClick = () => {
+    handleWarmEntity();
     if (!product.id) return;
     saveRecentlyViewed({
       id: product.id,
@@ -90,6 +98,9 @@ export const ProductCard = memo(function ProductCard({
       <Link
         to={`/marketplace/${product.id}`}
         onClick={handleTrackClick}
+        onMouseEnter={handleWarmEntity}
+        onTouchStart={handleWarmEntity}
+        onFocus={handleWarmEntity}
         className="block h-full focus:outline-none"
       >
         <Card

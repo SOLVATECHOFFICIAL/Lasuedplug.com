@@ -270,7 +270,11 @@ export function formatFirebaseAuthError(error: unknown): string {
 
 export const PHONE_UPDATE_COOLDOWN_DAYS = 7;
 export const ACADEMIC_LOCK_MESSAGE =
-  'Locked. Contact Support to request a change.';
+  'Locked forever after saving. Contact Support to request a change.';
+export const MARKETER_LOCK_MESSAGE =
+  'Shop & brand details are locked forever after saving. Contact Support to request a change.';
+export const ACCOUNT_TYPE_LOCK_MESSAGE =
+  'Account type is chosen once at signup and locked forever. Contact Admin/Support if you need it changed.';
 export const NAME_LOCK_MESSAGE =
   'Name cannot be changed. Contact Support to request a change.';
 
@@ -367,18 +371,19 @@ export function isAcademicFieldLocked(value: unknown): boolean {
 }
 
 export function canSwitchAccountTypeOnProfile(
+  _profile?: Partial<UserProfile> | null
+): boolean {
+  // Account type is selected once at signup and locked permanently unless changed by an Admin.
+  return false;
+}
+
+export function areMarketerProfileFieldsLocked(
   profile: Partial<UserProfile> | null | undefined
 ): boolean {
-  if (!profile) return true;
-  if (profile.isVerified) return false;
-  if (
-    isAcademicFieldLocked(profile.campus) ||
-    isAcademicFieldLocked(profile.department) ||
-    isAcademicFieldLocked(profile.level)
-  ) {
+  if (!profile || !isMarketerProfile(profile)) {
     return false;
   }
-  return true;
+  return isFieldPermanentlyLocked(profile.businessName);
 }
 
 export function parseTimestampMs(value: unknown): number | null {

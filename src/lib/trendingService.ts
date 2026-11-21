@@ -14,6 +14,8 @@ import {
   runDeduplicatedQuery,
 } from './firestoreQueryCache';
 import { fetchPublicUserTrustMap } from './homeService';
+import { warmImages } from './imageCache';
+import { primeProductIntoCache } from './syncCache';
 import {
   applyTwoHourTrendingShuffle,
   compareByEngagement,
@@ -164,13 +166,26 @@ export async function getTrendingItems(
     const userTrustMap = await fetchPublicUserTrustMap(sellerIds);
 
     const combined: MixedFeedItem[] = [
-      ...topProducts.map((p) =>
-        productToMixedFeedItem(p, userTrustMap[p.sellerId])
-      ),
+      ...topProducts.map((p) => {
+        primeProductIntoCache(p, { isFull: true, idbOnly: true });
+        return productToMixedFeedItem(p, userTrustMap[p.sellerId]);
+      }),
       ...uniqueLegacyServices.map((s) =>
         serviceToMixedFeedItem(s, userTrustMap[s.providerId])
       ),
     ];
+
+    warmImages(
+      combined.map(
+        (item) =>
+          item.product?.images?.[0] ||
+          item.service?.images?.[0] ||
+          item.store?.images?.[0] ||
+          item.store?.logoUrl ||
+          item.accommodation?.images?.[0]
+      ),
+      16
+    );
 
     return applyTwoHourTrendingShuffle(combined, nowMs, 30);
   });

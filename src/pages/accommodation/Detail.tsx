@@ -18,9 +18,18 @@ import {
   getAccommodationRent,
   getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+} from '../../lib/fastCache';
+import { warmImages } from '../../lib/imageCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { shareListing } from '../../lib/shareUtils';
+import {
+  primeAccommodationIntoCache,
+  shouldSkipDetailNetworkFetch,
+} from '../../lib/syncCache';
 import { formatNaira } from '../../lib/utils';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -46,28 +55,63 @@ export function AccommodationDetail() {
   const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSelectedImageIndex(0);
+    setError(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<Omit<Accommodation, 'exactAddress'>>(
+        `accommodation:${id}`,
+        0
+      );
+      if (hydrated?.data) {
+        setItem((prev) =>
+          hydrated.isFull !== false || !prev ? hydrated.data : prev
+        );
+        setLoading(false);
+        warmImages(hydrated.data.images, 4);
+      }
+    };
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [id]);
+
   const loadDetail = useCallback(async () => {
     if (!id) {
       setItem(null);
       setLoading(false);
       return;
     }
-    const cached = getFastCache<Omit<Accommodation, 'exactAddress'>>(
-      `accommodation:${id}`
-    );
+
+    const { skip, cached } = shouldSkipDetailNetworkFetch<
+      Omit<Accommodation, 'exactAddress'>
+    >(`accommodation:${id}`);
+
     if (cached) {
       setItem(cached);
       setLoading(false);
+      warmImages(cached.images, 4);
     } else {
+      setItem(null);
       setLoading(true);
     }
     setError(null);
+
+    if (skip) {
+      return;
+    }
+
     try {
-      const record = await getPublicAccommodationById(id);
+      const record = await getPublicAccommodationById(id, { force: true });
       setItem(record);
-      setSelectedImageIndex(0);
       if (record) {
-        setFastCache(`accommodation:${id}`, record);
+        primeAccommodationIntoCache(record, { isFull: true, idbOnly: false });
+        warmImages(record.images, 4);
       }
     } catch (err) {
       if (!cached) {
@@ -220,6 +264,7 @@ export function AccommodationDetail() {
             <ProductImage
               src={activeImage}
               alt={item.title}
+              priority
               className="w-full h-full object-cover"
               iconClassName="w-12 h-12 text-slate-400"
             />

@@ -5,6 +5,8 @@ import { getCategoryName } from '../../lib/categories';
 import { getProductPriceDisplay } from '../../lib/marketplaceHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
+import { warmImages } from '../../lib/imageCache';
+import { primeProductIntoCache } from '../../lib/syncCache';
 import { MixedFeedItem } from '../../lib/trendingHelpers';
 import { Service } from '../../types';
 import { Card } from '../ui/Card';
@@ -31,7 +33,40 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
   const verified = Boolean(isVerified ?? service.sellerSnapshot?.isVerified);
   const priceText = service.priceRange || getProductPriceDisplay(service).text;
 
+  const handleWarmEntity = () => {
+    if (service.id) {
+      primeProductIntoCache(
+        {
+          id: service.id,
+          sellerId: service.providerId,
+          adType: 'service',
+          title: service.title,
+          description: service.description,
+          categoryId: service.categoryId,
+          subcategory: service.subcategory,
+          images: service.images || [],
+          priceType: service.priceType || 'contact',
+          price: service.price,
+          priceUnit: service.priceUnit,
+          whatsappNumber: service.whatsappNumber || '',
+          locationName: service.locationName,
+          shopName: service.shopName,
+          viewCount: service.viewCount || 0,
+          contactCount: service.contactCount || 0,
+          status: service.status || 'available',
+          isApproved: service.isApproved ?? true,
+          isActive: service.isActive ?? true,
+          createdAt: service.createdAt,
+          sellerSnapshot: service.sellerSnapshot,
+        },
+        { idbOnly: true }
+      );
+    }
+    warmImages(service.images, 4);
+  };
+
   const handleTrackClick = () => {
+    handleWarmEntity();
     if (!service.id) return;
     saveRecentlyViewed({
       id: service.id,
@@ -70,6 +105,9 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
       <Link
         to={`/marketplace/${service.id}`}
         onClick={handleTrackClick}
+        onMouseEnter={handleWarmEntity}
+        onTouchStart={handleWarmEntity}
+        onFocus={handleWarmEntity}
         className="block h-full focus:outline-none"
       >
         <Card

@@ -460,9 +460,9 @@ export function AdminUsers() {
                                       .join(' · ')}
                                   </div>
                                 ) : (
-                                  (account.campus || account.department) && (
+                                  (account.campus || account.department || account.level) && (
                                     <div className="text-xs text-slate-500 truncate">
-                                      {[account.campus, account.department]
+                                      {[account.campus, account.department, account.level]
                                         .filter(Boolean)
                                         .join(' · ')}
                                     </div>
@@ -761,8 +761,17 @@ export function AdminUsers() {
                     </p>
                     <p>
                       <span className="text-slate-500">Level:</span>{' '}
-                      <strong className="text-slate-900">
+                      <strong
+                        className={
+                          inspectUser.level === 'Graduate'
+                            ? 'text-emerald-700'
+                            : 'text-slate-900'
+                        }
+                      >
                         {inspectUser.level || 'Not set'}
+                        {inspectUser.level === 'Graduate'
+                          ? ' (Final — Forever)'
+                          : ''}
                       </strong>
                     </p>
                   </div>

@@ -26,6 +26,20 @@ export function subscribeToPlatformSettings(
       const data = snap.data() as Partial<PlatformSettings>;
       onUpdate({
         maintenanceMode: Boolean(data.maintenanceMode),
+        academicSessionCount:
+          typeof data.academicSessionCount === 'number'
+            ? data.academicSessionCount
+            : 0,
+        lastSessionRolloverAt: data.lastSessionRolloverAt,
+        lastSessionRolloverBy: data.lastSessionRolloverBy,
+        lastSessionPromotedCount:
+          typeof data.lastSessionPromotedCount === 'number'
+            ? data.lastSessionPromotedCount
+            : 0,
+        lastSessionGraduatedCount:
+          typeof data.lastSessionGraduatedCount === 'number'
+            ? data.lastSessionGraduatedCount
+            : 0,
         updatedAt: data.updatedAt,
         updatedBy: data.updatedBy,
       });

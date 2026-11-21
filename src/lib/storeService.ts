@@ -10,15 +10,24 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { invalidateFastCachePrefix } from './fastCache';
 import {
   hasKnownMissingIndex,
   markMissingIndex,
   runDeduplicatedQuery,
 } from './firestoreQueryCache';
 import { getTimestampMillis } from './homeHelpers';
+import { warmImages } from './imageCache';
+import {
+  invalidatePublicFeedCaches,
+  primeProductIntoCache,
+  primeStoreIntoCache,
+  shouldSkipDetailNetworkFetch,
+} from './syncCache';
 import { Product, Store } from '../types';
 
 function mapStoreFirestoreError(err: unknown, fallbackMessage: string): Error {
@@ -37,6 +46,18 @@ function mapStoreFirestoreError(err: unknown, fallbackMessage: string): Error {
     return err;
   }
   return new Error(fallbackMessage);
+}
+
+export function primeStoresIntoCache(
+  stores: ReadonlyArray<Store>,
+  isFull = true
+): void {
+  const coverUrls: Array<string | undefined> = [];
+  for (const store of stores) {
+    primeStoreIntoCache(store, { isFull, idbOnly: true });
+    coverUrls.push(store.images?.[0] || store.logoUrl);
+  }
+  warmImages(coverUrls, 12);
 }
 
 /**
@@ -107,7 +128,7 @@ export async function getApprovedStores(): Promise<Store[]> {
         limit(60)
       );
       const snapshot = await getDocs(fallbackQ);
-      return snapshot.docs
+      const rows = snapshot.docs
         .map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Store, 'id'>),
@@ -116,6 +137,8 @@ export async function getApprovedStores(): Promise<Store[]> {
         .sort(
           (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
         );
+      primeStoresIntoCache(rows, true);
+      return rows;
     };
 
     if (hasKnownMissingIndex(indexKey)) {
@@ -131,10 +154,12 @@ export async function getApprovedStores(): Promise<Store[]> {
         limit(60)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((docSnap) => ({
+      const rows = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...(docSnap.data() as Omit<Store, 'id'>),
       }));
+      primeStoresIntoCache(rows, true);
+      return rows;
     } catch (err) {
       const firestoreErr = err as FirestoreError;
       if (firestoreErr?.code === 'failed-precondition') {
@@ -146,27 +171,89 @@ export async function getApprovedStores(): Promise<Store[]> {
   });
 }
 
-export async function getStoreById(storeId: string): Promise<Store | null> {
-  if (!db || !storeId.trim()) {
-    return null;
+/**
+ * Fetches ONLY newly approved stores created after `afterCreatedAtMs`.
+ */
+export async function getApprovedStoresDelta(
+  afterCreatedAtMs: number
+): Promise<Store[]> {
+  if (!db || afterCreatedAtMs <= 0) {
+    return [];
+  }
+
+  const indexKey = 'stores:approved_active_createdAt';
+  if (hasKnownMissingIndex(indexKey)) {
+    return [];
   }
 
   try {
-    const snap = await getDoc(doc(db, 'stores', storeId.trim()));
-    if (!snap.exists()) {
-      return null;
-    }
-    return {
-      id: snap.id,
-      ...(snap.data() as Omit<Store, 'id'>),
-    };
+    const q = query(
+      collection(db, 'stores'),
+      where('isApproved', '==', true),
+      where('isActive', '==', true),
+      where('createdAt', '>', Timestamp.fromMillis(afterCreatedAtMs + 1)),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+    const snapshot = await getDocs(q);
+    const rows = snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...(docSnap.data() as Omit<Store, 'id'>),
+    }));
+    primeStoresIntoCache(rows, true);
+    return rows;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
-    if (firestoreErr?.code === 'permission-denied') {
-      return null;
+    if (firestoreErr?.code === 'failed-precondition') {
+      markMissingIndex(indexKey);
     }
-    throw mapStoreFirestoreError(err, 'Unable to load store details.');
+    return [];
   }
+}
+
+export async function getStoreById(
+  storeId: string,
+  options?: { force?: boolean }
+): Promise<Store | null> {
+  const cleanId = storeId.trim();
+  if (!cleanId) {
+    return null;
+  }
+
+  const cacheCheck = shouldSkipDetailNetworkFetch<Store>(`store:${cleanId}`, {
+    force: options?.force,
+  });
+  if (cacheCheck.skip && cacheCheck.cached) {
+    return cacheCheck.cached;
+  }
+
+  if (!db) {
+    return cacheCheck.cached;
+  }
+
+  return runDeduplicatedQuery(`store:get:${cleanId}`, async () => {
+    try {
+      const snap = await getDoc(doc(db!, 'stores', cleanId));
+      if (!snap.exists()) {
+        return null;
+      }
+      const storeRecord: Store = {
+        id: snap.id,
+        ...(snap.data() as Omit<Store, 'id'>),
+      };
+      primeStoreIntoCache(storeRecord, { isFull: true, idbOnly: false });
+      return storeRecord;
+    } catch (err) {
+      const firestoreErr = err as FirestoreError;
+      if (firestoreErr?.code === 'permission-denied') {
+        return null;
+      }
+      if (firestoreErr?.code === 'unavailable' && cacheCheck.cached) {
+        return cacheCheck.cached;
+      }
+      throw mapStoreFirestoreError(err, 'Unable to load store details.');
+    }
+  });
 }
 
 export async function getApprovedStoresByOwner(ownerId: string): Promise<Store[]> {
@@ -181,7 +268,7 @@ export async function getApprovedStoresByOwner(ownerId: string): Promise<Store[]
       where('isApproved', '==', true)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs
+    const rows = snapshot.docs
       .map((docSnap) => ({
         id: docSnap.id,
         ...(docSnap.data() as Omit<Store, 'id'>),
@@ -190,6 +277,8 @@ export async function getApprovedStoresByOwner(ownerId: string): Promise<Store[]
       .sort(
         (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
       );
+    primeStoresIntoCache(rows, true);
+    return rows;
   } catch (err) {
     throw mapStoreFirestoreError(err, 'Unable to load seller stores.');
   }
@@ -209,7 +298,7 @@ export async function getApprovedProductsByStoreId(
       where('isApproved', '==', true)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs
+    const rows = snapshot.docs
       .map((docSnap) => ({
         id: docSnap.id,
         ...(docSnap.data() as Omit<Product, 'id'>),
@@ -218,6 +307,9 @@ export async function getApprovedProductsByStoreId(
       .sort(
         (a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt)
       );
+    rows.forEach((p) => primeProductIntoCache(p, { isFull: true, idbOnly: true }));
+    warmImages(rows.map((p) => p.images?.[0]), 12);
+    return rows;
   } catch (err) {
     throw mapStoreFirestoreError(err, 'Unable to load store listings.');
   }
@@ -247,6 +339,7 @@ export async function createStore(
 
   try {
     await setDoc(docRef, payload);
+    invalidateFastCachePrefix('seller_dash:');
     return {
       id: docRef.id,
       ...storeData,
@@ -266,6 +359,7 @@ export async function createStore(
       try {
         const snap = await getDoc(docRef);
         if (snap.exists() && snap.data()?.ownerId === storeData.ownerId) {
+          invalidateFastCachePrefix('seller_dash:');
           return {
             id: docRef.id,
             ...storeData,
@@ -281,6 +375,7 @@ export async function createStore(
       }
       const freshRef = doc(storesCol);
       await setDoc(freshRef, payload);
+      invalidateFastCachePrefix('seller_dash:');
       return {
         id: freshRef.id,
         ...storeData,
@@ -306,6 +401,8 @@ export async function deleteStore(storeId: string): Promise<void> {
 
   try {
     await deleteDoc(doc(db, 'stores', storeId));
+    invalidatePublicFeedCaches({ storeId });
+    invalidateFastCachePrefix('seller_dash:');
   } catch (err) {
     throw mapStoreFirestoreError(err, 'Failed to delete store.');
   }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  areMarketerProfileFieldsLocked,
   BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
   canSwitchAccountTypeOnProfile,
@@ -389,10 +390,10 @@ test('isMarketerProfile, resolveAccountType, and canSwitchAccountTypeOnProfile d
   assert.equal(resolveAccountType({ businessName: 'Campus Kicks' }), 'business');
   assert.equal(resolveAccountType({ accountType: 'student' }), 'student');
 
-  assert.equal(canSwitchAccountTypeOnProfile(null), true);
+  assert.equal(canSwitchAccountTypeOnProfile(null), false);
   assert.equal(
     canSwitchAccountTypeOnProfile({ accountType: 'student', isVerified: false }),
-    true
+    false
   );
   assert.equal(
     canSwitchAccountTypeOnProfile({ accountType: 'student', isVerified: true }),
@@ -412,6 +413,32 @@ test('isMarketerProfile, resolveAccountType, and canSwitchAccountTypeOnProfile d
   assert.equal(
     canSwitchAccountTypeOnProfile({ accountType: 'business', level: '200L' }),
     false
+  );
+
+  // Marketer profile fields lock permanently once businessName is saved
+  assert.equal(areMarketerProfileFieldsLocked(null), false);
+  assert.equal(
+    areMarketerProfileFieldsLocked({
+      accountType: 'student',
+      fullName: 'Ada Okafor',
+      campus: 'LASUED',
+    }),
+    false
+  );
+  assert.equal(
+    areMarketerProfileFieldsLocked({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+    }),
+    false
+  );
+  assert.equal(
+    areMarketerProfileFieldsLocked({
+      accountType: 'business',
+      fullName: 'Tunde Bello',
+      businessName: 'Tunde Ventures',
+    }),
+    true
   );
 
   // Legacy marketer with missing or 'student' accountType still uses marketer completeness rules

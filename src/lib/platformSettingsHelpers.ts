@@ -5,6 +5,11 @@ export const GLOBAL_SETTINGS_DOC_ID = 'global';
 
 export interface PlatformSettings {
   maintenanceMode: boolean;
+  academicSessionCount?: number;
+  lastSessionRolloverAt?: unknown;
+  lastSessionRolloverBy?: string;
+  lastSessionPromotedCount?: number;
+  lastSessionGraduatedCount?: number;
   updatedAt?: unknown;
   updatedBy?: string;
 }

@@ -10,7 +10,14 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { invalidateFastCachePrefix } from './fastCache';
+import {
+  getFastCacheEnvelope,
+  invalidateFastCache,
+  invalidateFastCachePrefix,
+  setFastCache,
+} from './fastCache';
+import { runDeduplicatedQuery } from './firestoreQueryCache';
+import { REVIEWS_FRESH_MS } from './syncCache';
 import { Review } from '../types';
 import {
   calculateReviewStats,
@@ -39,28 +46,50 @@ function mapReviewError(err: unknown, fallback: string): Error {
 
 export async function fetchReviewsForTarget(
   targetId: string,
-  targetType?: 'user' | 'store'
+  targetType?: 'user' | 'store',
+  options?: { force?: boolean }
 ): Promise<Review[]> {
-  if (!db || !targetId.trim()) {
+  const cleanId = targetId.trim();
+  if (!cleanId) {
     return [];
   }
 
-  try {
-    const colRef = collection(db, 'reviews');
-    const q = query(colRef, where('targetId', '==', targetId.trim()));
-    const snapshot = await getDocs(q);
-
-    const items = snapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Review, 'id'>),
-      }))
-      .filter((r) => (targetType ? r.targetType === targetType : true));
-
-    return sortReviewsNewestFirst(items);
-  } catch (err) {
-    throw mapReviewError(err, 'Unable to load reviews right now.');
+  const cacheKey = `reviews:${targetType || 'all'}:${cleanId}`;
+  if (!options?.force) {
+    const cached = getFastCacheEnvelope<Review[]>(cacheKey, REVIEWS_FRESH_MS);
+    if (cached) {
+      return cached.data;
+    }
   }
+
+  if (!db) {
+    return [];
+  }
+
+  return runDeduplicatedQuery(cacheKey, async () => {
+    try {
+      const colRef = collection(db!, 'reviews');
+      const q = query(colRef, where('targetId', '==', cleanId));
+      const snapshot = await getDocs(q);
+
+      const items = snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Review, 'id'>),
+        }))
+        .filter((r) => (targetType ? r.targetType === targetType : true));
+
+      const sorted = sortReviewsNewestFirst(items);
+      setFastCache(cacheKey, sorted, { idbOnly: true });
+      return sorted;
+    } catch (err) {
+      const stale = getFastCacheEnvelope<Review[]>(cacheKey, 0);
+      if (stale) {
+        return stale.data;
+      }
+      throw mapReviewError(err, 'Unable to load reviews right now.');
+    }
+  });
 }
 
 export async function submitReview(
@@ -102,7 +131,9 @@ export async function submitReview(
       createdAt: serverTimestamp(),
     });
 
-    const allReviews = await fetchReviewsForTarget(cleanTargetId, targetType);
+    const allReviews = await fetchReviewsForTarget(cleanTargetId, targetType, {
+      force: true,
+    });
     const stats = calculateReviewStats(allReviews);
 
     const targetCollection = targetType === 'store' ? 'stores' : 'users';
@@ -112,6 +143,13 @@ export async function submitReview(
     });
     invalidateFastCachePrefix(`store_profile:${cleanTargetId}`);
     invalidateFastCachePrefix(`seller_profile:${cleanTargetId}`);
+    invalidateFastCache(`store:${cleanTargetId}`);
+    invalidateFastCache(`seller_public_user:${cleanTargetId}`);
+    invalidateFastCache(`user_trust:${cleanTargetId}`);
+    invalidateFastCachePrefix('reviews:');
+    setFastCache(`reviews:${targetType}:${cleanTargetId}`, allReviews, {
+      idbOnly: true,
+    });
     invalidateFastCachePrefix('home_');
 
     return {

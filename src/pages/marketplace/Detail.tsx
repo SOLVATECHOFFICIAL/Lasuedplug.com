@@ -40,9 +40,19 @@ import {
   getProductPriceDisplay,
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+} from '../../lib/fastCache';
+import { warmImages } from '../../lib/imageCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
+import {
+  claimSessionViewTrack,
+  primeProductIntoCache,
+  shouldSkipDetailNetworkFetch,
+} from '../../lib/syncCache';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Product } from '../../types';
@@ -76,26 +86,59 @@ export function MarketplaceDetail() {
 
   const trackedViewForIdRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    setSelectedImageIndex(0);
+    setError(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<Product>(`product:${id}`, 0);
+      if (hydrated?.data) {
+        setProduct((prev) =>
+          hydrated.isFull !== false || !prev ? hydrated.data : prev
+        );
+        setLoading(false);
+        warmImages(hydrated.data.images, 4);
+      }
+    };
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [id]);
+
   const loadProduct = useCallback(async () => {
     if (!id) {
       setProduct(null);
       setLoading(false);
       return;
     }
-    const cached = getFastCache<Product>(`product:${id}`);
+
+    const { skip, cached } = shouldSkipDetailNetworkFetch<Product>(
+      `product:${id}`
+    );
     if (cached) {
       setProduct(cached);
       setLoading(false);
+      warmImages(cached.images, 4);
     } else {
+      setProduct(null);
       setLoading(true);
     }
     setError(null);
+
+    if (skip) {
+      return;
+    }
+
     try {
-      const row = await getProductById(id);
+      const row = await getProductById(id, { force: true });
       setProduct(row);
-      setSelectedImageIndex(0);
       if (row) {
-        setFastCache(`product:${id}`, row);
+        primeProductIntoCache(row, { isFull: true, idbOnly: false });
+        warmImages(row.images, 4);
       }
     } catch (err) {
       if (!cached) {
@@ -114,7 +157,7 @@ export function MarketplaceDetail() {
     void loadProduct();
   }, [loadProduct]);
 
-  // Increment viewCount by 1 once when the product detail loads and save recentlyViewed
+  // Save recentlyViewed and increment viewCount once per browser session
   useEffect(() => {
     const productId = product?.id;
     if (!productId || !product) {
@@ -142,12 +185,14 @@ export function MarketplaceDetail() {
       return;
     }
     trackedViewForIdRef.current = productId;
-    setProduct((prev) =>
-      prev && prev.id === productId
-        ? { ...prev, viewCount: (prev.viewCount || 0) + 1 }
-        : prev
-    );
-    void incrementProductViewCount(productId);
+    if (claimSessionViewTrack(productId)) {
+      setProduct((prev) =>
+        prev && prev.id === productId
+          ? { ...prev, viewCount: (prev.viewCount || 0) + 1 }
+          : prev
+      );
+      void incrementProductViewCount(productId);
+    }
   }, [product]);
 
   // Check if current listing is saved in user favorites
@@ -418,6 +463,7 @@ export function MarketplaceDetail() {
             <ProductImage
               src={activeImage}
               alt={product.title}
+              priority
               className="w-full h-full object-cover"
               iconClassName="w-12 h-12 text-slate-400"
             />

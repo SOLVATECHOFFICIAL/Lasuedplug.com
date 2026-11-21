@@ -24,12 +24,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
-  canSwitchAccountTypeOnProfile,
+  ACCOUNT_TYPE_LOCK_MESSAGE,
+  areMarketerProfileFieldsLocked,
   getFieldCooldownStatus,
   getPrimaryRoleLabel,
   getProfilePicLockStatus,
   getUserAvatarUrl,
   isAcademicFieldLocked,
+  MARKETER_LOCK_MESSAGE,
   NAME_LOCK_MESSAGE,
   parseOpeningHoursRange,
   PHONE_UPDATE_COOLDOWN_DAYS,
@@ -40,6 +42,7 @@ import {
   CAMPUS_OPTIONS,
   getLevelsForCampus,
   handleCampusCascade,
+  isGraduateLevel,
 } from '../../lib/academicData';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import {
@@ -108,9 +111,6 @@ export function ProfilePage() {
   const location = useLocation();
   const shownRedirectToastRef = useRef<string | null>(null);
 
-  const [selectedAccountType, setSelectedAccountType] = useState<AccountType>(
-    () => resolveAccountType(profile)
-  );
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [campus, setCampus] = useState('');
@@ -160,7 +160,6 @@ export function ProfilePage() {
   }, [location.state, showToast]);
 
   useEffect(() => {
-    setSelectedAccountType(resolveAccountType(profile));
     setFullName(profile?.fullName || user?.displayName || '');
     setPhone(profile?.phone || '');
     setCampus(profile?.campus || '');
@@ -198,20 +197,16 @@ export function ProfilePage() {
     void loadVerificationHistory();
   }, [loadVerificationHistory]);
 
-  const canSwitchAccountType = useMemo(
-    () => canSwitchAccountTypeOnProfile(profile),
-    [profile]
-  );
-  const accountType: AccountType = canSwitchAccountType
-    ? selectedAccountType
-    : resolveAccountType(profile);
+  const accountType: AccountType = resolveAccountType(profile);
   const isBusinessAccount = accountType === 'business';
+  const isMarketerLocked = areMarketerProfileFieldsLocked(profile);
   const isNameLocked = isAcademicFieldLocked(profile?.fullName);
   const isCampusLocked = isAcademicFieldLocked(profile?.campus);
   const isDepartmentLocked = isAcademicFieldLocked(profile?.department);
   const isLevelLocked = isAcademicFieldLocked(profile?.level);
   const anyAcademicLocked =
     isCampusLocked || isDepartmentLocked || isLevelLocked;
+  const hasGraduated = !isBusinessAccount && isGraduateLevel(profile?.level);
 
   const phoneCooldown = useMemo(
     () =>
@@ -256,7 +251,7 @@ export function ProfilePage() {
   );
 
   const allEditableFieldsLocked = isBusinessAccount
-    ? false
+    ? isNameLocked && phoneCooldown.isLocked && isMarketerLocked
     : isNameLocked &&
       phoneCooldown.isLocked &&
       isCampusLocked &&
@@ -716,89 +711,43 @@ export function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
-          {/* Account Type Selector / Status */}
+          {/* Account Type (Locked Forever Once Chosen at Signup) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="block text-sm font-medium text-slate-700">
                 Account Type
               </span>
-              {!canSwitchAccountType && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-600">
-                  <Lock className="w-3 h-3" />
-                  <span>Locked</span>
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-600">
+                <Lock className="w-3 h-3" />
+                <span>Locked Forever</span>
+              </span>
             </div>
-            {canSwitchAccountType ? (
-              <div
-                role="radiogroup"
-                aria-label="Account type"
-                className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+            <div
+              data-testid="locked-account-type-banner"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700"
+            >
+              <div className="flex items-start gap-2.5">
+                {isBusinessAccount ? (
+                  <Store className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                ) : (
+                  <GraduationCap className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <p className="font-semibold text-slate-900">
+                    Registered as {isBusinessAccount ? 'Marketer' : 'Student'}
+                  </p>
+                  <p className="text-slate-600">{ACCOUNT_TYPE_LOCK_MESSAGE}</p>
+                </div>
+              </div>
+              <a
+                href={SUPPORT_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary-600 hover:underline whitespace-nowrap shrink-0 self-start sm:self-center"
               >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={accountType === 'student'}
-                  onClick={() => {
-                    setSelectedAccountType('student');
-                    setFieldErrors({});
-                  }}
-                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                    accountType === 'student'
-                      ? 'bg-primary-50 border-primary-500 text-primary-900 ring-1 ring-primary-500'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <GraduationCap className="w-5 h-5 shrink-0 mt-0.5 text-primary-600" />
-                  <div>
-                    <p className="text-sm font-semibold">Student</p>
-                    <p className="text-xs text-slate-500">
-                      Verify with Student ID / Fee Receipt
-                    </p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={accountType === 'business'}
-                  onClick={() => {
-                    setSelectedAccountType('business');
-                    setFieldErrors({});
-                  }}
-                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                    accountType === 'business'
-                      ? 'bg-primary-50 border-primary-500 text-primary-900 ring-1 ring-primary-500'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Store className="w-5 h-5 shrink-0 mt-0.5 text-primary-600" />
-                  <div>
-                    <p className="text-sm font-semibold">Marketer</p>
-                    <p className="text-xs text-slate-500">
-                      Verify with NIN, Driver’s License, or Valid ID
-                    </p>
-                  </div>
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
-                <span>
-                  Registered as{' '}
-                  <span className="font-semibold text-slate-900">
-                    {isBusinessAccount ? 'Marketer' : 'Student'}
-                  </span>
-                  . Contact Admin/Support if you need your account type switched.
-                </span>
-                <a
-                  href={SUPPORT_LINK}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-primary-600 hover:underline whitespace-nowrap shrink-0"
-                >
-                  Contact Support
-                </a>
-              </div>
-            )}
+                Contact Support
+              </a>
+            </div>
           </div>
 
           {/* Contact & Identity */}
@@ -848,12 +797,46 @@ export function ProfilePage() {
 
           {isBusinessAccount ? (
             <div className="pt-4 border-t border-slate-200 space-y-5">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-primary-600" />
-                <h4 className="text-base font-semibold text-slate-900">
-                  Marketer Details
-                </h4>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-primary-600" />
+                  <h4 className="text-base font-semibold text-slate-900">
+                    Marketer Details
+                  </h4>
+                </div>
+                {isMarketerLocked && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                    Sealed
+                  </span>
+                )}
               </div>
+
+              {isMarketerLocked ? (
+                <div
+                  role="note"
+                  data-testid="marketer-lock-notice"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                    <span>{MARKETER_LOCK_MESSAGE}</span>
+                  </div>
+                  <a
+                    href={SUPPORT_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap shrink-0"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Contact Support</span>
+                  </a>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Verify your brand name, shop mode, hours, and physical address carefully — marketer profile details lock forever once saved.
+                </p>
+              )}
 
               <Input
                 label="Business / Brand Name"
@@ -861,11 +844,17 @@ export function ProfilePage() {
                 type="text"
                 placeholder="e.g. Deji Tech Ventures or Kemi Thrift Store"
                 value={businessName}
+                disabled={isMarketerLocked}
                 onChange={(e) => {
                   setBusinessName(e.target.value);
                   clearFieldError('businessName');
                 }}
                 error={fieldErrors.businessName}
+                helperText={
+                  isMarketerLocked
+                    ? 'Permanently locked after saving.'
+                    : 'Locks permanently once saved.'
+                }
                 required
               />
 
@@ -882,13 +871,15 @@ export function ProfilePage() {
                     type="button"
                     role="radio"
                     aria-checked={hasPhysicalShop}
+                    disabled={isMarketerLocked}
                     onClick={() => {
+                      if (isMarketerLocked) return;
                       setHasPhysicalShop(true);
                       clearFieldError('openingHours');
                       clearFieldError('shopAddress');
                       clearFieldError('gps');
                     }}
-                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                       hasPhysicalShop
                         ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -901,13 +892,15 @@ export function ProfilePage() {
                     type="button"
                     role="radio"
                     aria-checked={!hasPhysicalShop}
+                    disabled={isMarketerLocked}
                     onClick={() => {
+                      if (isMarketerLocked) return;
                       setHasPhysicalShop(false);
                       clearFieldError('openingHours');
                       clearFieldError('shopAddress');
                       clearFieldError('gps');
                     }}
-                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                    className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                       !hasPhysicalShop
                         ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -941,12 +934,13 @@ export function ProfilePage() {
                             name="openingTimeStart"
                             type="time"
                             required
+                            disabled={isMarketerLocked}
                             value={openingTimeStart}
                             onChange={(e) => {
                               setOpeningTimeStart(e.target.value);
                               clearFieldError('openingHours');
                             }}
-                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div className="space-y-1">
@@ -961,12 +955,13 @@ export function ProfilePage() {
                             name="openingTimeEnd"
                             type="time"
                             required
+                            disabled={isMarketerLocked}
                             value={openingTimeEnd}
                             onChange={(e) => {
                               setOpeningTimeEnd(e.target.value);
                               clearFieldError('openingHours');
                             }}
-                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -989,6 +984,7 @@ export function ProfilePage() {
                       type="text"
                       placeholder="e.g. Shop 12, LASUED Main Gate Complex, Epe"
                       value={shopAddress}
+                      disabled={isMarketerLocked}
                       onChange={(e) => {
                         setShopAddress(e.target.value);
                         clearFieldError('shopAddress');
@@ -1001,6 +997,7 @@ export function ProfilePage() {
                     <LocationPinField
                       latitude={latitude}
                       longitude={longitude}
+                      disabled={isMarketerLocked}
                       onPin={({ latitude: lat, longitude: lng }) => {
                         setLatitude(lat);
                         setLongitude(lng);
@@ -1011,7 +1008,11 @@ export function ProfilePage() {
                         setLongitude(undefined);
                       }}
                       label="Physical Shop GPS Pin"
-                      helperText="Stand at your shop and tap to pin exact GPS coordinates."
+                      helperText={
+                        isMarketerLocked
+                          ? 'Shop GPS pin is sealed. Contact Support if your physical shop moved.'
+                          : 'Stand at your shop and tap to pin exact GPS coordinates.'
+                      }
                       error={fieldErrors.gps}
                     />
                   </div>
@@ -1106,11 +1107,13 @@ export function ProfilePage() {
                   }}
                   error={fieldErrors.level}
                   helperText={
-                    campus === 'LASUED'
-                      ? 'LASUED levels range from 100L to 400L.'
-                      : campus === 'LASU'
-                        ? 'LASU levels range from 100L to 600L.'
-                        : undefined
+                    hasGraduated
+                      ? 'Graduated — final status forever (no further level upgrades).'
+                      : campus === 'LASUED'
+                        ? 'LASUED: 100L–400L, then Graduate on Admin session rollover.'
+                        : campus === 'LASU'
+                          ? 'LASU: 100L–600L, then Graduate on Admin session rollover.'
+                          : undefined
                   }
                   required
                 />
@@ -1118,12 +1121,20 @@ export function ProfilePage() {
             </div>
           )}
 
-          <div className="pt-2 flex justify-end">
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {allEditableFieldsLocked ? (
+              <p className="text-xs text-slate-500">
+                All permanent fields are sealed. Only your Phone Number and Profile Picture can be updated once every 7 days.
+              </p>
+            ) : (
+              <span />
+            )}
             <Button
               type="submit"
               variant="primary"
               size="md"
               disabled={saving || allEditableFieldsLocked}
+              className="shrink-0 self-end sm:self-auto"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving changes...' : 'Save Profile'}

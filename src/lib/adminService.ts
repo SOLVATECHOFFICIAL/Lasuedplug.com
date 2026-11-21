@@ -9,18 +9,29 @@ import {
   getCountFromServer,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { invalidateFastCache, invalidateFastCachePrefix } from './fastCache';
+import { invalidatePublicFeedCaches } from './syncCache';
 import { getTimestampMillis } from './homeHelpers';
+import {
+  AcademicSessionRolloverPlan,
+  buildAcademicSessionRolloverPlan,
+} from './academicData';
 import { isMarketerProfile } from './authHelpers';
+import {
+  GLOBAL_SETTINGS_DOC_ID,
+  PLATFORM_SETTINGS_COLLECTION,
+} from './platformSettingsHelpers';
 import { isServiceAd } from './sellerHelpers';
 import {
   AdminAlertCounts,
@@ -430,12 +441,13 @@ export async function approvePendingItem(item: PendingAdminItem): Promise<void> 
     await updateDoc(doc(db, item.collectionName, item.id), {
       isApproved: true,
     });
-    invalidateFastCachePrefix('home_');
-    invalidateFastCachePrefix('mkt_');
-    invalidateFastCachePrefix('services_');
-    invalidateFastCachePrefix('accommodations_');
-    invalidateFastCachePrefix('roommates_');
-    invalidateFastCachePrefix('approved_stores');
+    invalidatePublicFeedCaches({
+      productId: item.collectionName === 'products' ? item.id : undefined,
+      storeId: item.collectionName === 'stores' ? item.id : undefined,
+      accommodationId:
+        item.collectionName === 'accommodations' ? item.id : undefined,
+      sellerId: item.ownerId || undefined,
+    });
     invalidateFastCachePrefix('admin_stats');
     if (item.ownerId) {
       await notifyListingApproved(
@@ -462,7 +474,13 @@ export async function rejectPendingItem(item: PendingAdminItem): Promise<void> {
 
   try {
     await deleteDoc(doc(db, item.collectionName, item.id));
-    invalidateFastCachePrefix('home_');
+    invalidatePublicFeedCaches({
+      productId: item.collectionName === 'products' ? item.id : undefined,
+      storeId: item.collectionName === 'stores' ? item.id : undefined,
+      accommodationId:
+        item.collectionName === 'accommodations' ? item.id : undefined,
+      sellerId: item.ownerId || undefined,
+    });
     invalidateFastCachePrefix('admin_stats');
     if (item.ownerId) {
       try {
@@ -634,6 +652,9 @@ export async function updateUserAccountStatus(
         isBanned: false,
       });
     }
+    invalidatePublicFeedCaches({ sellerId: cleanUid });
+    invalidateFastCache(`seller_public_user:${cleanUid}`);
+    invalidateFastCache(`user_trust:${cleanUid}`);
   } catch (err) {
     throw mapAdminError(err, 'Failed to update user account status.');
   }
@@ -654,6 +675,9 @@ export async function banUserAccount(uid: string): Promise<void> {
       isBanned: true,
     });
     await hideAllUserListings(cleanUid);
+    invalidatePublicFeedCaches({ sellerId: cleanUid });
+    invalidateFastCache(`seller_public_user:${cleanUid}`);
+    invalidateFastCache(`user_trust:${cleanUid}`);
   } catch (err) {
     throw mapAdminError(err, 'Failed to ban user account.');
   }
@@ -756,6 +780,86 @@ export async function updateUserAccountTypeAdmin(
     invalidateFastCachePrefix('seller_profile:');
   } catch (err) {
     throw mapAdminError(err, 'Failed to update user account type.');
+  }
+}
+
+export interface AcademicSessionRolloverResult {
+  promotedCount: number;
+  advancingCount: number;
+  graduatedCount: number;
+  alreadyGraduateCount: number;
+  marketersSkipped: number;
+}
+
+/**
+ * Computes a dry-run preview of how many Students will advance or enter Graduate
+ * if the Admin triggers "+1 Session". Marketers and existing Graduates are skipped.
+ */
+export async function previewAcademicSessionRollover(): Promise<AcademicSessionRolloverPlan> {
+  const users = await getAllUsers();
+  return buildAcademicSessionRolloverPlan(users);
+}
+
+/**
+ * Admin-only yearly session promotion:
+ * Advances every eligible Student profile by +1 academic level
+ * (LASUED: 100L..400L -> Graduate; LASU: 100L..600L -> Graduate).
+ * Graduates stay "Graduate" forever and Marketers are untouched.
+ */
+export async function promoteAllStudentsByOneSession(
+  adminEmail?: string | null
+): Promise<AcademicSessionRolloverResult> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+
+  try {
+    const firestore = db;
+    const users = await getAllUsers();
+    const plan = buildAcademicSessionRolloverPlan(users);
+
+    const BATCH_LIMIT = 400;
+    for (let i = 0; i < plan.updates.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(firestore);
+      const chunk = plan.updates.slice(i, i + BATCH_LIMIT);
+      chunk.forEach((item) => {
+        batch.update(doc(firestore, 'users', item.uid), {
+          level: item.toLevel,
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+    }
+
+    await setDoc(
+      doc(firestore, PLATFORM_SETTINGS_COLLECTION, GLOBAL_SETTINGS_DOC_ID),
+      {
+        academicSessionCount: increment(1),
+        lastSessionRolloverAt: serverTimestamp(),
+        lastSessionRolloverBy: adminEmail || '',
+        lastSessionPromotedCount: plan.updates.length,
+        lastSessionGraduatedCount: plan.graduatingCount,
+      },
+      { merge: true }
+    );
+
+    invalidateFastCache('admin_users');
+    invalidateFastCache('admin_stats');
+    invalidateFastCache('admin_overview');
+    invalidateFastCachePrefix('seller_profile:');
+
+    return {
+      promotedCount: plan.updates.length,
+      advancingCount: plan.advancingCount,
+      graduatedCount: plan.graduatingCount,
+      alreadyGraduateCount: plan.alreadyGraduateCount,
+      marketersSkipped: plan.marketersSkipped,
+    };
+  } catch (err) {
+    throw mapAdminError(
+      err,
+      'Failed to run +1 Academic Session promotion.'
+    );
   }
 }
 
@@ -961,6 +1065,12 @@ export async function deleteReportTargetAndResolve(
       if (targetCollection) {
         await deleteDoc(doc(db, targetCollection, report.targetId));
       }
+      invalidatePublicFeedCaches({
+        productId: report.targetType === 'product' || report.targetType === 'service' ? report.targetId : undefined,
+        storeId: report.targetType === 'store' ? report.targetId : undefined,
+        accommodationId:
+          report.targetType === 'accommodation' ? report.targetId : undefined,
+      });
     }
 
     await updateDoc(doc(db, 'reports', report.id), {

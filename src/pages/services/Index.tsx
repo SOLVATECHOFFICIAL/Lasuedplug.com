@@ -9,10 +9,27 @@ import {
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, getCategoryName } from '../../lib/categories';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
-import { fetchApprovedActiveServices } from '../../lib/marketplaceService';
+import {
+  fetchApprovedActiveServices,
+  fetchMarketplaceProductsDelta,
+  primeProductsListIntoCache,
+} from '../../lib/marketplaceService';
 import { getLatestLegacyServices } from '../../lib/homeService';
+import { getTimestampMillis } from '../../lib/homeHelpers';
+import { warmImages } from '../../lib/imageCache';
 import { getListingAdType } from '../../lib/marketplaceHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+  touchFastCache,
+} from '../../lib/fastCache';
+import {
+  getNewestCreatedAtMs,
+  mergeDeltaEntities,
+  resolveSyncStrategy,
+} from '../../lib/syncCache';
 import { Product, Service } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
@@ -21,11 +38,13 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 import { LegacyServiceCard } from '../../components/marketplace/MixedFeedCard';
 import { ProductCard } from '../../components/marketplace/ProductCard';
 
+interface CachedServicesFeed {
+  productServices: Product[];
+  legacyServices: Service[];
+}
+
 export function ServicesIndex() {
-  const initialCached = getFastCache<{
-    productServices: Product[];
-    legacyServices: Service[];
-  }>('services_feed');
+  const initialCached = getFastCache<CachedServicesFeed>('services_feed');
 
   const [productServices, setProductServices] = useState<Product[]>(
     () => initialCached?.productServices || []
@@ -39,36 +58,153 @@ export function ServicesIndex() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadServices = useCallback(async () => {
-    const cached = getFastCache<{
-      productServices: Product[];
-      legacyServices: Service[];
-    }>('services_feed');
-    if (!cached) {
+  useEffect(() => {
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<CachedServicesFeed>('services_feed');
+      if (hydrated) {
+        setProductServices((prev) =>
+          hydrated.isFull !== false || prev.length === 0
+            ? hydrated.data.productServices
+            : prev
+        );
+        setLegacyServices((prev) =>
+          hydrated.isFull !== false || prev.length === 0
+            ? hydrated.data.legacyServices
+            : prev
+        );
+        setLoading(false);
+        primeProductsListIntoCache(
+          hydrated.data.productServices,
+          hydrated.isFull !== false
+        );
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, []);
+
+  const loadServices = useCallback(async (forceRefresh = false) => {
+    const env = getFastCacheEnvelope<CachedServicesFeed>('services_feed');
+    const cached = env?.data || null;
+    const hasCached = Boolean(
+      cached &&
+        (cached.productServices.length > 0 || cached.legacyServices.length > 0)
+    );
+
+    if (hasCached && cached) {
+      primeProductsListIntoCache(
+        cached.productServices,
+        env?.isFull !== false
+      );
+      warmImages(
+        cached.legacyServices.map((s) => s.images?.[0]),
+        12
+      );
+      setLoading(false);
+    } else {
       setLoading(true);
     }
+
+    const strategy = resolveSyncStrategy({
+      hasCached,
+      lastSyncedAt: env?.syncedAt,
+      lastFullSyncAt: env?.fullSyncAt,
+      forceRefresh,
+    });
+
+    if (strategy === 'fresh-skip') {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setError(null);
     try {
-      const [serviceProducts, rawServices] = await Promise.all([
-        fetchApprovedActiveServices(),
-        getLatestLegacyServices(40),
-      ]);
-      const filteredServiceProducts = serviceProducts.filter(
-        (item) => getListingAdType(item) === 'service'
-      );
-      const seenIds = new Set(
-        filteredServiceProducts.map((p) => p.id).filter(Boolean)
-      );
-      const uniqueLegacy = rawServices.filter((s) => !s.id || !seenIds.has(s.id));
+      if (strategy === 'delta-sync' && cached) {
+        const newestProductMs = getNewestCreatedAtMs(cached.productServices);
+        const newestLegacyMs = getNewestCreatedAtMs(cached.legacyServices);
+        const [newProductServices, newRawServices] = await Promise.all([
+          fetchMarketplaceProductsDelta(newestProductMs, { adType: 'service' }),
+          getLatestLegacyServices(30, newestLegacyMs),
+        ]);
 
-      setProductServices(filteredServiceProducts);
-      setLegacyServices(uniqueLegacy);
-      setFastCache('services_feed', {
-        productServices: compactListingsForCache(filteredServiceProducts, 24),
-        legacyServices: compactListingsForCache(uniqueLegacy, 24),
-      });
+        const filteredNewProducts = newProductServices.filter(
+          (item) => getListingAdType(item) === 'service'
+        );
+
+        if (filteredNewProducts.length === 0 && newRawServices.length === 0) {
+          touchFastCache('services_feed');
+        } else {
+          const mergedProducts = mergeDeltaEntities(
+            cached.productServices,
+            filteredNewProducts,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            80
+          );
+          const productIds = new Set(
+            mergedProducts.map((p) => p.id).filter(Boolean)
+          );
+          const mergedLegacy = mergeDeltaEntities(
+            cached.legacyServices,
+            newRawServices,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            60
+          ).filter((s) => !s.id || !productIds.has(s.id));
+
+          setProductServices(mergedProducts);
+          setLegacyServices(mergedLegacy);
+          setFastCache(
+            'services_feed',
+            {
+              productServices: mergedProducts,
+              legacyServices: mergedLegacy,
+            },
+            {
+              localData: {
+                productServices: compactListingsForCache(mergedProducts, 24),
+                legacyServices: compactListingsForCache(mergedLegacy, 24),
+              },
+              isFull: true,
+            }
+          );
+        }
+      } else {
+        const [serviceProducts, rawServices] = await Promise.all([
+          fetchApprovedActiveServices(),
+          getLatestLegacyServices(40),
+        ]);
+        const filteredServiceProducts = serviceProducts.filter(
+          (item) => getListingAdType(item) === 'service'
+        );
+        const seenIds = new Set(
+          filteredServiceProducts.map((p) => p.id).filter(Boolean)
+        );
+        const uniqueLegacy = rawServices.filter((s) => !s.id || !seenIds.has(s.id));
+
+        setProductServices(filteredServiceProducts);
+        setLegacyServices(uniqueLegacy);
+        setFastCache(
+          'services_feed',
+          {
+            productServices: filteredServiceProducts,
+            legacyServices: uniqueLegacy,
+          },
+          {
+            localData: {
+              productServices: compactListingsForCache(filteredServiceProducts, 24),
+              legacyServices: compactListingsForCache(uniqueLegacy, 24),
+            },
+            isFull: true,
+          }
+        );
+      }
     } catch (err) {
-      if (!cached) {
+      if (!hasCached) {
         setError(
           err instanceof Error
             ? err.message

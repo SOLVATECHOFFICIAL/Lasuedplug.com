@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { History } from 'lucide-react';
+import { getFastCache } from '../../lib/fastCache';
+import { warmImages } from '../../lib/imageCache';
 import { RecentlyViewedItem } from '../../lib/recentlyViewed';
 import { Card } from '../ui/Card';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
@@ -40,10 +42,32 @@ export const RecentlyViewedRow = memo(function RecentlyViewedRow({
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto pb-2 snap-x snap-mandatory hide-scrollbar">
-        {items.map((item) => (
+        {items.map((item) => {
+          const handleWarmItem = () => {
+            if (item.imageUrl) {
+              warmImages([item.imageUrl], 1);
+            }
+            const prefix =
+              item._type === 'store'
+                ? 'store'
+                : item._type === 'accommodation'
+                  ? 'accommodation'
+                  : 'product';
+            const cachedEntity = getFastCache<{ images?: string[] }>(
+              `${prefix}:${item.id}`
+            );
+            if (cachedEntity?.images) {
+              warmImages(cachedEntity.images, 4);
+            }
+          };
+
+          return (
           <Link
             key={`${item._type}-${item.id}`}
             to={item.href}
+            onMouseEnter={handleWarmItem}
+            onTouchStart={handleWarmItem}
+            onFocus={handleWarmItem}
             className="group shrink-0 w-44 sm:w-52 snap-start focus:outline-none"
           >
             <Card
@@ -83,7 +107,8 @@ export const RecentlyViewedRow = memo(function RecentlyViewedRow({
               </div>
             </Card>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

@@ -16,7 +16,12 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  getFastCacheEnvelope,
+  setFastCache,
+} from '../../lib/fastCache';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
 import {
@@ -24,6 +29,7 @@ import {
   getPublicUserProfile,
 } from '../../lib/sellerService';
 import { getApprovedStoresByOwner } from '../../lib/storeService';
+import { DETAIL_FRESH_MS } from '../../lib/syncCache';
 import { Product, Review, Store, UserProfile } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -56,9 +62,13 @@ export function SellerProfile() {
   const initialCached = uid
     ? getFastCache<CachedSellerProfile>(`seller_profile:${uid}`)
     : null;
+  const initialPublicUser =
+    !initialCached && uid
+      ? getFastCache<UserProfile>(`seller_public_user:${uid}`)
+      : null;
 
   const [seller, setSeller] = useState<UserProfile | null>(
-    () => initialCached?.seller ?? null
+    () => initialCached?.seller ?? initialPublicUser ?? null
   );
   const [stores, setStores] = useState<Store[]>(() => initialCached?.stores ?? []);
   const [products, setProducts] = useState<Product[]>(
@@ -67,9 +77,39 @@ export function SellerProfile() {
   const [reviews, setReviews] = useState<Review[]>(
     () => initialCached?.reviews ?? []
   );
-  const [loading, setLoading] = useState(() => Boolean(uid) && !initialCached);
+  const [loading, setLoading] = useState(
+    () => Boolean(uid) && !initialCached && !initialPublicUser
+  );
   const [error, setError] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!uid) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCacheEnvelope<CachedSellerProfile>(
+        `seller_profile:${uid}`,
+        0
+      );
+      if (hydrated?.data) {
+        setSeller(hydrated.data.seller);
+        setStores(hydrated.data.stores);
+        setProducts(hydrated.data.products);
+        setReviews(hydrated.data.reviews);
+        setLoading(false);
+        return;
+      }
+      const hydratedUser = getFastCache<UserProfile>(`seller_public_user:${uid}`);
+      if (hydratedUser) {
+        setSeller((prev) => prev ?? hydratedUser);
+        setLoading(false);
+      }
+    };
+
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [uid]);
 
   const loadSellerProfile = useCallback(async () => {
     if (!uid) {
@@ -78,17 +118,34 @@ export function SellerProfile() {
       return;
     }
 
-    const cached = getFastCache<CachedSellerProfile>(`seller_profile:${uid}`);
+    const freshEnv = getFastCacheEnvelope<CachedSellerProfile>(
+      `seller_profile:${uid}`,
+      DETAIL_FRESH_MS
+    );
+    const cached =
+      freshEnv?.data ||
+      getFastCache<CachedSellerProfile>(`seller_profile:${uid}`);
+    const fallbackUser = cached
+      ? null
+      : getFastCache<UserProfile>(`seller_public_user:${uid}`);
+
     if (cached) {
       setSeller(cached.seller);
       setStores(cached.stores);
       setProducts(cached.products);
       setReviews(cached.reviews);
       setLoading(false);
+    } else if (fallbackUser) {
+      setSeller(fallbackUser);
+      setLoading(false);
     } else {
       setLoading(true);
     }
     setError(null);
+
+    if (freshEnv) {
+      return;
+    }
 
     try {
       const [profileData, sellerStores, sellerProducts, sellerReviews] =
@@ -104,15 +161,19 @@ export function SellerProfile() {
       setProducts(sellerProducts);
       setReviews(sellerReviews);
       if (profileData) {
-        setFastCache(`seller_profile:${uid}`, {
-          seller: profileData,
-          stores: sellerStores,
-          products: sellerProducts,
-          reviews: sellerReviews,
-        });
+        setFastCache(
+          `seller_profile:${uid}`,
+          {
+            seller: profileData,
+            stores: sellerStores,
+            products: sellerProducts,
+            reviews: sellerReviews,
+          },
+          { idbOnly: true, isFull: true }
+        );
       }
     } catch (err) {
-      if (!cached) {
+      if (!cached && !fallbackUser) {
         setError(
           err instanceof Error
             ? err.message
@@ -319,7 +380,12 @@ export function SellerProfile() {
                       <span className="inline-flex items-center gap-1.5">
                         <GraduationCap className="w-4 h-4 text-slate-400 shrink-0" />
                         <span>
-                          {[seller.department?.trim(), seller.level?.trim()]
+                          {[
+                            seller.department?.trim(),
+                            seller.level?.trim() === 'Graduate'
+                              ? 'Graduate'
+                              : seller.level?.trim(),
+                          ]
                             .filter(Boolean)
                             .join(' · ')}
                         </span>

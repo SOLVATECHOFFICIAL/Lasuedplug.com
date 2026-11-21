@@ -4,17 +4,25 @@ import {
   ArrowRight,
   BadgeCheck,
   Building2,
+  CalendarPlus,
   CheckSquare,
   Clock,
   Flag,
   Globe,
   GraduationCap,
   Layers,
+  Loader2,
   RefreshCw,
   ShieldAlert,
   Store,
   Users,
+  X,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import {
+  AcademicSessionRolloverPlan,
+} from '../../lib/academicData';
 import {
   AdminDashboardStats,
   getAdminModuleLabel,
@@ -23,8 +31,12 @@ import { isMarketerProfile } from '../../lib/authHelpers';
 import {
   EnhancedAdminOverview,
   getEnhancedAdminOverview,
+  previewAcademicSessionRollover,
+  promoteAllStudentsByOneSession,
 } from '../../lib/adminService';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
+import { PlatformSettings } from '../../lib/platformSettingsHelpers';
+import { subscribeToPlatformSettings } from '../../lib/platformSettingsService';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -59,6 +71,8 @@ const EMPTY_STATS: AdminDashboardStats = {
 };
 
 export function AdminIndex() {
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const initialCached = getFastCache<EnhancedAdminOverview>('admin_overview');
   const [overview, setOverview] = useState<EnhancedAdminOverview>(
     () =>
@@ -71,6 +85,16 @@ export function AdminIndex() {
   );
   const [loading, setLoading] = useState(() => !initialCached);
   const [error, setError] = useState<string | null>(null);
+
+  const [sessionMeta, setSessionMeta] = useState<PlatformSettings>({
+    maintenanceMode: false,
+    academicSessionCount: 0,
+  });
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [rolloverPlan, setRolloverPlan] =
+    useState<AcademicSessionRolloverPlan | null>(null);
+  const [rolloverModalOpen, setRolloverModalOpen] = useState(false);
+  const [promotingSession, setPromotingSession] = useState(false);
 
   const loadOverview = useCallback(async () => {
     const cached = getFastCache<EnhancedAdminOverview>('admin_overview');
@@ -99,6 +123,58 @@ export function AdminIndex() {
   useEffect(() => {
     void loadOverview();
   }, [loadOverview]);
+
+  useEffect(() => {
+    const unsub = subscribeToPlatformSettings((settings) => {
+      setSessionMeta(settings);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleOpenSessionPreview = async () => {
+    if (loadingPreview || promotingSession) return;
+    setLoadingPreview(true);
+    try {
+      const plan = await previewAcademicSessionRollover();
+      setRolloverPlan(plan);
+      setRolloverModalOpen(true);
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : 'Unable to calculate academic session rollover preview.',
+        'error'
+      );
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmSessionPromotion = async () => {
+    if (promotingSession) return;
+    setPromotingSession(true);
+    try {
+      const res = await promoteAllStudentsByOneSession(user?.email);
+      setRolloverModalOpen(false);
+      setRolloverPlan(null);
+      showToast(
+        res.promotedCount > 0
+          ? `New session applied! ${res.promotedCount} student${res.promotedCount === 1 ? '' : 's'} upgraded (${res.graduatedCount} entered Graduate). Marketers untouched.`
+          : `No active undergraduate levels to upgrade (${res.alreadyGraduateCount} already Graduate, ${res.marketersSkipped} Marketers untouched).`,
+        'success'
+      );
+      await loadOverview();
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : 'Failed to upgrade student levels for the new session.',
+        'error'
+      );
+    } finally {
+      setPromotingSession(false);
+    }
+  };
 
   const { stats, recentPendingListings, recentVerifications, recentReports } =
     overview;
@@ -201,6 +277,63 @@ export function AdminIndex() {
         />
       ) : (
         <div className="space-y-6">
+          {/* Yearly Academic Session Rollover Banner (+1 Session for Students Only) */}
+          <section
+            aria-label="Academic session promotion banner"
+            data-testid="admin-session-banner"
+            className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-blue-50 p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+          >
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <GraduationCap className="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900">
+                    New Academic Session Rollover
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 tabular-nums">
+                    Sessions Applied: {sessionMeta.academicSessionCount ?? 0}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Push every Student profile up by 1 year (LASUED: 100L–400L →{' '}
+                  <strong className="text-slate-800">Graduate</strong>; LASU: 100L–600L →{' '}
+                  <strong className="text-slate-800">Graduate</strong>). Graduates stay Graduate forever and Marketers are never affected.
+                </p>
+                {(sessionMeta.lastSessionPromotedCount ?? 0) > 0 && (
+                  <p className="text-[11px] font-medium text-indigo-700 tabular-nums">
+                    Last rollover: {sessionMeta.lastSessionPromotedCount} student(s) upgraded (
+                    {sessionMeta.lastSessionGraduatedCount ?? 0} graduated)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0">
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                disabled={loadingPreview || promotingSession}
+                onClick={() => void handleOpenSessionPreview()}
+                className="bg-indigo-600 hover:bg-indigo-700 focus-visible:ring-indigo-500 w-full md:w-auto"
+              >
+                {loadingPreview ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Calculating...</span>
+                  </>
+                ) : (
+                  <>
+                    <CalendarPlus className="w-4 h-4" />
+                    <span>+1 Session</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </section>
+
           {/* 4 Primary KPI Cards */}
           <section
             aria-label="Platform metrics"
@@ -611,6 +744,162 @@ export function AdminIndex() {
               </div>
             </div>
           </section>
+        </div>
+      )}
+
+      {/* +1 Academic Session Confirmation Dialog */}
+      {rolloverModalOpen && rolloverPlan && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="session-rollover-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          onClick={() => !promotingSession && setRolloverModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+                  <CalendarPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2
+                    id="session-rollover-modal-title"
+                    className="text-base font-bold text-slate-900"
+                  >
+                    Confirm +1 Academic Session
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Students only · Marketers &amp; Graduates remain untouched
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={promotingSession}
+                onClick={() => setRolloverModalOpen(false)}
+                aria-label="Close session rollover dialog"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2.5 text-center">
+                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                  <p className="text-xs font-medium text-indigo-800">
+                    Advancing Level
+                  </p>
+                  <p className="text-2xl font-extrabold text-indigo-950 tabular-nums mt-0.5">
+                    {rolloverPlan.advancingCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <p className="text-xs font-medium text-emerald-800">
+                    Entering Graduate
+                  </p>
+                  <p className="text-2xl font-extrabold text-emerald-950 tabular-nums mt-0.5">
+                    {rolloverPlan.graduatingCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <p className="text-xs font-medium text-slate-600">
+                    Already Graduate
+                  </p>
+                  <p className="text-lg font-bold text-slate-900 tabular-nums mt-0.5">
+                    {rolloverPlan.alreadyGraduateCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <p className="text-xs font-medium text-slate-600">
+                    Marketers Untouched
+                  </p>
+                  <p className="text-lg font-bold text-slate-900 tabular-nums mt-0.5">
+                    {rolloverPlan.marketersSkipped}
+                  </p>
+                </div>
+              </div>
+
+              {rolloverPlan.updates.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">
+                    Preview ({rolloverPlan.updates.length} student
+                    {rolloverPlan.updates.length === 1 ? '' : 's'} will update):
+                  </p>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50/70">
+                    {rolloverPlan.updates.slice(0, 12).map((u) => (
+                      <div
+                        key={u.uid}
+                        className="px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-slate-900 truncate block">
+                            {u.fullName}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {u.campus}
+                          </span>
+                        </div>
+                        <span className="shrink-0 font-semibold tabular-nums">
+                          <span className="text-slate-500">{u.fromLevel}</span>{' '}
+                          →{' '}
+                          <span
+                            className={
+                              u.graduated ? 'text-emerald-700' : 'text-indigo-700'
+                            }
+                          >
+                            {u.toLevel}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                  No students with active 100L–600L levels to advance right now.
+                </p>
+              )}
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={promotingSession}
+                onClick={() => setRolloverModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={promotingSession || rolloverPlan.updates.length === 0}
+                onClick={() => void handleConfirmSessionPromotion()}
+                className="bg-indigo-600 hover:bg-indigo-700 focus-visible:ring-indigo-500"
+              >
+                {promotingSession ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Upgrading Students...</span>
+                  </>
+                ) : (
+                  <>
+                    <CalendarPlus className="w-4 h-4" />
+                    <span>
+                      Confirm +1 Session ({rolloverPlan.updates.length})
+                    </span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </AdminLayout>
