@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   areAllVisibleSelected,
+  buildAdminBellAlerts,
   extractListingOwnerId,
   filterAdminUsers,
   filterPendingAdminItems,
   filterVerificationRequestsByAccountType,
+  getAdminAlertTotal,
   getAdminModuleLabel,
   getAdminReportTargetCollection,
   getAdminUserFilterUrl,
@@ -389,3 +391,111 @@ test('unified seller dashboard helpers combine accommodations, roommates, and st
   assert.equal(filterUnifiedSellerListingsByTab(all, 'pending').length, 2);
   assert.equal(filterUnifiedSellerListingsByTab(all, 'active').length, 1);
 });
+
+test('filterAdminUsers, getPrimaryUserRoleBadge, and filterVerificationRequestsByAccountType detect legacy marketers', () => {
+  const users: UserProfile[] = [
+    {
+      uid: 'leg-1',
+      email: 'legacy1@example.com',
+      fullName: 'Kemi Ade',
+      accountType: 'student',
+      businessName: 'Kemi Hair Studio',
+      roles: { buyer: true, seller: true },
+      isVerified: false,
+      status: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      uid: 'leg-2',
+      email: 'legacy2@example.com',
+      fullName: 'Seyi Alabi',
+      roles: { buyer: true, landlord: true },
+      isVerified: true,
+      status: 'active',
+      createdAt: 2,
+      updatedAt: 2,
+    },
+    {
+      uid: 'stu-1',
+      email: 'stu1@lasued.edu.ng',
+      fullName: 'Bola Musa',
+      accountType: 'student',
+      roles: { buyer: true, seller: true },
+      isVerified: true,
+      status: 'active',
+      createdAt: 3,
+      updatedAt: 3,
+    },
+  ];
+
+  assert.equal(filterAdminUsers(users, '', 'business').length, 2);
+  assert.equal(filterAdminUsers(users, '', 'student').length, 1);
+  assert.equal(getPrimaryUserRoleBadge(users[0]), 'Marketer');
+  assert.equal(getPrimaryUserRoleBadge(users[1]), 'Marketer');
+  assert.equal(getPrimaryUserRoleBadge(users[2]), 'Student Seller');
+
+  const requests: VerificationRequest[] = [
+    {
+      id: 'vr-1',
+      userId: 'leg-1',
+      fullName: 'Kemi Ade',
+      accountType: 'student',
+      businessName: 'Kemi Hair Studio',
+      documentType: 'NIN Slip / Card',
+      idCardImage: 'data:image/jpeg;base64,AAA',
+      status: 'pending',
+      createdAt: 100,
+    },
+    {
+      id: 'vr-2',
+      userId: 'stu-1',
+      fullName: 'Bola Musa',
+      accountType: 'student',
+      documentType: 'Student ID Card',
+      idCardImage: 'data:image/jpeg;base64,BBB',
+      status: 'pending',
+      createdAt: 200,
+    },
+  ];
+
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'business').length, 1);
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'business')[0].id, 'vr-1');
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'student').length, 1);
+  assert.equal(filterVerificationRequestsByAccountType(requests, 'student')[0].id, 'vr-2');
+});
+
+test('getAdminAlertTotal and buildAdminBellAlerts aggregate and format admin moderation alerts', () => {
+  assert.equal(
+    getAdminAlertTotal({ pendingListings: 3, pendingVerifications: 2, openReports: 1 }),
+    6
+  );
+  assert.equal(
+    getAdminAlertTotal({ pendingListings: -2, pendingVerifications: 0, openReports: 4 }),
+    4
+  );
+
+  assert.deepEqual(
+    buildAdminBellAlerts({ pendingListings: 0, pendingVerifications: 0, openReports: 0 }),
+    []
+  );
+
+  const alerts = buildAdminBellAlerts({
+    pendingListings: 1,
+    pendingVerifications: 2,
+    openReports: 1,
+  });
+  assert.equal(alerts.length, 3);
+  assert.deepEqual(
+    alerts.map((a) => ({ id: a.id, count: a.count, to: a.to, tone: a.tone })),
+    [
+      { id: 'listings', count: 1, to: '/admin/listings', tone: 'amber' },
+      { id: 'verifications', count: 2, to: '/admin/verifications', tone: 'indigo' },
+      { id: 'reports', count: 1, to: '/admin/reports', tone: 'red' },
+    ]
+  );
+  assert.equal(alerts[0].subtitle, '1 listing awaiting approval');
+  assert.equal(alerts[1].subtitle, '2 submissions to verify');
+  assert.equal(alerts[2].subtitle, '1 report needs moderation');
+});
+

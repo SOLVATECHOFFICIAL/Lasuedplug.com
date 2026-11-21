@@ -98,7 +98,7 @@ export function AdminSettings() {
                   </span>
                 </div>
                 <p className="text-sm text-slate-600 leading-relaxed max-w-xl">
-                  When enabled, public visitors and regular student accounts see a
+                  When enabled, public visitors and regular student and marketer accounts see a
                   full-screen &ldquo;We&apos;ll be right back&rdquo; maintenance notice.
                   Your verified Admin session keeps full access so you can finish
                   updates and turn Maintenance Mode back off.
@@ -151,7 +151,7 @@ export function AdminSettings() {
             <p className="leading-relaxed">
               {maintenanceMode
                 ? 'Maintenance Mode is currently ON. Non-admin users cannot browse listings or submit forms until you switch this back off.'
-                : 'LASUEDPLUG is currently open to all students and visitors.'}
+                : 'LASUEDPLUG is currently open to all students, marketers, and visitors.'}
             </p>
           </div>
         </Card>

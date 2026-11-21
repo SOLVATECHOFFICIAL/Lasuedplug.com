@@ -110,7 +110,12 @@ export const AccommodationCard = memo(function AccommodationCard({
                   size="2xs"
                 />
                 <span className="truncate">{ownerName || 'Campus Host'}</span>
-                {verified && <VerifiedBadge size="xs" />}
+                {verified && (
+                  <VerifiedBadge
+                    size="xs"
+                    accountType={accommodation.ownerSnapshot?.accountType}
+                  />
+                )}
               </p>
             )}
             <p className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5 min-w-0">

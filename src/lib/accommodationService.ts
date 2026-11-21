@@ -22,6 +22,7 @@ import { sanitizePublicAccommodation } from './accommodationHelpers';
 import {
   Accommodation,
   AccommodationType,
+  AccountType,
   RoommateRequest,
   RoommateRequestType,
 } from '../types';
@@ -44,6 +45,7 @@ export interface CreateAccommodationInput {
     fullName: string;
     isVerified: boolean;
     profilePic?: string;
+    accountType?: AccountType;
   };
 }
 
@@ -64,6 +66,7 @@ export interface CreateRoommateRequestInput {
     fullName: string;
     isVerified: boolean;
     profilePic?: string;
+    accountType?: AccountType;
   };
 }
 

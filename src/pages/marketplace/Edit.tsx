@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { getProductById } from '../../lib/marketplaceService';
 import { updateSellerListing } from '../../lib/sellerService';
-import { parseOpeningHoursRange } from '../../lib/authHelpers';
+import { parseOpeningHoursRange, resolveAccountType } from '../../lib/authHelpers';
 import {
   getCategoriesForAdType,
   getCategoryName,
@@ -55,7 +55,7 @@ const NON_SHOP_SERVICE_MODES: Array<{
 export function MarketplaceEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showToast } = useToast();
 
   const [listing, setListing] = useState<Product | null>(null);
@@ -334,6 +334,22 @@ export function MarketplaceEdit() {
           adType === 'item'
             ? effectiveLocationType === 'online' || hasDelivery
             : effectiveServiceLocation === 'online',
+        sellerSnapshot: {
+          fullName:
+            listing.sellerSnapshot?.fullName ||
+            profile?.fullName ||
+            user.displayName ||
+            'LASUEDPLUG Seller',
+          isVerified: Boolean(
+            profile?.isVerified ?? listing.sellerSnapshot?.isVerified
+          ),
+          accountType:
+            listing.sellerSnapshot?.accountType ||
+            resolveAccountType(profile),
+          ...(listing.sellerSnapshot?.profilePic
+            ? { profilePic: listing.sellerSnapshot.profilePic }
+            : {}),
+        },
       });
 
       showToast(

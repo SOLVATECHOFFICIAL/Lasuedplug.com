@@ -37,6 +37,7 @@ import {
   ACADEMIC_LOCK_MESSAGE,
   BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
+  canSwitchAccountTypeOnProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
   getFieldCooldownStatus,
@@ -46,6 +47,7 @@ import {
   isAccountSuspended,
   NAME_LOCK_MESSAGE,
   PHONE_UPDATE_COOLDOWN_DAYS,
+  resolveAccountType,
   SUSPENDED_ACCOUNT_MESSAGE,
 } from '../lib/authHelpers';
 import { AccountType, UserProfile } from '../types';
@@ -246,15 +248,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let initialSnapshotHandled = false;
       if (db) {
-        if (firebaseUser.emailVerified) {
-          void setDoc(
-            doc(db, 'users', firebaseUser.uid),
-            { emailVerified: true },
-            { merge: true }
-          ).catch(() => {});
-        }
+        const firestoreDb = db;
         unsubscribeProfile = onSnapshot(
-          doc(db, 'users', firebaseUser.uid),
+          doc(firestoreDb, 'users', firebaseUser.uid),
           (snap) => {
             if (!isMounted) return;
             initialSnapshotHandled = true;
@@ -262,9 +258,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setLoading(false);
               return;
             }
+            const rawData = snap.data() as Omit<UserProfile, 'uid'>;
+            if (firebaseUser.emailVerified && rawData.emailVerified !== true) {
+              void setDoc(
+                doc(firestoreDb, 'users', firebaseUser.uid),
+                { emailVerified: true },
+                { merge: true }
+              ).catch(() => {});
+            }
             const liveProfile = {
               uid: snap.id,
-              ...(snap.data() as Omit<UserProfile, 'uid'>),
+              ...rawData,
+              ...(firebaseUser.emailVerified ? { emailVerified: true } : {}),
             };
             if (isAccountSuspended(liveProfile)) {
               invalidateFastCache(`user_profile:${firebaseUser.uid}`);
@@ -381,6 +386,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (!existingCred.user.emailVerified) {
+            const userRef = doc(db, 'users', existingCred.user.uid);
+            const existingSnap = await getDoc(userRef);
+            if (!existingSnap.exists()) {
+              const recoveredProfile = buildNewUserProfile({
+                uid: existingCred.user.uid,
+                email: existingCred.user.email || trimmedEmail,
+                fullName: trimmedName || existingCred.user.displayName || '',
+                accountType,
+                timestamp: serverTimestamp(),
+              });
+              await setDoc(userRef, recoveredProfile);
+              setProfile(recoveredProfile);
+            } else {
+              const existingData = existingSnap.data() as Partial<UserProfile>;
+              if (
+                canSwitchAccountTypeOnProfile(existingData) &&
+                existingData.accountType !== accountType
+              ) {
+                await setDoc(
+                  userRef,
+                  {
+                    accountType,
+                    ...(trimmedName && !existingData.fullName
+                      ? { fullName: trimmedName }
+                      : {}),
+                    updatedAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              }
+            }
             setIsEmailVerified(false);
             let verificationEmailSent = false;
             try {
@@ -552,8 +588,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('You must be signed in with an active account to update your profile.');
       }
 
+      const canSwitchType = canSwitchAccountTypeOnProfile(profile);
       const effectiveAccountType: AccountType =
-        profile?.accountType || updates.accountType || 'student';
+        canSwitchType && updates.accountType
+          ? updates.accountType
+          : profile
+            ? resolveAccountType(profile)
+            : updates.accountType || 'student';
 
       const nextFullName = updates.fullName.trim();
       const nextPhone = (updates.phone || '').trim();

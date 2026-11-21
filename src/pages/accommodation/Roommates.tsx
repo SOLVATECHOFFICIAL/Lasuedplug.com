@@ -30,7 +30,7 @@ import {
   createRoommateRequest,
   fetchApprovedRoommateRequests,
 } from '../../lib/accommodationService';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
@@ -272,6 +272,7 @@ export function Roommates() {
           fullName:
             profile?.fullName || user.displayName || 'LASUEDPLUG Student',
           isVerified: Boolean(profile?.isVerified),
+          accountType: resolveAccountType(profile),
           ...(profileAvatar &&
           estimatedBytes + profileAvatar.length <= 850_000
             ? { profilePic: profileAvatar }
@@ -493,7 +494,12 @@ export function Roommates() {
                           size="2xs"
                         />
                         <span className="truncate">By {posterName}</span>
-                        {isVerified && <VerifiedBadge size="xs" />}
+                        {isVerified && (
+                          <VerifiedBadge
+                            size="xs"
+                            accountType={req.userSnapshot?.accountType}
+                          />
+                        )}
                       </p>
                       <p className="text-sm font-bold text-slate-900 tabular-nums">
                         {typeof req.budget === 'number' && req.budget > 0
@@ -650,7 +656,10 @@ export function Roommates() {
                         'LASUEDPLUG Student'}
                     </span>
                     {selectedRequest.userSnapshot?.isVerified && (
-                      <VerifiedBadge size="sm" />
+                      <VerifiedBadge
+                        size="sm"
+                        accountType={selectedRequest.userSnapshot?.accountType}
+                      />
                     )}
                   </p>
                   <p className="text-xs text-slate-500">

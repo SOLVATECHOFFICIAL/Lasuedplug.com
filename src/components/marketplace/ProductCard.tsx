@@ -144,7 +144,12 @@ export const ProductCard = memo(function ProductCard({
                   size="2xs"
                 />
                 <span className="truncate">{sellerName || 'Campus Seller'}</span>
-                {isSellerVerified && <VerifiedBadge size="xs" />}
+                {isSellerVerified && (
+                  <VerifiedBadge
+                    size="xs"
+                    accountType={product.sellerSnapshot?.accountType}
+                  />
+                )}
               </p>
             )}
             <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">

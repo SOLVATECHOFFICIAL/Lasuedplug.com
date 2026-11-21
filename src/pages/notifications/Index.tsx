@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
+  ArrowRight,
+  BadgeCheck,
   Bell,
   CheckCheck,
   CheckCircle2,
+  CheckSquare,
+  Flag,
   MessageCircle,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -17,6 +22,14 @@ import {
   countUnreadNotifications,
   formatNotificationTime,
 } from '../../lib/notificationHelpers';
+import {
+  AdminAlertCounts,
+  buildAdminBellAlerts,
+  getAdminAlertTotal,
+  isAuthorizedAdminSession,
+  isUserAdmin,
+} from '../../lib/adminHelpers';
+import { subscribeToAdminAlertCounts } from '../../lib/adminService';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -41,7 +54,7 @@ function NotificationIcon({ type }: { type: AppNotification['type'] }) {
 }
 
 export function NotificationsIndex() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -55,6 +68,39 @@ export function NotificationsIndex() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [markingAll, setMarkingAll] = useState(false);
+  const [adminAlertCounts, setAdminAlertCounts] = useState<AdminAlertCounts>({
+    pendingListings: 0,
+    pendingVerifications: 0,
+    openReports: 0,
+  });
+
+  const isAdminBellActive =
+    isAuthorizedAdminSession(user) || isUserAdmin(profile);
+  const adminAlertTotal = isAdminBellActive
+    ? getAdminAlertTotal(adminAlertCounts)
+    : 0;
+  const adminBellAlerts = useMemo(
+    () => (isAdminBellActive ? buildAdminBellAlerts(adminAlertCounts) : []),
+    [isAdminBellActive, adminAlertCounts]
+  );
+
+  useEffect(() => {
+    if (!isAdminBellActive) {
+      setAdminAlertCounts({
+        pendingListings: 0,
+        pendingVerifications: 0,
+        openReports: 0,
+      });
+      return;
+    }
+    const unsubscribe = subscribeToAdminAlertCounts(
+      (counts) => setAdminAlertCounts(counts),
+      () => {
+        // Silent fallback
+      }
+    );
+    return () => unsubscribe();
+  }, [isAdminBellActive]);
 
   const loadNotifications = useCallback(async () => {
     if (!user?.uid) {
@@ -166,6 +212,77 @@ export function NotificationsIndex() {
           </Button>
         )}
       </div>
+
+      {/* Admin-only Moderation Queue (invisible to regular users) */}
+      {isAdminBellActive && (
+        <section
+          aria-label="Admin Moderation Queue"
+          data-testid="admin-notifications-queue"
+          className="rounded-2xl bg-amber-50/70 border border-amber-200 p-4 sm:p-5 space-y-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-amber-950">
+                  Admin Moderation Queue
+                </h2>
+                <p className="text-xs text-amber-900/80">
+                  Live pending items visible only to your admin account.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/admin"
+              className="inline-flex items-center gap-1 text-xs font-bold text-primary-700 hover:underline"
+            >
+              <span>Open Admin Console</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {adminAlertTotal === 0 ? (
+            <p className="text-xs font-medium text-amber-900/80 bg-white/80 border border-amber-200/70 rounded-xl px-3.5 py-2.5">
+              All clear — no pending listings, verification requests, or open reports.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {adminBellAlerts.map((alert) => {
+                const Icon =
+                  alert.id === 'verifications'
+                    ? BadgeCheck
+                    : alert.id === 'reports'
+                    ? Flag
+                    : CheckSquare;
+                return (
+                  <Link
+                    key={alert.id}
+                    to={alert.to}
+                    className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-white border border-amber-200 hover:border-primary-300 shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className="w-4 h-4 text-amber-700 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {alert.title}
+                        </p>
+                        <p className="text-[11px] text-slate-600 truncate">
+                          {alert.subtitle}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 tabular-nums shrink-0">
+                      {alert.count}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Filter Tabs */}
       <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100">

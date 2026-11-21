@@ -1,4 +1,5 @@
 import { getTimestampMillis } from './homeHelpers';
+import { isMarketerProfile } from './authHelpers';
 import { AccountType, VerificationRequest } from '../types';
 
 export type VerificationUiState =
@@ -22,15 +23,41 @@ export const MARKETER_VERIFICATION_DOC_TYPES = [
 ] as const;
 
 export function getVerificationDocOptions(
-  accountType?: AccountType | null
+  accountType?: AccountType | string | null
 ): readonly string[] {
-  return accountType === 'business'
+  const normalized =
+    typeof accountType === 'string' ? accountType.trim().toLowerCase() : '';
+  return normalized === 'business' || normalized === 'marketer'
     ? MARKETER_VERIFICATION_DOC_TYPES
     : STUDENT_VERIFICATION_DOC_TYPES;
 }
 
-export function getVerifiedBadgeLabel(accountType?: AccountType | null): string {
-  return accountType === 'business' ? 'Verified Marketer' : 'Verified Student';
+export function getVerifiedBadgeLabel(
+  accountType?: AccountType | string | null
+): string {
+  const normalized =
+    typeof accountType === 'string' ? accountType.trim().toLowerCase() : '';
+  return normalized === 'business' || normalized === 'marketer'
+    ? 'Verified Marketer'
+    : 'Verified Student';
+}
+
+export function getResolvedVerifiedBadgeLabel(
+  entity?: {
+    accountType?: AccountType | string | null;
+    businessName?: string | null;
+    shopAddress?: string | null;
+    isOnlineOnly?: boolean | null;
+  } | null
+): string {
+  if (!entity) return 'Verified Member';
+  if (isMarketerProfile(entity)) return 'Verified Marketer';
+  const normalized =
+    typeof entity.accountType === 'string'
+      ? entity.accountType.trim().toLowerCase()
+      : '';
+  if (normalized === 'student') return 'Verified Student';
+  return 'Verified Member';
 }
 
 export function sortVerificationRequests(

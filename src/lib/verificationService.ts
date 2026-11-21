@@ -148,33 +148,41 @@ export async function fetchPendingVerificationRequests(): Promise<
   }
 }
 
-async function syncUserSnapshotVerification(userId: string): Promise<void> {
+async function syncUserSnapshotVerification(
+  userId: string,
+  accountType?: AccountType
+): Promise<void> {
   if (!db || !userId.trim()) return;
 
   const targets: Array<{
     collectionName: string;
     ownerField: string;
-    snapshotField: string;
+    verifiedField: string;
+    accountTypeField: string;
   }> = [
     {
       collectionName: 'products',
       ownerField: 'sellerId',
-      snapshotField: 'sellerSnapshot.isVerified',
+      verifiedField: 'sellerSnapshot.isVerified',
+      accountTypeField: 'sellerSnapshot.accountType',
     },
     {
       collectionName: 'accommodations',
       ownerField: 'ownerId',
-      snapshotField: 'ownerSnapshot.isVerified',
+      verifiedField: 'ownerSnapshot.isVerified',
+      accountTypeField: 'ownerSnapshot.accountType',
     },
     {
       collectionName: 'roommate_requests',
       ownerField: 'userId',
-      snapshotField: 'userSnapshot.isVerified',
+      verifiedField: 'userSnapshot.isVerified',
+      accountTypeField: 'userSnapshot.accountType',
     },
     {
       collectionName: 'stores',
       ownerField: 'ownerId',
-      snapshotField: 'ownerSnapshot.isVerified',
+      verifiedField: 'ownerSnapshot.isVerified',
+      accountTypeField: 'ownerSnapshot.accountType',
     },
   ];
 
@@ -189,7 +197,10 @@ async function syncUserSnapshotVerification(userId: string): Promise<void> {
       )
     );
     for (const docSnap of snap.docs) {
-      batch.update(docSnap.ref, { [target.snapshotField]: true });
+      batch.update(docSnap.ref, {
+        [target.verifiedField]: true,
+        ...(accountType ? { [target.accountTypeField]: accountType } : {}),
+      });
       updateCount += 1;
     }
   }
@@ -225,7 +236,10 @@ export async function approveVerificationRequest(
     });
 
     try {
-      await syncUserSnapshotVerification(request.userId);
+      await syncUserSnapshotVerification(
+        request.userId,
+        request.accountType === 'business' ? 'business' : 'student'
+      );
     } catch (syncErr) {
       console.warn('Could not sync snapshot verification across listings:', syncErr);
     }

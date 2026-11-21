@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
@@ -203,6 +203,9 @@ export function StoreProfile() {
   const isVerified = Boolean(
     ownerProfile?.isVerified || store.ownerSnapshot?.isVerified
   );
+  const isMarketerOwner = isMarketerProfile(
+    ownerProfile || store.ownerSnapshot
+  );
   const openingHours =
     store.openingHours?.trim() || ownerProfile?.openingHours?.trim() || '';
   const hasGps =
@@ -312,7 +315,7 @@ export function StoreProfile() {
                 {store.subcategory && (
                   <Badge variant="role">{store.subcategory}</Badge>
                 )}
-                {ownerProfile?.accountType === 'business' && (
+                {isMarketerOwner && (
                   <Badge variant="verified">Marketer Store</Badge>
                 )}
               </div>
@@ -324,10 +327,11 @@ export function StoreProfile() {
                 {isVerified && (
                   <VerifiedBadge
                     size="sm"
-                    label={
-                      ownerProfile?.accountType === 'business'
-                        ? 'Verified Marketer'
-                        : 'Verified Student'
+                    accountType={
+                      isMarketerOwner
+                        ? 'business'
+                        : ownerProfile?.accountType ||
+                          store.ownerSnapshot?.accountType
                     }
                   />
                 )}

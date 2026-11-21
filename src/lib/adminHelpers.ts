@@ -9,6 +9,7 @@ import {
   VerificationRequest,
 } from '../types';
 import { getTimestampMillis } from './homeHelpers';
+import { isMarketerProfile } from './authHelpers';
 import { isServiceAd } from './sellerHelpers';
 
 export type AdminModuleType =
@@ -39,13 +40,35 @@ export interface PendingAdminItem {
   createdAt: unknown;
 }
 
+export interface AdminModuleStatsBreakdown {
+  itemsTotal: number;
+  itemsPending: number;
+  servicesTotal: number;
+  servicesPending: number;
+  roomsTotal: number;
+  roomsPending: number;
+  roommatesTotal: number;
+  roommatesPending: number;
+  storesTotal: number;
+  storesPending: number;
+}
+
 export interface AdminDashboardStats {
   totalUsers: number;
   studentUsers?: number;
   marketerUsers?: number;
+  verifiedUsers?: number;
+  verifiedStudents?: number;
+  verifiedMarketers?: number;
+  physicalShopMarketers?: number;
+  onlineOnlyMarketers?: number;
+  suspendedUsers?: number;
+  bannedUsers?: number;
   totalListings: number;
   pendingApprovals: number;
+  pendingVerifications?: number;
   openReports: number;
+  moduleBreakdown?: AdminModuleStatsBreakdown;
 }
 
 export type AdminAccountTypeFilter = 'all' | AccountType;
@@ -121,7 +144,7 @@ export function mapAccommodationToPendingAdminItem(
     _type: 'room',
     collectionName: 'accommodations',
     ownerId: acc.ownerId,
-    ownerName: acc.ownerSnapshot?.fullName || 'LASUEDPLUG Landlord',
+    ownerName: acc.ownerSnapshot?.fullName || 'LASUEDPLUG Host',
     title: acc.title,
     description: acc.description,
     priceOrSubtitle: `${formatPendingAmount(acc.rentPrice || 0)} / yr`,
@@ -196,8 +219,8 @@ export function filterAdminUsers(
       ? users
       : users.filter((user) =>
           accountTypeFilter === 'business'
-            ? user.accountType === 'business'
-            : user.accountType !== 'business'
+            ? isMarketerProfile(user)
+            : !isMarketerProfile(user)
         );
 
   const q = rawQuery.trim().toLowerCase();
@@ -239,11 +262,10 @@ export function filterVerificationRequestsByAccountType(
   if (accountTypeFilter === 'all') {
     return requests;
   }
-  return requests.filter((req) =>
-    accountTypeFilter === 'business'
-      ? req.accountType === 'business'
-      : req.accountType !== 'business'
-  );
+  return requests.filter((req) => {
+    const isMarketer = isMarketerProfile(req);
+    return accountTypeFilter === 'business' ? isMarketer : !isMarketer;
+  });
 }
 
 export interface AdminAlertCounts {
@@ -252,12 +274,68 @@ export interface AdminAlertCounts {
   openReports: number;
 }
 
-export function hasAnyAdminAlerts(counts: AdminAlertCounts): boolean {
+export function getAdminAlertTotal(counts: AdminAlertCounts): number {
   return (
-    counts.pendingListings > 0 ||
-    counts.pendingVerifications > 0 ||
-    counts.openReports > 0
+    Math.max(0, counts.pendingListings) +
+    Math.max(0, counts.pendingVerifications) +
+    Math.max(0, counts.openReports)
   );
+}
+
+export function hasAnyAdminAlerts(counts: AdminAlertCounts): boolean {
+  return getAdminAlertTotal(counts) > 0;
+}
+
+export interface AdminBellAlertItem {
+  id: 'listings' | 'verifications' | 'reports';
+  title: string;
+  subtitle: string;
+  count: number;
+  to: string;
+  tone: 'amber' | 'indigo' | 'red';
+}
+
+export function buildAdminBellAlerts(
+  counts: AdminAlertCounts
+): AdminBellAlertItem[] {
+  const items: AdminBellAlertItem[] = [];
+  if (counts.pendingListings > 0) {
+    items.push({
+      id: 'listings',
+      title: 'Pending Listings',
+      subtitle: `${counts.pendingListings} ${
+        counts.pendingListings === 1 ? 'listing' : 'listings'
+      } awaiting approval`,
+      count: counts.pendingListings,
+      to: '/admin/listings',
+      tone: 'amber',
+    });
+  }
+  if (counts.pendingVerifications > 0) {
+    items.push({
+      id: 'verifications',
+      title: 'Identity Verifications',
+      subtitle: `${counts.pendingVerifications} ${
+        counts.pendingVerifications === 1 ? 'submission' : 'submissions'
+      } to verify`,
+      count: counts.pendingVerifications,
+      to: '/admin/verifications',
+      tone: 'indigo',
+    });
+  }
+  if (counts.openReports > 0) {
+    items.push({
+      id: 'reports',
+      title: 'Open Reports',
+      subtitle: `${counts.openReports} ${
+        counts.openReports === 1 ? 'report needs' : 'reports need'
+      } moderation`,
+      count: counts.openReports,
+      to: '/admin/reports',
+      tone: 'red',
+    });
+  }
+  return items;
 }
 
 export function toggleBulkSelectionKey(
@@ -389,11 +467,16 @@ export interface EnrichedReport {
 }
 
 export function getPrimaryUserRoleBadge(
-  user: Pick<UserProfile, 'roles'> & Partial<Pick<UserProfile, 'accountType'>>
+  user: Pick<UserProfile, 'roles'> &
+    Partial<
+      Pick<
+        UserProfile,
+        'accountType' | 'businessName' | 'shopAddress' | 'isOnlineOnly'
+      >
+    >
 ): string {
   if (user.roles?.admin) return 'Admin';
-  if (user.accountType === 'business') return 'Marketer';
-  if (user.roles?.landlord) return 'Marketer';
+  if (isMarketerProfile(user)) return 'Marketer';
   if (user.roles?.serviceProvider) return 'Service Provider';
   if (user.roles?.seller) return 'Student Seller';
   if (user.roles?.roommateSeeker) return 'Roommate Seeker';

@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   DocumentReference,
   FirestoreError,
@@ -17,8 +18,10 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { invalidateFastCachePrefix } from './fastCache';
+import { invalidateFastCache, invalidateFastCachePrefix } from './fastCache';
 import { getTimestampMillis } from './homeHelpers';
+import { isMarketerProfile } from './authHelpers';
+import { isServiceAd } from './sellerHelpers';
 import {
   AdminAlertCounts,
   AdminDashboardStats,
@@ -36,13 +39,16 @@ import {
 } from './adminHelpers';
 import { buildListingRejectedNotification } from './notificationHelpers';
 import { createNotification, notifyListingApproved } from './notificationService';
+import { fetchPendingVerificationRequests } from './verificationService';
 import {
   Accommodation,
+  AccountType,
   Product,
   Report,
   RoommateRequest,
   Store,
   UserProfile,
+  VerificationRequest,
 } from '../types';
 
 function mapAdminError(err: unknown, fallback: string): Error {
@@ -85,7 +91,8 @@ async function safeCountCollection(
 }
 
 /**
- * Aggregates top-level platform stats across Users, all 4 listing modules, Pending queue, and Open Reports.
+ * Aggregates comprehensive platform stats across Users (Students vs Marketers, verification, shop mode),
+ * all 5 marketplace modules (Items, Services, Accommodation, Roommates, Stores), Pending queues, and Open Reports.
  */
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   if (!db) {
@@ -93,57 +100,176 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       totalUsers: 0,
       studentUsers: 0,
       marketerUsers: 0,
+      verifiedUsers: 0,
+      verifiedStudents: 0,
+      verifiedMarketers: 0,
+      physicalShopMarketers: 0,
+      onlineOnlyMarketers: 0,
+      suspendedUsers: 0,
+      bannedUsers: 0,
       totalListings: 0,
       pendingApprovals: 0,
+      pendingVerifications: 0,
       openReports: 0,
+      moduleBreakdown: {
+        itemsTotal: 0,
+        itemsPending: 0,
+        servicesTotal: 0,
+        servicesPending: 0,
+        roomsTotal: 0,
+        roomsPending: 0,
+        roommatesTotal: 0,
+        roommatesPending: 0,
+        storesTotal: 0,
+        storesPending: 0,
+      },
     };
   }
 
   try {
     const [
-      totalUsers,
-      marketerUsers,
-      totalProducts,
+      usersSnap,
+      productsSnap,
       totalAccommodations,
       totalRoommates,
       totalStores,
-      pendingProducts,
       pendingAccommodations,
       pendingRoommates,
       pendingStores,
+      pendingVerifications,
       openReports,
     ] = await Promise.all([
-      safeCountCollection('users'),
-      safeCountCollection('users', 'accountType', 'business'),
-      safeCountCollection('products'),
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'products')),
       safeCountCollection('accommodations'),
       safeCountCollection('roommate_requests'),
       safeCountCollection('stores'),
-      safeCountCollection('products', 'isApproved', false),
       safeCountCollection('accommodations', 'isApproved', false),
       safeCountCollection('roommate_requests', 'isApproved', false),
       safeCountCollection('stores', 'isApproved', false),
+      safeCountCollection('verification_requests', 'status', 'pending'),
       safeCountCollection('reports', 'status', 'open'),
     ]);
 
-    const studentUsers = Math.max(0, totalUsers - marketerUsers);
+    let studentUsers = 0;
+    let marketerUsers = 0;
+    let verifiedStudents = 0;
+    let verifiedMarketers = 0;
+    let physicalShopMarketers = 0;
+    let onlineOnlyMarketers = 0;
+    let suspendedUsers = 0;
+    let bannedUsers = 0;
+
+    usersSnap.docs.forEach((docSnap) => {
+      const u = docSnap.data() as Partial<UserProfile>;
+      const isMarketer = isMarketerProfile(u);
+      if (isMarketer) {
+        marketerUsers += 1;
+        if (u.isVerified) verifiedMarketers += 1;
+        if (u.isOnlineOnly === true) {
+          onlineOnlyMarketers += 1;
+        } else {
+          physicalShopMarketers += 1;
+        }
+      } else {
+        studentUsers += 1;
+        if (u.isVerified) verifiedStudents += 1;
+      }
+      if (u.status === 'suspended' || u.isBanned === true) {
+        suspendedUsers += 1;
+      }
+      if (u.isBanned === true) {
+        bannedUsers += 1;
+      }
+    });
+
+    let itemsTotal = 0;
+    let itemsPending = 0;
+    let servicesTotal = 0;
+    let servicesPending = 0;
+
+    productsSnap.docs.forEach((docSnap) => {
+      const p = docSnap.data() as Product;
+      const isService = isServiceAd(p);
+      if (isService) {
+        servicesTotal += 1;
+        if (p.isApproved === false) servicesPending += 1;
+      } else {
+        itemsTotal += 1;
+        if (p.isApproved === false) itemsPending += 1;
+      }
+    });
+
+    const totalUsers = usersSnap.size;
+    const verifiedUsers = verifiedStudents + verifiedMarketers;
+    const totalListings =
+      itemsTotal +
+      servicesTotal +
+      totalAccommodations +
+      totalRoommates +
+      totalStores;
+    const pendingApprovals =
+      itemsPending +
+      servicesPending +
+      pendingAccommodations +
+      pendingRoommates +
+      pendingStores;
 
     return {
       totalUsers,
       studentUsers,
       marketerUsers,
-      totalListings:
-        totalProducts + totalAccommodations + totalRoommates + totalStores,
-      pendingApprovals:
-        pendingProducts +
-        pendingAccommodations +
-        pendingRoommates +
-        pendingStores,
+      verifiedUsers,
+      verifiedStudents,
+      verifiedMarketers,
+      physicalShopMarketers,
+      onlineOnlyMarketers,
+      suspendedUsers,
+      bannedUsers,
+      totalListings,
+      pendingApprovals,
+      pendingVerifications,
       openReports,
+      moduleBreakdown: {
+        itemsTotal,
+        itemsPending,
+        servicesTotal,
+        servicesPending,
+        roomsTotal: totalAccommodations,
+        roomsPending: pendingAccommodations,
+        roommatesTotal: totalRoommates,
+        roommatesPending: pendingRoommates,
+        storesTotal: totalStores,
+        storesPending: pendingStores,
+      },
     };
   } catch (err) {
     throw mapAdminError(err, 'Unable to load admin statistics.');
   }
+}
+
+export interface EnhancedAdminOverview {
+  stats: AdminDashboardStats;
+  recentPendingListings: PendingAdminItem[];
+  recentVerifications: VerificationRequest[];
+  recentReports: Report[];
+}
+
+export async function getEnhancedAdminOverview(): Promise<EnhancedAdminOverview> {
+  const [stats, pendingListings, pendingVerifications, openReports] =
+    await Promise.all([
+      getAdminDashboardStats(),
+      fetchPendingApprovals(),
+      fetchPendingVerificationRequests(),
+      getOpenReports(),
+    ]);
+
+  return {
+    stats,
+    recentPendingListings: pendingListings.slice(0, 5),
+    recentVerifications: pendingVerifications.slice(0, 5),
+    recentReports: openReports.slice(0, 5),
+  };
 }
 
 /**
@@ -530,6 +656,106 @@ export async function banUserAccount(uid: string): Promise<void> {
     await hideAllUserListings(cleanUid);
   } catch (err) {
     throw mapAdminError(err, 'Failed to ban user account.');
+  }
+}
+
+/**
+ * Admin: Switches a user's accountType ('student' <-> 'business' / Marketer)
+ * and propagates the corrected accountType across their listings, stores, and verification requests.
+ */
+export async function updateUserAccountTypeAdmin(
+  uid: string,
+  nextAccountType: AccountType
+): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
+    throw new Error('User ID is missing.');
+  }
+
+  try {
+    const firestore = db;
+    const userRef = doc(firestore, 'users', cleanUid);
+    const userUpdates: Record<string, unknown> = {
+      accountType: nextAccountType,
+      updatedAt: serverTimestamp(),
+    };
+    if (nextAccountType === 'student') {
+      userUpdates['roles.landlord'] = deleteField();
+      userUpdates.businessName = deleteField();
+      userUpdates.shopAddress = deleteField();
+      userUpdates.isOnlineOnly = deleteField();
+    }
+    await updateDoc(userRef, userUpdates);
+
+    // Best-effort propagate accountType across user's listing snapshots & verification requests
+    try {
+      const snapshotTargets: Array<{
+        collectionName: string;
+        ownerField: string;
+        updateField: string;
+      }> = [
+        {
+          collectionName: 'products',
+          ownerField: 'sellerId',
+          updateField: 'sellerSnapshot.accountType',
+        },
+        {
+          collectionName: 'accommodations',
+          ownerField: 'ownerId',
+          updateField: 'ownerSnapshot.accountType',
+        },
+        {
+          collectionName: 'roommate_requests',
+          ownerField: 'userId',
+          updateField: 'userSnapshot.accountType',
+        },
+        {
+          collectionName: 'stores',
+          ownerField: 'ownerId',
+          updateField: 'ownerSnapshot.accountType',
+        },
+        {
+          collectionName: 'verification_requests',
+          ownerField: 'userId',
+          updateField: 'accountType',
+        },
+      ];
+
+      const batch = writeBatch(firestore);
+      let count = 0;
+
+      for (const target of snapshotTargets) {
+        const snap = await getDocs(
+          query(
+            collection(firestore, target.collectionName),
+            where(target.ownerField, '==', cleanUid)
+          )
+        );
+        snap.docs.forEach((docSnap) => {
+          batch.update(docSnap.ref, { [target.updateField]: nextAccountType });
+          count += 1;
+        });
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (syncErr) {
+      console.warn('Could not sync accountType across existing listings:', syncErr);
+    }
+
+    invalidateFastCache('admin_users');
+    invalidateFastCache('admin_stats');
+    invalidateFastCache('admin_overview');
+    invalidateFastCachePrefix('home_');
+    invalidateFastCachePrefix('mkt_');
+    invalidateFastCachePrefix('services_');
+    invalidateFastCachePrefix('seller_profile:');
+  } catch (err) {
+    throw mapAdminError(err, 'Failed to update user account type.');
   }
 }
 

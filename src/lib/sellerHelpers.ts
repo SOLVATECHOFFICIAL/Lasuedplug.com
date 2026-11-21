@@ -201,6 +201,7 @@ export interface EditListingInput {
   whatsappNumber: string;
   locationName?: string;
   hasDelivery?: boolean;
+  sellerSnapshot?: Product['sellerSnapshot'];
 }
 
 /**
@@ -234,6 +235,7 @@ export function buildEditedListingUpdatePayload(
     hasDelivery: isService
       ? input.serviceLocation === 'online'
       : effectiveLocationType === 'online' || Boolean(input.hasDelivery),
+    ...(input.sellerSnapshot ? { sellerSnapshot: input.sellerSnapshot } : {}),
     // CRITICAL SECURITY RULE: Auto-hide on edit
     isApproved: false,
   };

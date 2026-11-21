@@ -89,7 +89,12 @@ export const StoreCard = memo(function StoreCard({
               <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                 {store.name}
               </h3>
-              {verified && <VerifiedBadge size="xs" />}
+              {verified && (
+                <VerifiedBadge
+                  size="xs"
+                  accountType={store.ownerSnapshot?.accountType}
+                />
+              )}
             </div>
 
             {(store.ownerSnapshot?.fullName || store.ownerId) && (

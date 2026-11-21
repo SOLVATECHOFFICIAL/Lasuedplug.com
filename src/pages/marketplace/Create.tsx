@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import { db } from '../../lib/firebase';
 import {
   getCategoriesForAdType,
@@ -419,6 +419,7 @@ export function MarketplaceCreate() {
         sellerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
           isVerified: Boolean(profile?.isVerified),
+          accountType: resolveAccountType(profile),
         },
       };
 

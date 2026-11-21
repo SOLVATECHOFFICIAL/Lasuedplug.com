@@ -4,6 +4,7 @@ import {
   canSubmitVerificationRequest,
   formatVerificationDate,
   getLatestVerificationRequest,
+  getResolvedVerifiedBadgeLabel,
   getVerificationDocOptions,
   getVerificationUiState,
   getVerifiedBadgeLabel,
@@ -157,3 +158,39 @@ test('formatVerificationDate handles missing timestamps cleanly', () => {
   const formatted = formatVerificationDate(Date.UTC(2025, 2, 15));
   assert.ok(formatted.includes('2025'));
 });
+
+test('getResolvedVerifiedBadgeLabel and marketer string normalization resolve badge labels accurately', () => {
+  assert.deepEqual(getVerificationDocOptions('marketer'), MARKETER_VERIFICATION_DOC_TYPES);
+  assert.equal(getVerifiedBadgeLabel('marketer'), 'Verified Marketer');
+
+  assert.equal(getResolvedVerifiedBadgeLabel(null), 'Verified Member');
+  assert.equal(getResolvedVerifiedBadgeLabel({}), 'Verified Member');
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({ accountType: 'business' }),
+    'Verified Marketer'
+  );
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({ accountType: 'marketer' }),
+    'Verified Marketer'
+  );
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({
+      accountType: 'student',
+      businessName: 'Campus Hub',
+    }),
+    'Verified Marketer'
+  );
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({ shopAddress: 'Shop 5, Epe Gate' }),
+    'Verified Marketer'
+  );
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({ isOnlineOnly: true }),
+    'Verified Marketer'
+  );
+  assert.equal(
+    getResolvedVerifiedBadgeLabel({ accountType: 'student' }),
+    'Verified Student'
+  );
+});
+

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
+  canSwitchAccountTypeOnProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
   getAccountTypeLabel,
@@ -15,9 +16,11 @@ import {
   isAcademicFieldLocked,
   isAccountBanned,
   isAccountSuspended,
+  isMarketerProfile,
   parseOpeningHoursRange,
   PHONE_UPDATE_COOLDOWN_DAYS,
   PROFILE_PIC_COOLDOWN_DAYS,
+  resolveAccountType,
   SUSPENDED_ACCOUNT_MESSAGE,
   validateEmailField,
   validateLoginForm,
@@ -356,4 +359,83 @@ test('getProfilePicLockStatus enforces 7-day DP lock and constructs lock message
   assert.equal(unlocked.isLocked, false);
   assert.equal(unlocked.lockMessage, null);
 });
+
+test('isMarketerProfile, resolveAccountType, and canSwitchAccountTypeOnProfile detect legacy marketers and enforce switch locks', () => {
+  assert.equal(isMarketerProfile(null), false);
+  assert.equal(isMarketerProfile({ accountType: 'business' }), true);
+  assert.equal(isMarketerProfile({ accountType: 'marketer' }), true);
+  assert.equal(
+    isMarketerProfile({ accountType: 'student', roles: { landlord: true } }),
+    true
+  );
+  assert.equal(
+    isMarketerProfile({ accountType: 'student', businessName: 'Plug Gadgets' }),
+    true
+  );
+  assert.equal(
+    isMarketerProfile({ shopAddress: 'Shop 2, Epe Main Gate' }),
+    true
+  );
+  assert.equal(
+    isMarketerProfile({ accountType: 'student', isOnlineOnly: true }),
+    true
+  );
+  assert.equal(
+    isMarketerProfile({ accountType: 'student', roles: { buyer: true, seller: true } }),
+    false
+  );
+
+  assert.equal(resolveAccountType({ accountType: 'marketer' }), 'business');
+  assert.equal(resolveAccountType({ businessName: 'Campus Kicks' }), 'business');
+  assert.equal(resolveAccountType({ accountType: 'student' }), 'student');
+
+  assert.equal(canSwitchAccountTypeOnProfile(null), true);
+  assert.equal(
+    canSwitchAccountTypeOnProfile({ accountType: 'student', isVerified: false }),
+    true
+  );
+  assert.equal(
+    canSwitchAccountTypeOnProfile({ accountType: 'student', isVerified: true }),
+    false
+  );
+  assert.equal(
+    canSwitchAccountTypeOnProfile({ accountType: 'student', campus: 'LASUED' }),
+    false
+  );
+  assert.equal(
+    canSwitchAccountTypeOnProfile({
+      accountType: 'business',
+      department: 'Computer Science',
+    }),
+    false
+  );
+  assert.equal(
+    canSwitchAccountTypeOnProfile({ accountType: 'business', level: '200L' }),
+    false
+  );
+
+  // Legacy marketer with missing or 'student' accountType still uses marketer completeness rules
+  assert.equal(
+    checkProfileCompleteness({
+      accountType: 'student',
+      roles: { buyer: true, landlord: true },
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Ventures',
+      isOnlineOnly: true,
+    }),
+    true
+  );
+  assert.equal(
+    checkProfileCompleteness({
+      fullName: 'Tunde Bello',
+      phone: '08012345678',
+      businessName: 'Tunde Ventures',
+      isOnlineOnly: false,
+      shopAddress: 'Shop 4, Gate',
+    }),
+    false
+  );
+});
+
 

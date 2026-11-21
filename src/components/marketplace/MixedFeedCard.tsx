@@ -108,7 +108,12 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
                   size="2xs"
                 />
                 <span className="truncate">{sellerName || 'Service Provider'}</span>
-                {verified && <VerifiedBadge size="xs" />}
+                {verified && (
+                  <VerifiedBadge
+                    size="xs"
+                    accountType={service.sellerSnapshot?.accountType}
+                  />
+                )}
               </p>
             )}
             {service.locationName && (

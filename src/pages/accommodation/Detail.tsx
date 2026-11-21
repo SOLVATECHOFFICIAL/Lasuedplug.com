@@ -159,7 +159,7 @@ export function AccommodationDetail() {
   const typeLabel = getAccommodationTypeLabel(item.type);
   const publicLocation = getAccommodationPublicLocation(item);
   const rentPrice = getAccommodationRent(item);
-  const ownerName = item.ownerSnapshot?.fullName || 'Campus Landlord / Agent';
+  const ownerName = item.ownerSnapshot?.fullName || 'Campus Property Host';
   const ownerVerified = Boolean(item.ownerSnapshot?.isVerified);
   const amenities = Array.isArray(item.amenities) ? item.amenities : [];
   const whatsappHref = buildAccommodationWhatsAppUrl(
@@ -330,7 +330,7 @@ export function AccommodationDetail() {
             {/* Owner Card */}
             <div className="pt-4 border-t border-slate-100 space-y-3">
               <h2 className="text-sm font-semibold text-slate-900">
-                Landlord / Agent Information
+                Property Host / Marketer
               </h2>
               <Link
                 to={`/seller/${item.ownerId}`}
@@ -347,7 +347,12 @@ export function AccommodationDetail() {
                   <div className="min-w-0 space-y-0.5">
                     <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{ownerName}</span>
-                      {ownerVerified && <VerifiedBadge size="sm" />}
+                      {ownerVerified && (
+                        <VerifiedBadge
+                          size="sm"
+                          accountType={item.ownerSnapshot?.accountType}
+                        />
+                      )}
                     </p>
                     <p className="text-xs text-slate-500">
                       View host profile &amp; reviews →
@@ -372,7 +377,7 @@ export function AccommodationDetail() {
                 className="flex-1 min-w-0 min-h-[52px] inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 whitespace-nowrap"
               >
                 <MessageCircle className="w-5 h-5 shrink-0" />
-                <span>Message Landlord/Agent</span>
+                <span>Message Property Host</span>
               </a>
               <Button
                 type="button"
@@ -397,7 +402,7 @@ export function AccommodationDetail() {
           className="flex-1 min-w-0 min-h-[48px] inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
         >
           <MessageCircle className="w-5 h-5 shrink-0" />
-          <span className="truncate">Message Landlord/Agent</span>
+          <span className="truncate">Message Property Host</span>
         </a>
         <Button
           type="button"

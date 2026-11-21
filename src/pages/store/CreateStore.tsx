@@ -14,7 +14,7 @@ import {
   ALL_MARKETPLACE_CATEGORIES,
   getStoreSubcategoriesForCategory,
 } from '../../lib/categories';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import {
   formatOpeningHoursRange,
   StoreCreateValidationErrors,
@@ -184,6 +184,7 @@ export function CreateStore() {
         ownerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
           isVerified: Boolean(profile?.isVerified),
+          accountType: resolveAccountType(profile),
           ...(ownerAvatar &&
           totalImagesLength + ownerAvatar.length <= 850_000
             ? { profilePic: ownerAvatar }

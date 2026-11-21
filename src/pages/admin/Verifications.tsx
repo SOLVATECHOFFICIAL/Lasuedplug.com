@@ -18,6 +18,7 @@ import {
   toggleBulkSelectionKey,
   toggleSelectAllVisibleKeys,
 } from '../../lib/adminHelpers';
+import { isMarketerProfile } from '../../lib/authHelpers';
 import { formatVerificationDate } from '../../lib/verificationHelpers';
 import {
   approveVerificationRequest,
@@ -81,7 +82,7 @@ export function AdminVerifications() {
   }, [previewRequest, bulkRejectOpen, bulkAction]);
 
   const filterCounts = useMemo(() => {
-    const marketers = requests.filter((r) => r.accountType === 'business').length;
+    const marketers = requests.filter((r) => isMarketerProfile(r)).length;
     const students = requests.length - marketers;
     return { all: requests.length, student: students, business: marketers };
   }, [requests]);
@@ -363,7 +364,7 @@ export function AdminVerifications() {
                   const reqId = req.id || '';
                   const isBusy = busyId === reqId;
                   const isSelected = Boolean(reqId && selectedIds.includes(reqId));
-                  const isMarketer = req.accountType === 'business';
+                  const isMarketer = isMarketerProfile(req);
                   const docLabel =
                     req.documentType ||
                     (isMarketer ? 'Government ID' : 'Student ID / Receipt');
@@ -405,7 +406,9 @@ export function AdminVerifications() {
                         >
                           <img
                             src={req.idCardImage}
-                            alt={`Student ID document submitted by ${req.fullName}`}
+                            alt={`${
+                              isMarketer ? 'Marketer ID' : 'Student ID'
+                            } document submitted by ${req.fullName}`}
                             loading="lazy"
                             decoding="async"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -569,12 +572,12 @@ export function AdminVerifications() {
                 >
                   {previewRequest.fullName} —{' '}
                   {previewRequest.documentType ||
-                    (previewRequest.accountType === 'business'
+                    (isMarketerProfile(previewRequest)
                       ? 'Marketer ID Document'
                       : 'Student Verification Document')}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  {previewRequest.accountType === 'business'
+                  {isMarketerProfile(previewRequest)
                     ? 'Marketer Account'
                     : 'Student Account'}{' '}
                   · Submitted {formatVerificationDate(previewRequest.createdAt)}
@@ -624,7 +627,7 @@ export function AdminVerifications() {
                   <Check className="w-4 h-4" />
                 )}
                 <span>
-                  {previewRequest.accountType === 'business'
+                  {isMarketerProfile(previewRequest)
                     ? 'Approve & Verify Marketer'
                     : 'Approve & Verify Student'}
                 </span>
@@ -662,7 +665,7 @@ export function AdminVerifications() {
                     {selectedRequests.length === 1 ? 'Request' : 'Requests'}?
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Each student will receive a notification to re-upload a clearer document.
+                    Each applicant will receive a notification to re-upload a clearer document.
                   </p>
                 </div>
               </div>

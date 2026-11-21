@@ -646,7 +646,12 @@ export function MarketplaceDetail() {
                   <div className="min-w-0 space-y-0.5">
                     <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{sellerName}</span>
-                      {sellerVerified && <VerifiedBadge size="sm" />}
+                      {sellerVerified && (
+                        <VerifiedBadge
+                          size="sm"
+                          accountType={product.sellerSnapshot?.accountType}
+                        />
+                      )}
                     </p>
                     <p className="text-xs text-slate-500">
                       View seller profile, reviews &amp; listings →

@@ -136,7 +136,12 @@ const SavedListingCard = memo(function SavedListingCard({
               <span className="truncate">
                 {listing.sellerSnapshot?.fullName || 'Campus Seller'}
               </span>
-              {listing.sellerSnapshot?.isVerified && <VerifiedBadge size="xs" />}
+              {listing.sellerSnapshot?.isVerified && (
+                <VerifiedBadge
+                  size="xs"
+                  accountType={listing.sellerSnapshot?.accountType}
+                />
+              )}
             </p>
           )}
           <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">

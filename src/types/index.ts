@@ -98,7 +98,12 @@ export interface Product {
   createdAt: any;
   viewCount?: number;
   contactCount?: number;
-  sellerSnapshot?: { fullName: string; isVerified: boolean; profilePic?: string };
+  sellerSnapshot?: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+    accountType?: AccountType;
+  };
 }
 
 export interface Store {
@@ -123,7 +128,12 @@ export interface Store {
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
-  ownerSnapshot?: { fullName: string; isVerified: boolean; profilePic?: string };
+  ownerSnapshot?: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+    accountType?: AccountType;
+  };
 }
 
 export interface Service {
@@ -158,7 +168,12 @@ export interface Service {
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
-  sellerSnapshot?: { fullName: string; isVerified: boolean; profilePic?: string };
+  sellerSnapshot?: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+    accountType?: AccountType;
+  };
 }
 
 export type AccommodationType =
@@ -185,7 +200,12 @@ export interface Accommodation {
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
-  ownerSnapshot?: { fullName: string; isVerified: boolean; profilePic?: string };
+  ownerSnapshot?: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+    accountType?: AccountType;
+  };
   // Optional legacy compatibility fields
   price?: number;
   location?: string;
@@ -210,7 +230,12 @@ export interface RoommateRequest {
   isApproved: boolean;
   isActive: boolean;
   createdAt: any;
-  userSnapshot?: { fullName: string; isVerified: boolean; profilePic?: string };
+  userSnapshot?: {
+    fullName: string;
+    isVerified: boolean;
+    profilePic?: string;
+    accountType?: AccountType;
+  };
 }
 
 export interface Review {

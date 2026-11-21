@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import {
   isAuthorizedAdminEmail,
   isAuthorizedAdminSession,
+  isUserAdmin,
   PRIMARY_ADMIN_EMAIL,
 } from '../../lib/adminHelpers';
 import { Loading } from '../feedback/Loading';
@@ -18,7 +19,7 @@ interface AdminRouteProps {
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const { showToast } = useToast();
   const location = useLocation();
   const [sendingVerification, setSendingVerification] = useState(false);
@@ -27,19 +28,25 @@ export function AdminRoute({ children }: AdminRouteProps) {
   const deniedToastShownRef = useRef(false);
 
   const isAdminEmail = isAuthorizedAdminEmail(user?.email);
+  const hasAdminRole = isUserAdmin(profile);
+  const canAccessAdmin = isAdminEmail || hasAdminRole;
   const isAdminVerified =
-    verifiedConfirmed || isAuthorizedAdminSession(user);
+    hasAdminRole || verifiedConfirmed || isAuthorizedAdminSession(user);
 
   useEffect(() => {
-    setVerifiedConfirmed(Boolean(user && isAuthorizedAdminSession(user)));
-  }, [user, user?.emailVerified]);
+    setVerifiedConfirmed(
+      Boolean(
+        hasAdminRole || (user && isAuthorizedAdminSession(user))
+      )
+    );
+  }, [hasAdminRole, user, user?.emailVerified]);
 
   useEffect(() => {
-    if (!loading && user && !isAdminEmail && !deniedToastShownRef.current) {
+    if (!loading && user && !canAccessAdmin && !deniedToastShownRef.current) {
       deniedToastShownRef.current = true;
       showToast('Admin access required.', 'error');
     }
-  }, [loading, user, isAdminEmail, showToast]);
+  }, [loading, user, canAccessAdmin, showToast]);
 
   if (loading) {
     return <Loading fullScreen message="Verifying admin access..." />;
@@ -49,7 +56,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!isAdminEmail) {
+  if (!canAccessAdmin) {
     return <Navigate to="/" replace />;
   }
 

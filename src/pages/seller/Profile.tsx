@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
@@ -159,7 +159,7 @@ export function SellerProfile() {
     );
   }
 
-  const isBusiness = seller.accountType === 'business';
+  const isBusiness = isMarketerProfile(seller);
   const displayName =
     (isBusiness ? seller.businessName?.trim() : '') ||
     seller.fullName?.trim() ||
@@ -242,6 +242,7 @@ export function SellerProfile() {
                 {seller.isVerified && (
                   <VerifiedBadge
                     size="sm"
+                    accountType={isBusiness ? 'business' : 'student'}
                     label={isBusiness ? 'Verified Marketer' : 'Verified Student'}
                   />
                 )}

@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
+  canSwitchAccountTypeOnProfile,
   getFieldCooldownStatus,
   getPrimaryRoleLabel,
   getProfilePicLockStatus,
@@ -32,6 +33,7 @@ import {
   NAME_LOCK_MESSAGE,
   parseOpeningHoursRange,
   PHONE_UPDATE_COOLDOWN_DAYS,
+  resolveAccountType,
 } from '../../lib/authHelpers';
 import { SUPPORT_LINK } from '../../lib/constants';
 import {
@@ -53,7 +55,7 @@ import {
   getUserVerificationRequests,
   submitVerificationRequest,
 } from '../../lib/verificationService';
-import { VerificationRequest } from '../../types';
+import { AccountType, VerificationRequest } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
@@ -106,6 +108,9 @@ export function ProfilePage() {
   const location = useLocation();
   const shownRedirectToastRef = useRef<string | null>(null);
 
+  const [selectedAccountType, setSelectedAccountType] = useState<AccountType>(
+    () => resolveAccountType(profile)
+  );
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [campus, setCampus] = useState('');
@@ -155,6 +160,7 @@ export function ProfilePage() {
   }, [location.state, showToast]);
 
   useEffect(() => {
+    setSelectedAccountType(resolveAccountType(profile));
     setFullName(profile?.fullName || user?.displayName || '');
     setPhone(profile?.phone || '');
     setCampus(profile?.campus || '');
@@ -192,7 +198,13 @@ export function ProfilePage() {
     void loadVerificationHistory();
   }, [loadVerificationHistory]);
 
-  const accountType = profile?.accountType || 'student';
+  const canSwitchAccountType = useMemo(
+    () => canSwitchAccountTypeOnProfile(profile),
+    [profile]
+  );
+  const accountType: AccountType = canSwitchAccountType
+    ? selectedAccountType
+    : resolveAccountType(profile);
   const isBusinessAccount = accountType === 'business';
   const isNameLocked = isAcademicFieldLocked(profile?.fullName);
   const isCampusLocked = isAcademicFieldLocked(profile?.campus);
@@ -704,6 +716,91 @@ export function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          {/* Account Type Selector / Status */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="block text-sm font-medium text-slate-700">
+                Account Type
+              </span>
+              {!canSwitchAccountType && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-600">
+                  <Lock className="w-3 h-3" />
+                  <span>Locked</span>
+                </span>
+              )}
+            </div>
+            {canSwitchAccountType ? (
+              <div
+                role="radiogroup"
+                aria-label="Account type"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={accountType === 'student'}
+                  onClick={() => {
+                    setSelectedAccountType('student');
+                    setFieldErrors({});
+                  }}
+                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                    accountType === 'student'
+                      ? 'bg-primary-50 border-primary-500 text-primary-900 ring-1 ring-primary-500'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <GraduationCap className="w-5 h-5 shrink-0 mt-0.5 text-primary-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Student</p>
+                    <p className="text-xs text-slate-500">
+                      Verify with Student ID / Fee Receipt
+                    </p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={accountType === 'business'}
+                  onClick={() => {
+                    setSelectedAccountType('business');
+                    setFieldErrors({});
+                  }}
+                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                    accountType === 'business'
+                      ? 'bg-primary-50 border-primary-500 text-primary-900 ring-1 ring-primary-500'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Store className="w-5 h-5 shrink-0 mt-0.5 text-primary-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Marketer</p>
+                    <p className="text-xs text-slate-500">
+                      Verify with NIN, Driver’s License, or Valid ID
+                    </p>
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                <span>
+                  Registered as{' '}
+                  <span className="font-semibold text-slate-900">
+                    {isBusinessAccount ? 'Marketer' : 'Student'}
+                  </span>
+                  . Contact Admin/Support if you need your account type switched.
+                </span>
+                <a
+                  href={SUPPORT_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-primary-600 hover:underline whitespace-nowrap shrink-0"
+                >
+                  Contact Support
+                </a>
+              </div>
+            )}
+          </div>
+
           {/* Contact & Identity */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">

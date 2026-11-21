@@ -16,7 +16,7 @@ import {
   validateAccommodationCreateInput,
 } from '../../lib/listingValidation';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
-import { getUserAvatarUrl } from '../../lib/authHelpers';
+import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AccommodationType } from '../../types';
@@ -130,8 +130,9 @@ export function AccommodationCreate() {
         whatsappNumber: formattedPhone,
         ownerSnapshot: {
           fullName:
-            profile?.fullName || user.displayName || 'LASUEDPLUG Landlord',
+            profile?.fullName || user.displayName || 'LASUEDPLUG Host',
           isVerified: Boolean(profile?.isVerified),
+          accountType: resolveAccountType(profile),
           ...(ownerAvatar &&
           totalImagesChars + ownerAvatar.length <= MAX_DOCUMENT_IMAGE_BYTES
             ? { profilePic: ownerAvatar }

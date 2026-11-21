@@ -163,18 +163,72 @@ export function getInitials(fullName?: string | null, email?: string | null): st
   return 'U';
 }
 
+export interface AccountTypeResolvable {
+  accountType?: AccountType | string | null;
+  roles?: UserRoles | null;
+  businessName?: string | null;
+  shopAddress?: string | null;
+  isOnlineOnly?: boolean | null;
+}
+
+export function isMarketerProfile(
+  entity?: AccountTypeResolvable | null
+): boolean {
+  if (!entity) return false;
+  const rawType =
+    typeof entity.accountType === 'string'
+      ? entity.accountType.trim().toLowerCase()
+      : '';
+  if (rawType === 'business' || rawType === 'marketer') {
+    return true;
+  }
+  if (rawType === 'student') {
+    // Respect explicit student only when there is no legacy marketer flag/business footprint
+    if (
+      entity.roles?.landlord === true ||
+      Boolean(entity.businessName && entity.businessName.trim()) ||
+      Boolean(entity.shopAddress && entity.shopAddress.trim()) ||
+      typeof entity.isOnlineOnly === 'boolean'
+    ) {
+      return true;
+    }
+    return false;
+  }
+  return Boolean(
+    entity.roles?.landlord === true ||
+      (entity.businessName && entity.businessName.trim()) ||
+      (entity.shopAddress && entity.shopAddress.trim()) ||
+      typeof entity.isOnlineOnly === 'boolean'
+  );
+}
+
+export function resolveAccountType(
+  entity?: AccountTypeResolvable | null
+): AccountType {
+  return isMarketerProfile(entity) ? 'business' : 'student';
+}
+
 export function getAccountTypeLabel(
-  accountType?: AccountType | null
+  accountType?: AccountType | string | null
 ): 'Marketer' | 'Student' {
-  return accountType === 'business' ? 'Marketer' : 'Student';
+  const normalized =
+    typeof accountType === 'string' ? accountType.trim().toLowerCase() : '';
+  return normalized === 'business' || normalized === 'marketer'
+    ? 'Marketer'
+    : 'Student';
 }
 
 export function getPrimaryRoleLabel(
   roles?: UserRoles,
-  accountType?: AccountType | null
+  accountType?: AccountType | string | null
 ): string {
   if (roles?.admin) return 'Admin';
-  if (accountType === 'business') return 'Marketer';
+  if (
+    accountType &&
+    getAccountTypeLabel(accountType) === 'Marketer'
+  ) {
+    return 'Marketer';
+  }
   if (!roles) return 'Buyer';
   if (roles.seller) return 'Seller';
   if (roles.serviceProvider) return 'Service Provider';
@@ -269,7 +323,7 @@ export function checkProfileCompleteness(
   }
   const hasName = Boolean(profile.fullName && profile.fullName.trim());
   const hasPhone = Boolean(profile.phone && profile.phone.trim());
-  if (profile.accountType === 'business') {
+  if (isMarketerProfile(profile)) {
     const hasBusinessName = Boolean(
       profile.businessName && profile.businessName.trim()
     );
@@ -310,6 +364,21 @@ export function isFieldPermanentlyLocked(value: unknown): boolean {
 
 export function isAcademicFieldLocked(value: unknown): boolean {
   return isFieldPermanentlyLocked(value);
+}
+
+export function canSwitchAccountTypeOnProfile(
+  profile: Partial<UserProfile> | null | undefined
+): boolean {
+  if (!profile) return true;
+  if (profile.isVerified) return false;
+  if (
+    isAcademicFieldLocked(profile.campus) ||
+    isAcademicFieldLocked(profile.department) ||
+    isAcademicFieldLocked(profile.level)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function parseTimestampMs(value: unknown): number | null {
