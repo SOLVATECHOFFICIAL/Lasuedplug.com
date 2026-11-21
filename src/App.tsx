@@ -1,3 +1,4 @@
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { PWAProvider } from './contexts/PWAContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -6,15 +7,17 @@ import { AppRouter } from './router';
 
 export function App() {
   return (
-    <ToastProvider>
-      <PWAProvider>
-        <AuthProvider>
-          <AppShell>
-            <AppRouter />
-          </AppShell>
-        </AuthProvider>
-      </PWAProvider>
-    </ToastProvider>
+    <HelmetProvider>
+      <ToastProvider>
+        <PWAProvider>
+          <AuthProvider>
+            <AppShell>
+              <AppRouter />
+            </AppShell>
+          </AuthProvider>
+        </PWAProvider>
+      </ToastProvider>
+    </HelmetProvider>
   );
 }
 

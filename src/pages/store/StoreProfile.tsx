@@ -38,6 +38,7 @@ import { ProductCard } from '../../components/marketplace/ProductCard';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { ReviewSection } from '../../components/reviews/ReviewSection';
 import { ReportUserModal } from '../../components/reviews/ReportUserModal';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function StoreProfile() {
   const { id } = useParams<{ id: string }>();
@@ -175,6 +176,11 @@ export function StoreProfile() {
   if (!store) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <SeoHead
+          title="Store Not Found"
+          ogTitle="Store Not Found — LASUEDPLUG"
+          description="This campus storefront may have been removed or is awaiting admin approval."
+        />
         <EmptyState
           icon={StoreIcon}
           title="Store not found"
@@ -217,6 +223,14 @@ export function StoreProfile() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+      <SeoHead
+        title={store.name}
+        ogTitle={store.name}
+        description={
+          store.description?.trim() ||
+          `${store.category || 'Campus Store'} by ${ownerName} on LASUEDPLUG.`
+        }
+      />
       <div className="flex items-center justify-between gap-3">
         <Link
           to="/marketplace?tab=stores"

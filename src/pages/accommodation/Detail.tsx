@@ -31,6 +31,7 @@ import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductImage } from '../../components/marketplace/ProductImage';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -124,6 +125,11 @@ export function AccommodationDetail() {
   if (!item) {
     return (
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12">
+        <SeoHead
+          title="Accommodation Not Found"
+          ogTitle="Accommodation Not Found — LASUEDPLUG"
+          description="This lodge listing may have been rented out or removed from LASUEDPLUG."
+        />
         <Card
           hoverable={false}
           className="border-dashed text-center py-10 space-y-4"
@@ -165,6 +171,14 @@ export function AccommodationDetail() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
+      <SeoHead
+        title={item.title}
+        ogTitle={item.title}
+        description={
+          item.description?.trim() ||
+          `${typeLabel} · ${publicLocation} (${formatNaira(rentPrice)} / year) on LASUEDPLUG.`
+        }
+      />
       <div className="flex items-center justify-between gap-3">
         <Link
           to="/accommodation"

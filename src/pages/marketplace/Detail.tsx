@@ -53,6 +53,7 @@ import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductImage } from '../../components/marketplace/ProductImage';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function MarketplaceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -194,6 +195,11 @@ export function MarketplaceDetail() {
   if (!product) {
     return (
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12">
+        <SeoHead
+          title="Listing Not Found"
+          ogTitle="Listing Not Found — LASUEDPLUG"
+          description="This listing may have been removed or is no longer available on LASUEDPLUG."
+        />
         <Card
           hoverable={false}
           className="border-dashed text-center py-10 space-y-4"
@@ -353,6 +359,15 @@ export function MarketplaceDetail() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
+      <SeoHead
+        title={product.title}
+        ogTitle={product.title}
+        description={
+          product.description?.trim() ||
+          `${priceInfo.text} · ${locationLabel} on LASUEDPLUG.`
+        }
+        type="product"
+      />
       {/* Back link & Share */}
       <div className="flex items-center justify-between gap-3">
         <Link

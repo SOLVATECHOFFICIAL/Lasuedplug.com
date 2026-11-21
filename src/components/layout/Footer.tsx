@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Facebook, Instagram, MessageCircle, Twitter } from 'lucide-react';
 import { LOGO_URL, SITE_NAME, SUPPORT_LINK } from '../../lib/constants';
 
 const FOOTER_LINKS = [
@@ -13,6 +14,33 @@ const LEGAL_LINKS = [
   { name: 'Safety Rules', path: '/safety' },
   { name: 'Terms of Service', path: '/terms' },
   { name: 'Privacy Policy', path: '/privacy' },
+];
+
+const SOCIAL_LINKS = [
+  {
+    name: 'Facebook',
+    href: 'https://facebook.com/lasuedplug',
+    icon: Facebook,
+    hoverClass: 'hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50',
+  },
+  {
+    name: 'Twitter',
+    href: 'https://twitter.com/lasuedplug',
+    icon: Twitter,
+    hoverClass: 'hover:text-sky-600 hover:border-sky-200 hover:bg-sky-50',
+  },
+  {
+    name: 'Instagram',
+    href: 'https://instagram.com/lasuedplug',
+    icon: Instagram,
+    hoverClass: 'hover:text-pink-600 hover:border-pink-200 hover:bg-pink-50',
+  },
+  {
+    name: 'WhatsApp',
+    href: SUPPORT_LINK,
+    icon: MessageCircle,
+    hoverClass: 'hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50',
+  },
 ];
 
 export function Footer() {
@@ -74,18 +102,37 @@ export function Footer() {
           <p className="max-w-2xl leading-relaxed">
             LASUEDPLUG is an independent community marketplace. Not affiliated with, endorsed by, or operated by LASUED or LASU.
           </p>
-          <p className="text-slate-500 shrink-0">
-            Designed &amp; Built by{' '}
-            <a
-              href={SUPPORT_LINK}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-slate-700 hover:text-blue-600 underline underline-offset-2 transition-colors"
-            >
-              Oyeyemi Solomon
-            </a>
-            . © {currentYear} {SITE_NAME}.
-          </p>
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
+            <nav aria-label="Social Media" className="flex items-center gap-2">
+              {SOCIAL_LINKS.map(({ name, href, icon: Icon, hoverClass }) => (
+                <a
+                  key={name}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={name}
+                  title={name}
+                  className={`inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 bg-white text-slate-600 transition-colors duration-200 ${hoverClass}`}
+                >
+                  <Icon className="w-4 h-4" />
+                </a>
+              ))}
+            </nav>
+
+            <p className="text-slate-500">
+              Designed &amp; Built by{' '}
+              <a
+                href={SUPPORT_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-slate-700 hover:text-blue-600 underline underline-offset-2 transition-colors"
+              >
+                Oyeyemi Solomon
+              </a>
+              . © {currentYear} {SITE_NAME}.
+            </p>
+          </div>
         </div>
       </div>
     </footer>

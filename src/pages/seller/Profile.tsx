@@ -36,6 +36,7 @@ import { ProductCard } from '../../components/marketplace/ProductCard';
 import { StoreCard } from '../../components/marketplace/StoreCard';
 import { ReviewSection } from '../../components/reviews/ReviewSection';
 import { ReportUserModal } from '../../components/reviews/ReportUserModal';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function SellerProfile() {
   const { uid } = useParams<{ uid: string }>();
@@ -142,6 +143,11 @@ export function SellerProfile() {
   if (!seller) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <SeoHead
+          title="Seller Not Found"
+          ogTitle="Seller Not Found — LASUEDPLUG"
+          description="This seller profile could not be found on LASUEDPLUG."
+        />
         <EmptyState
           icon={UserIcon}
           title="Seller profile not found"
@@ -180,6 +186,15 @@ export function SellerProfile() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+      <SeoHead
+        title={displayName}
+        ogTitle={displayName}
+        description={
+          seller.bio?.trim() ||
+          `${isBusiness ? 'Verified Campus Business' : seller.campus || 'Campus Seller'} on LASUEDPLUG (${products.length} active listings).`
+        }
+        type="profile"
+      />
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
