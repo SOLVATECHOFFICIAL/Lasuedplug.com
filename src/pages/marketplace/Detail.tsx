@@ -39,16 +39,16 @@ import {
   getProductPriceDisplay,
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
-import { getInitials } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
-import { shareListingLink } from '../../lib/shareUtils';
+import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Product } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -244,7 +244,6 @@ export function MarketplaceDetail() {
     getCategoryName(product.categoryId) || product.categoryName;
   const sellerName = product.sellerSnapshot?.fullName || 'Campus Seller';
   const sellerVerified = Boolean(product.sellerSnapshot?.isVerified);
-  const sellerInitials = getInitials(sellerName, null);
   const storeTitle = product.storeName || product.shopName;
   const whatsappHref = buildProductWhatsAppUrl(
     product.whatsappNumber || '',
@@ -357,6 +356,27 @@ export function MarketplaceDetail() {
   const hasGps =
     typeof product.latitude === 'number' && typeof product.longitude === 'number';
 
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? product.id
+        ? `${window.location.origin}/marketplace/${product.id}`
+        : window.location.href
+      : `/marketplace/${product.id || ''}`;
+  const sharePriceText = formatSharePriceText({
+    priceType: product.priceType,
+    price: product.price,
+    adType,
+  });
+
+  const handleShareClick = () => {
+    void shareListing(
+      product.title,
+      sharePriceText,
+      isServiceListing ? 'Service' : 'Item',
+      shareUrl
+    );
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
       <SeoHead
@@ -382,18 +402,7 @@ export function MarketplaceDetail() {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            void shareListingLink({
-              title: product.title,
-              text: `Check out ${product.title} on LASUEDPLUG`,
-            }).then((outcome) => {
-              if (outcome === 'copied') {
-                showToast('Link copied! Share on WhatsApp.', 'success');
-              } else if (outcome === 'failed') {
-                showToast('Could not copy link. Please copy the URL from your browser.', 'error');
-              }
-            });
-          }}
+          onClick={handleShareClick}
         >
           <Share2 className="w-4 h-4" />
           <span>Share</span>
@@ -616,9 +625,13 @@ export function MarketplaceDetail() {
                 className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
-                    {sellerInitials}
-                  </div>
+                  <UserAvatar
+                    uid={product.sellerId}
+                    src={product.sellerSnapshot?.profilePic}
+                    name={sellerName}
+                    size="md"
+                    className="w-11 h-11"
+                  />
                   <div className="min-w-0 space-y-0.5">
                     <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{sellerName}</span>
@@ -638,18 +651,27 @@ export function MarketplaceDetail() {
               </Link>
             </div>
 
-            {/* Desktop WhatsApp Primary Action */}
-            <div className="hidden md:block pt-2">
+            {/* Desktop WhatsApp & Share Actions */}
+            <div className="hidden md:flex items-center gap-2.5 pt-2">
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={handleWhatsAppClick}
-                className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                className="flex-1 min-w-0 min-h-[52px] inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 whitespace-nowrap"
               >
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-5 h-5 shrink-0" />
                 <span>Message Seller on WhatsApp</span>
               </a>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleShareClick}
+                className="min-h-[52px] px-4 py-3.5 rounded-xl text-sm shrink-0 whitespace-nowrap"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </Button>
             </div>
           </Card>
 
@@ -675,18 +697,27 @@ export function MarketplaceDetail() {
         </div>
       </div>
 
-      {/* Fixed Mobile WhatsApp CTA Bar (sits cleanly above MobileNav) */}
-      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-2.5 shadow-sm">
+      {/* Fixed Mobile WhatsApp & Share CTA Bar (sits cleanly above MobileNav) */}
+      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-3.5 py-2.5 shadow-sm flex items-center gap-2.5">
         <a
           href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleWhatsAppClick}
-          className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
+          className="flex-1 min-w-0 min-h-[48px] inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
         >
-          <MessageCircle className="w-5 h-5" />
-          <span>Message Seller on WhatsApp</span>
+          <MessageCircle className="w-5 h-5 shrink-0" />
+          <span className="truncate">WhatsApp Seller</span>
         </a>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleShareClick}
+          className="min-h-[48px] px-4 py-3 rounded-xl shrink-0"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Share</span>
+        </Button>
       </div>
 
       {/* Report Listing Modal */}

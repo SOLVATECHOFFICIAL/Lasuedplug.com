@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ALL_MARKETPLACE_CATEGORIES } from '../../lib/categories';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { createStore } from '../../lib/storeService';
 import { Card } from '../../components/ui/Card';
@@ -206,6 +207,7 @@ export function CreateStore() {
         logoUrl = await compressImageToBase64(logoFile);
       }
 
+      const ownerAvatar = getUserAvatarUrl(profile);
       await createStore({
         ownerId: user.uid,
         name: name.trim(),
@@ -221,6 +223,10 @@ export function CreateStore() {
         ownerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
           isVerified: Boolean(profile?.isVerified),
+          ...(ownerAvatar &&
+          (logoUrl?.length || 0) + ownerAvatar.length <= 850_000
+            ? { profilePic: ownerAvatar }
+            : {}),
         },
       });
 

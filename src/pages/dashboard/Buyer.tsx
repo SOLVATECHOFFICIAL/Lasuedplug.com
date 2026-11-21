@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatEnquiryDate } from '../../lib/buyerHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
@@ -33,6 +34,7 @@ import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { Card } from '../../components/ui/Card';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 
 type BuyerTab = 'saved' | 'enquiries';
@@ -124,7 +126,13 @@ const SavedListingCard = memo(function SavedListingCard({
             {listing.title}
           </h3>
           {(listing.sellerSnapshot?.fullName || listing.sellerSnapshot?.isVerified) && (
-            <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+            <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+              <UserAvatar
+                uid={listing.sellerId}
+                src={listing.sellerSnapshot?.profilePic}
+                name={listing.sellerSnapshot?.fullName || 'Campus Seller'}
+                size="2xs"
+              />
               <span className="truncate">
                 {listing.sellerSnapshot?.fullName || 'Campus Seller'}
               </span>
@@ -161,7 +169,7 @@ const SavedListingCard = memo(function SavedListingCard({
 });
 
 export function BuyerDashboard() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showToast } = useToast();
 
   interface CachedBuyerDash {
@@ -275,13 +283,22 @@ export function BuyerDashboard() {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            My Dashboard
-          </h1>
-          <p className="text-sm text-slate-600">
-            View your saved marketplace items and track sellers you have contacted.
-          </p>
+        <div className="flex items-center gap-3.5 min-w-0">
+          <UserAvatar
+            uid={user?.uid}
+            src={getUserAvatarUrl(profile)}
+            name={profile?.fullName || user?.displayName}
+            email={user?.email}
+            size="md"
+          />
+          <div className="space-y-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              My Dashboard
+            </h1>
+            <p className="text-sm text-slate-600">
+              View your saved marketplace items and track sellers you have contacted.
+            </p>
+          </div>
         </div>
       </div>
 

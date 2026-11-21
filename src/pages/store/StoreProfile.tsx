@@ -11,15 +11,15 @@ import {
   Share2,
   ShieldAlert,
   Store as StoreIcon,
-  User as UserIcon,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
-import { shareListingLink } from '../../lib/shareUtils';
+import { shareListing } from '../../lib/shareUtils';
 import { getPublicUserProfile } from '../../lib/sellerService';
 import {
   getApprovedProductsByStoreId,
@@ -30,6 +30,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { StarRating } from '../../components/ui/StarRating';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
@@ -322,65 +323,73 @@ export function StoreProfile() {
               <div className="pt-1">
                 <Link
                   to={`/seller/${store.ownerId}`}
-                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-primary-600 transition-colors"
+                  className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-600 hover:text-primary-600 transition-colors"
                 >
-                  <UserIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                  <UserAvatar
+                    uid={store.ownerId}
+                    src={
+                      getUserAvatarUrl(ownerProfile) ||
+                      store.ownerSnapshot?.profilePic
+                    }
+                    name={ownerName}
+                    size="xs"
+                  />
                   <span>
-                    Owned by <span className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2">{ownerName}</span>
+                    Owned by{' '}
+                    <span className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2">
+                      {ownerName}
+                    </span>
                   </span>
                 </Link>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row md:flex-col items-stretch sm:items-center md:items-end gap-2.5 w-full md:w-auto shrink-0">
-            {whatsappHref && (
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Chat Store on WhatsApp</span>
-              </a>
-            )}
+          <div className="flex flex-col items-stretch md:items-end gap-2.5 w-full md:w-auto shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              {whatsappHref && (
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Chat Store on WhatsApp</span>
+                </a>
+              )}
 
-            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const storeUrl =
+                    typeof window !== 'undefined'
+                      ? store.id
+                        ? `${window.location.origin}/store/${store.id}`
+                        : window.location.href
+                      : `/store/${store.id || ''}`;
+                  void shareListing(store.name, 'Business', 'Store', storeUrl);
+                }}
+                className="min-h-[44px] px-5 py-3 rounded-xl"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </Button>
+            </div>
+
+            {!isOwner && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void shareListingLink({
-                    title: store.name,
-                    text: `Check out ${store.name} on LASUEDPLUG`,
-                  }).then((outcome) => {
-                    if (outcome === 'copied') {
-                      showToast('Link copied! Share on WhatsApp.', 'success');
-                    } else if (outcome === 'failed') {
-                      showToast('Could not copy link. Please copy the URL from your browser.', 'error');
-                    }
-                  });
-                }}
+                onClick={handleReportClick}
+                className="text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 self-stretch sm:self-end"
               >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Share</span>
+                <Flag className="w-3.5 h-3.5" />
+                <span>Report User</span>
               </Button>
-
-              {!isOwner && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReportClick}
-                  className="text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
-                >
-                  <Flag className="w-3.5 h-3.5" />
-                  <span>Report User</span>
-                </Button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </Card>

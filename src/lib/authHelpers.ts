@@ -301,3 +301,51 @@ export function getFieldCooldownStatus(
   };
 }
 
+export const PROFILE_PIC_COOLDOWN_DAYS = 7;
+
+export function getUserAvatarUrl(
+  profile?: Partial<Pick<UserProfile, 'profilePic' | 'avatarUrl'>> | null
+): string {
+  if (!profile) return '';
+  const pic = typeof profile.profilePic === 'string' ? profile.profilePic.trim() : '';
+  if (pic) return pic;
+  const legacy = typeof profile.avatarUrl === 'string' ? profile.avatarUrl.trim() : '';
+  return legacy;
+}
+
+export function formatCooldownDate(date: Date | null): string {
+  if (!date) return '';
+  return date.toLocaleDateString('en-NG', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export interface ProfilePicLockStatus extends CooldownStatus {
+  lockMessage: string | null;
+}
+
+export function getProfilePicLockStatus(
+  profilePicUpdatedAt: unknown,
+  nowMs: number = Date.now()
+): ProfilePicLockStatus {
+  const status = getFieldCooldownStatus(
+    profilePicUpdatedAt,
+    PROFILE_PIC_COOLDOWN_DAYS,
+    nowMs
+  );
+  if (!status.isLocked) {
+    return {
+      ...status,
+      lockMessage: null,
+    };
+  }
+  const formattedDate =
+    formatCooldownDate(status.nextAvailableDate) ||
+    `${status.remainingDays} day(s)`;
+  return {
+    ...status,
+    lockMessage: `🔒 Profile picture locked. You can change it again on ${formattedDate}.`,
+  };
+}

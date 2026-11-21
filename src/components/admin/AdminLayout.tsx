@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowLeft,
   BadgeCheck,
   CheckSquare,
@@ -10,6 +11,8 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { AdminAlertCounts, hasAnyAdminAlerts } from '../../lib/adminHelpers';
+import { subscribeToAdminAlertCounts } from '../../lib/adminService';
 
 interface AdminLayoutProps {
   title: string;
@@ -43,6 +46,21 @@ export function AdminLayout({
   actionSlot,
   children,
 }: AdminLayoutProps) {
+  const [alertCounts, setAlertCounts] = useState<AdminAlertCounts>({
+    pendingListings: 0,
+    pendingVerifications: 0,
+    openReports: 0,
+  });
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAdminAlertCounts((counts) => {
+      setAlertCounts(counts);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const showAlertBanner = hasAnyAdminAlerts(alertCounts);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-12">
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -99,6 +117,44 @@ export function AdminLayout({
 
         {/* Main Panel */}
         <div className="flex-1 min-w-0 space-y-6">
+          {/* Real-time Admin Alert Banner */}
+          {showAlertBanner && (
+            <div
+              role="status"
+              data-testid="admin-alert-banner"
+              className="rounded-xl bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-950 shadow-sm flex items-start gap-2.5"
+            >
+              <AlertTriangle
+                className="w-4 h-4 text-amber-600 shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <p className="leading-relaxed">
+                ⚠️ Attention: You have{' '}
+                <Link
+                  to="/admin/listings"
+                  className="font-bold underline decoration-amber-500 underline-offset-2 hover:text-amber-700"
+                >
+                  {alertCounts.pendingListings} pending listings
+                </Link>
+                ,{' '}
+                <Link
+                  to="/admin/verifications"
+                  className="font-bold underline decoration-amber-500 underline-offset-2 hover:text-amber-700"
+                >
+                  {alertCounts.pendingVerifications} verifications
+                </Link>
+                , and{' '}
+                <Link
+                  to="/admin/reports"
+                  className="font-bold underline decoration-amber-500 underline-offset-2 hover:text-amber-700"
+                >
+                  {alertCounts.openReports} open reports
+                </Link>
+                .
+              </p>
+            </div>
+          )}
+
           {/* Mobile Horizontal Nav Tabs */}
           <nav
             aria-label="Admin Mobile Navigation"

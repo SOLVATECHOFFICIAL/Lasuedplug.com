@@ -1,13 +1,14 @@
 import {
   ChangeEvent,
   FormEvent,
+  MouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ImagePlus,
   MapPin,
@@ -15,6 +16,7 @@ import {
   Plus,
   Search,
   SearchX,
+  Share2,
   ShieldCheck,
   Users,
   X,
@@ -29,10 +31,11 @@ import {
   createRoommateRequest,
   fetchApprovedRoommateRequests,
 } from '../../lib/accommodationService';
-import { getInitials } from '../../lib/authHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
+import { shareListing } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -41,6 +44,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
@@ -59,6 +63,7 @@ const MAX_ROOMMATE_IMAGES = 3;
 export function Roommates() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile } = useAuth();
   const { showToast } = useToast();
 
@@ -142,6 +147,57 @@ export function Roommates() {
     () => filterRoommateRequests(requests, typeFilter, searchQuery),
     [requests, typeFilter, searchQuery]
   );
+
+  const requestedId = searchParams.get('request');
+  useEffect(() => {
+    if (!requestedId || requests.length === 0) return;
+    const match = requests.find((item) => item.id === requestedId);
+    if (match) {
+      setSelectedRequest(match);
+    }
+  }, [requestedId, requests]);
+
+  const buildRoommateShareUrl = (reqId?: string) => {
+    const base =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/roommates`
+        : '/roommates';
+    return reqId ? `${base}?request=${encodeURIComponent(reqId)}` : base;
+  };
+
+  const handleOpenRoommateDetail = (req: RoommateRequest) => {
+    setSelectedRequest(req);
+    if (req.id) {
+      const next = new URLSearchParams(searchParams);
+      next.set('request', req.id);
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  const handleCloseRoommateDetail = () => {
+    setSelectedRequest(null);
+    if (searchParams.has('request')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('request');
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  const handleShareRoommate = (
+    req: RoommateRequest,
+    e?: MouseEvent<HTMLButtonElement>
+  ) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    void shareListing(
+      req.title,
+      'Roommate Request',
+      'Roommate',
+      buildRoommateShareUrl(req.id)
+    );
+  };
 
   const handleOpenCreateModal = () => {
     if (!user) {
@@ -279,6 +335,7 @@ export function Roommates() {
         );
       }
 
+      const profileAvatar = getUserAvatarUrl(profile);
       await createRoommateRequest({
         userId: user.uid,
         type: reqType,
@@ -293,6 +350,10 @@ export function Roommates() {
           fullName:
             profile?.fullName || user.displayName || 'LASUEDPLUG Student',
           isVerified: Boolean(profile?.isVerified),
+          ...(profileAvatar &&
+          estimatedBytes + profileAvatar.length <= 850_000
+            ? { profilePic: profileAvatar }
+            : {}),
         },
       });
 
@@ -442,82 +503,96 @@ export function Roommates() {
             return (
               <Card
                 key={req.id || req.title}
-                onClick={() => setSelectedRequest(req)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setSelectedRequest(req);
-                  }
-                }}
-                className="cursor-pointer flex flex-col justify-between space-y-4 hover:border-primary-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                padded={false}
+                className="relative flex flex-col justify-between overflow-hidden hover:border-primary-200 transition-colors"
               >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
-                        req.type === 'room_available'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                      }`}
-                    >
-                      {typeLabel}
-                    </span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenRoommateDetail(req)}
+                  className="w-full h-full text-left p-5 flex flex-col justify-between gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl"
+                >
+                  <div className="space-y-3 w-full">
+                    <div className="flex items-center justify-between gap-2 pr-10">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
+                          req.type === 'room_available'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}
+                      >
+                        {typeLabel}
+                      </span>
 
-                    {isVerified && (
-                      <Badge variant="verified">
-                        <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                        Verified
-                      </Badge>
-                    )}
-                  </div>
-
-                  {req.images && req.images.length > 0 && (
-                    <div className="w-full h-36 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-                      <ProductImage
-                        src={req.images[0]}
-                        alt={req.title}
-                        className="w-full h-full object-cover"
-                        iconClassName="w-8 h-8 text-slate-400"
-                      />
+                      {isVerified && (
+                        <Badge variant="verified">
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
                     </div>
-                  )}
 
-                  <h2 className="text-base font-bold text-slate-900 line-clamp-2">
-                    {req.title}
-                  </h2>
+                    {req.images && req.images.length > 0 && (
+                      <div className="w-full h-36 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+                        <ProductImage
+                          src={req.images[0]}
+                          alt={req.title}
+                          className="w-full h-full object-cover"
+                          iconClassName="w-8 h-8 text-slate-400"
+                        />
+                      </div>
+                    )}
 
-                  <div className="space-y-1.5 text-xs text-slate-600">
-                    <p className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{req.generalLocation}</span>
-                    </p>
-                    <p className="text-slate-500 line-clamp-2">
-                      <span className="font-semibold text-slate-700">
-                        Preferences:
-                      </span>{' '}
-                      {req.preferences}
-                    </p>
+                    <h2 className="text-base font-bold text-slate-900 line-clamp-2">
+                      {req.title}
+                    </h2>
+
+                    <div className="space-y-1.5 text-xs text-slate-600">
+                      <p className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{req.generalLocation}</span>
+                      </p>
+                      <p className="text-slate-500 line-clamp-2">
+                        <span className="font-semibold text-slate-700">
+                          Preferences:
+                        </span>{' '}
+                        {req.preferences}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-500 flex items-center gap-1 min-w-0">
-                      <span className="truncate">By {posterName}</span>
-                      {isVerified && <VerifiedBadge size="xs" />}
-                    </p>
-                    <p className="text-sm font-bold text-slate-900 tabular-nums">
-                      {typeof req.budget === 'number' && req.budget > 0
-                        ? `${formatNaira(req.budget)} / yr`
-                        : 'Flexible Budget'}
-                    </p>
+                  <div className="w-full pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500 flex items-center gap-1.5 min-w-0">
+                        <UserAvatar
+                          uid={req.userId}
+                          src={req.userSnapshot?.profilePic}
+                          name={posterName}
+                          size="2xs"
+                        />
+                        <span className="truncate">By {posterName}</span>
+                        {isVerified && <VerifiedBadge size="xs" />}
+                      </p>
+                      <p className="text-sm font-bold text-slate-900 tabular-nums">
+                        {typeof req.budget === 'number' && req.budget > 0
+                          ? `${formatNaira(req.budget)} / yr`
+                          : 'Flexible Budget'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-blue-600 shrink-0">
+                      View &amp; Connect →
+                    </span>
                   </div>
-                  <span className="text-xs font-semibold text-blue-600 shrink-0">
-                    View &amp; Connect →
-                  </span>
-                </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => handleShareRoommate(req, e)}
+                  aria-label={`Share ${req.title}`}
+                  title="Share roommate request"
+                  className="absolute top-3.5 right-3.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
               </Card>
             );
           })}
@@ -531,7 +606,7 @@ export function Roommates() {
           aria-modal="true"
           aria-labelledby="roommate-detail-title"
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setSelectedRequest(null)}
+          onClick={handleCloseRoommateDetail}
         >
           <div
             className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
@@ -557,7 +632,7 @@ export function Roommates() {
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedRequest(null)}
+                onClick={handleCloseRoommateDetail}
                 aria-label="Close details"
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
@@ -627,12 +702,12 @@ export function Roommates() {
               className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                  {getInitials(
-                    selectedRequest.userSnapshot?.fullName || 'Student',
-                    null
-                  )}
-                </div>
+                <UserAvatar
+                  uid={selectedRequest.userId}
+                  src={selectedRequest.userSnapshot?.profilePic}
+                  name={selectedRequest.userSnapshot?.fullName || 'Student'}
+                  size="md"
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                     <span className="truncate">
@@ -656,7 +731,7 @@ export function Roommates() {
               )}
             </Link>
 
-            <div className="pt-1">
+            <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               <a
                 href={buildRoommateWhatsAppUrl(
                   selectedRequest.whatsappNumber || '',
@@ -664,11 +739,20 @@ export function Roommates() {
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
+                className="flex-1 min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
               >
                 <MessageCircle className="w-5 h-5" />
                 <span>Message on WhatsApp</span>
               </a>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleShareRoommate(selectedRequest)}
+                className="min-h-[48px] px-5 py-3.5 rounded-xl shrink-0"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  areAllVisibleSelected,
   extractListingOwnerId,
   filterAdminUsers,
   filterPendingAdminItems,
@@ -9,6 +10,7 @@ import {
   getAdminUserFilterUrl,
   getPrimaryUserRoleBadge,
   getReportListingRoute,
+  hasAnyAdminAlerts,
   isAuthorizedAdminEmail,
   isAuthorizedAdminSession,
   isUserAdmin,
@@ -18,6 +20,8 @@ import {
   mapStoreToPendingAdminItem,
   PRIMARY_ADMIN_EMAIL,
   sortPendingAdminItems,
+  toggleBulkSelectionKey,
+  toggleSelectAllVisibleKeys,
 } from './adminHelpers';
 import {
   accommodationToUnifiedSellerListing,
@@ -173,12 +177,14 @@ test('getAdminReportTargetCollection resolves all report target types cleanly', 
   assert.equal(getAdminReportTargetCollection('user'), null);
 });
 
-test('filterAdminUsers filters by name, email, or department and detects primary role badge', () => {
+test('filterAdminUsers filters by name, email, phone, campus, or department and detects primary role badge', () => {
   const users: UserProfile[] = [
     {
       uid: '1',
       email: 'ada@lasued.edu.ng',
       fullName: 'Ada Obi',
+      phone: '0801 234 5678',
+      campus: 'LASUED',
       department: 'Computer Science',
       roles: { buyer: true, admin: true },
       isVerified: true,
@@ -188,8 +194,10 @@ test('filterAdminUsers filters by name, email, or department and detects primary
     },
     {
       uid: '2',
-      email: 'tunde@lasued.edu.ng',
+      email: 'tunde@lasu.edu.ng',
       fullName: 'Tunde Bello',
+      phone: '08098765432',
+      campus: 'LASU',
       department: 'Economics',
       roles: { buyer: true, landlord: true },
       isVerified: false,
@@ -201,10 +209,45 @@ test('filterAdminUsers filters by name, email, or department and detects primary
 
   assert.equal(filterAdminUsers(users, 'ada').length, 1);
   assert.equal(filterAdminUsers(users, 'economics').length, 1);
-  assert.equal(filterAdminUsers(users, '2').length, 1);
-  assert.equal(filterAdminUsers(users, '2')[0].email, 'tunde@lasued.edu.ng');
+  assert.equal(filterAdminUsers(users, '08012345678').length, 1);
+  assert.equal(filterAdminUsers(users, '0809876').length, 1);
+  assert.equal(filterAdminUsers(users, 'lasu').length, 2);
+  assert.equal(filterAdminUsers(users, 'lasued').length, 1);
+  assert.equal(filterAdminUsers(users, '2').length, 2); // uid '2' and phone '08098765432'
+  assert.equal(filterAdminUsers(users, 'tunde@lasu').length, 1);
   assert.equal(getPrimaryUserRoleBadge(users[0]), 'Admin');
   assert.equal(getPrimaryUserRoleBadge(users[1]), 'Landlord');
+});
+
+test('hasAnyAdminAlerts and bulk selection helpers behave deterministically', () => {
+  assert.equal(
+    hasAnyAdminAlerts({ pendingListings: 0, pendingVerifications: 0, openReports: 0 }),
+    false
+  );
+  assert.equal(
+    hasAnyAdminAlerts({ pendingListings: 2, pendingVerifications: 0, openReports: 0 }),
+    true
+  );
+  assert.equal(
+    hasAnyAdminAlerts({ pendingListings: 0, pendingVerifications: 1, openReports: 0 }),
+    true
+  );
+  assert.equal(
+    hasAnyAdminAlerts({ pendingListings: 0, pendingVerifications: 0, openReports: 3 }),
+    true
+  );
+
+  let selected: string[] = [];
+  selected = toggleBulkSelectionKey(selected, 'a');
+  assert.deepEqual(selected, ['a']);
+  selected = toggleBulkSelectionKey(selected, 'b');
+  assert.equal(areAllVisibleSelected(selected, ['a', 'b']), true);
+  selected = toggleSelectAllVisibleKeys(selected, ['a', 'b']);
+  assert.deepEqual(selected, []);
+  selected = toggleSelectAllVisibleKeys(['x'], ['a', 'b']);
+  assert.deepEqual(selected, ['x', 'a', 'b']);
+  selected = toggleSelectAllVisibleKeys(selected, ['a', 'b']);
+  assert.deepEqual(selected, ['x']);
 });
 
 test('extractListingOwnerId, getReportListingRoute, and getAdminUserFilterUrl resolve moderation targets', () => {

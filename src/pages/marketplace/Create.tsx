@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { db } from '../../lib/firebase';
 import {
   getCategoriesForAdType,
@@ -557,6 +558,17 @@ export function MarketplaceCreate() {
         throw new Error(
           'Selected photos are too large even after compression. Please select fewer or smaller photos.'
         );
+      }
+
+      const sellerAvatar = getUserAvatarUrl(profile);
+      if (
+        sellerAvatar &&
+        totalImagesLength + sellerAvatar.length <= 850_000
+      ) {
+        payload.sellerSnapshot = {
+          ...(payload.sellerSnapshot as Record<string, unknown>),
+          profilePic: sellerAvatar,
+        };
       }
 
       const productsCol = collection(db, 'products');

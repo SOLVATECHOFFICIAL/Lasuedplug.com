@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import { registerShareToastHandler } from '../lib/shareUtils';
 
 interface Toast {
   id: string;
@@ -23,10 +24,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 4000);
   }, []);
 
+  useEffect(() => {
+    registerShareToastHandler(showToast);
+    return () => {
+      registerShareToastHandler(null);
+    };
+  }, [showToast]);
+
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed bottom-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+      >
         {toasts.map(t => (
           <div
             key={t.id}

@@ -188,13 +188,77 @@ export function filterAdminUsers(
   if (!q) {
     return users;
   }
-  return users.filter(
-    (user) =>
-      (user.uid || '').toLowerCase().includes(q) ||
-      (user.fullName || '').toLowerCase().includes(q) ||
-      (user.email || '').toLowerCase().includes(q) ||
-      (user.department || '').toLowerCase().includes(q)
+  const normalizedPhoneQuery = q.replace(/[\s\-()]/g, '');
+  return users.filter((user) => {
+    const uidMatch = (user.uid || '').toLowerCase().includes(q);
+    const nameMatch = (user.fullName || '').toLowerCase().includes(q);
+    const emailMatch = (user.email || '').toLowerCase().includes(q);
+    const phoneRaw = (user.phone || '').toLowerCase();
+    const phoneMatch =
+      phoneRaw.includes(q) ||
+      (normalizedPhoneQuery.length > 0 &&
+        phoneRaw.replace(/[\s\-()]/g, '').includes(normalizedPhoneQuery));
+    const campusMatch = (user.campus || '').toLowerCase().includes(q);
+    const departmentMatch = (user.department || '').toLowerCase().includes(q);
+
+    return (
+      uidMatch ||
+      nameMatch ||
+      emailMatch ||
+      phoneMatch ||
+      campusMatch ||
+      departmentMatch
+    );
+  });
+}
+
+export interface AdminAlertCounts {
+  pendingListings: number;
+  pendingVerifications: number;
+  openReports: number;
+}
+
+export function hasAnyAdminAlerts(counts: AdminAlertCounts): boolean {
+  return (
+    counts.pendingListings > 0 ||
+    counts.pendingVerifications > 0 ||
+    counts.openReports > 0
   );
+}
+
+export function toggleBulkSelectionKey(
+  selectedKeys: readonly string[],
+  key: string
+): string[] {
+  if (!key) return [...selectedKeys];
+  return selectedKeys.includes(key)
+    ? selectedKeys.filter((item) => item !== key)
+    : [...selectedKeys, key];
+}
+
+export function areAllVisibleSelected(
+  selectedKeys: readonly string[],
+  visibleKeys: readonly string[]
+): boolean {
+  if (visibleKeys.length === 0) return false;
+  const selectedSet = new Set(selectedKeys);
+  return visibleKeys.every((key) => selectedSet.has(key));
+}
+
+export function toggleSelectAllVisibleKeys(
+  selectedKeys: readonly string[],
+  visibleKeys: readonly string[]
+): string[] {
+  if (visibleKeys.length === 0) return [...selectedKeys];
+  if (areAllVisibleSelected(selectedKeys, visibleKeys)) {
+    const visibleSet = new Set(visibleKeys);
+    return selectedKeys.filter((key) => !visibleSet.has(key));
+  }
+  const merged = new Set(selectedKeys);
+  for (const key of visibleKeys) {
+    if (key) merged.add(key);
+  }
+  return Array.from(merged);
 }
 
 export function getAdminReportTargetCollection(

@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { memo, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, ShoppingBag, Store, Truck, Wrench } from 'lucide-react';
+import { MapPin, Share2, ShoppingBag, Store, Truck, Wrench } from 'lucide-react';
 import { Product } from '../../types';
 import { getCategoryName } from '../../lib/categories';
 import {
@@ -10,7 +10,9 @@ import {
   getServiceLocationLabel,
 } from '../../lib/marketplaceHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
 import { Card } from '../ui/Card';
+import { UserAvatar } from '../ui/UserAvatar';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { ProductImage } from './ProductImage';
 
@@ -58,16 +60,40 @@ export const ProductCard = memo(function ProductCard({
     });
   };
 
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? product.id
+        ? `${window.location.origin}/marketplace/${product.id}`
+        : `${window.location.origin}/marketplace`
+      : `/marketplace/${product.id || ''}`;
+  const sharePriceText = formatSharePriceText({
+    priceType: product.priceType,
+    price: product.price,
+    adType,
+  });
+
+  const handleShareClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void shareListing(
+      product.title,
+      sharePriceText,
+      isServiceListing ? 'Service' : 'Item',
+      shareUrl
+    );
+  };
+
   return (
-    <Link
-      to={`/marketplace/${product.id}`}
-      onClick={handleTrackClick}
-      className={`group block h-full focus:outline-none ${className}`.trim()}
-    >
-      <Card
-        padded={false}
-        className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+    <div className={`relative group h-full ${className}`.trim()}>
+      <Link
+        to={`/marketplace/${product.id}`}
+        onClick={handleTrackClick}
+        className="block h-full focus:outline-none"
       >
+        <Card
+          padded={false}
+          className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+        >
         <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
           <ProductImage
             src={product.images?.[0]}
@@ -106,8 +132,14 @@ export const ProductCard = memo(function ProductCard({
                 <span className="truncate">{storeTitle}</span>
               </p>
             )}
-            {(sellerName || isSellerVerified) && (
-              <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+            {(sellerName || isSellerVerified || product.sellerSnapshot?.profilePic) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+                <UserAvatar
+                  uid={product.sellerId}
+                  src={product.sellerSnapshot?.profilePic}
+                  name={sellerName || 'Campus Seller'}
+                  size="2xs"
+                />
                 <span className="truncate">{sellerName || 'Campus Seller'}</span>
                 {isSellerVerified && <VerifiedBadge size="xs" />}
               </p>
@@ -184,6 +216,17 @@ export const ProductCard = memo(function ProductCard({
         </div>
       </Card>
     </Link>
+
+      <button
+        type="button"
+        onClick={handleShareClick}
+        aria-label={`Share ${product.title}`}
+        title="Share listing"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    </div>
   );
 });
 

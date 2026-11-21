@@ -272,3 +272,40 @@ export async function rejectVerificationRequest(
     throw mapVerificationError(err, 'Failed to reject verification request.');
   }
 }
+
+export async function bulkApproveVerificationRequests(
+  requests: VerificationRequest[]
+): Promise<{ succeeded: VerificationRequest[]; failedCount: number }> {
+  const succeeded: VerificationRequest[] = [];
+  let failedCount = 0;
+
+  for (const req of requests) {
+    try {
+      await approveVerificationRequest(req);
+      succeeded.push(req);
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { succeeded, failedCount };
+}
+
+export async function bulkRejectVerificationRequests(
+  requests: VerificationRequest[]
+): Promise<{ succeeded: VerificationRequest[]; failedCount: number }> {
+  const succeeded: VerificationRequest[] = [];
+  let failedCount = 0;
+
+  for (const req of requests) {
+    try {
+      await rejectVerificationRequest(req);
+      succeeded.push(req);
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { succeeded, failedCount };
+}
+

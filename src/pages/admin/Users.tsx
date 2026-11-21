@@ -17,11 +17,13 @@ import {
   filterAdminUsers,
   getPrimaryUserRoleBadge,
 } from '../../lib/adminHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { getAllUsers, updateUserAccountStatus } from '../../lib/adminService';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { UserProfile } from '../../types';
 import { AdminLayout } from '../../components/admin/AdminLayout';
 import { Button } from '../../components/ui/Button';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { ErrorState } from '../../components/feedback/ErrorState';
 
@@ -163,7 +165,7 @@ export function AdminUsers() {
               type="search"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search by name, email, department, or UID..."
+              placeholder="Search by name, email, phone, or campus..."
               aria-label="Search users"
               className="block w-full pl-10 pr-9 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -206,18 +208,38 @@ export function AdminUsers() {
                       return (
                         <tr key={account.uid} className="hover:bg-slate-50/70">
                           <td className="py-3.5 px-4">
-                            <div className="font-semibold text-slate-900 inline-flex items-center gap-1.5">
-                              <span>{account.fullName || 'Unnamed Student'}</span>
-                              {account.isVerified && <VerifiedBadge size="xs" />}
-                            </div>
-                            {account.department && (
-                              <div className="text-xs text-slate-500">
-                                {account.department}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <UserAvatar
+                                uid={account.uid}
+                                src={getUserAvatarUrl(account)}
+                                name={account.fullName}
+                                email={account.email}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                                  <span className="truncate">
+                                    {account.fullName || 'Unnamed Student'}
+                                  </span>
+                                  {account.isVerified && <VerifiedBadge size="xs" />}
+                                </div>
+                                {(account.campus || account.department) && (
+                                  <div className="text-xs text-slate-500 truncate">
+                                    {[account.campus, account.department]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600">
-                            {account.email}
+                            <div className="truncate">{account.email}</div>
+                            {account.phone && (
+                              <div className="text-xs text-slate-500 tabular-nums">
+                                {account.phone}
+                              </div>
+                            )}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">

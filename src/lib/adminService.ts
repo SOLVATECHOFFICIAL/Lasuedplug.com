@@ -8,6 +8,7 @@ import {
   getCountFromServer,
   getDoc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -19,6 +20,7 @@ import { db } from './firebase';
 import { invalidateFastCachePrefix } from './fastCache';
 import { getTimestampMillis } from './homeHelpers';
 import {
+  AdminAlertCounts,
   AdminDashboardStats,
   EnrichedReport,
   extractListingOwnerId,
@@ -136,6 +138,108 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   }
 }
 
+/**
+ * Subscribes in real time to pending listings (across all 4 modules),
+ * pending student verifications, and open reports for the Admin Alert Banner.
+ */
+export function subscribeToAdminAlertCounts(
+  onUpdate: (counts: AdminAlertCounts) => void,
+  onError?: (err: Error) => void
+): () => void {
+  if (!db) {
+    onUpdate({ pendingListings: 0, pendingVerifications: 0, openReports: 0 });
+    return () => {};
+  }
+
+  let pendingProducts = 0;
+  let pendingAccommodations = 0;
+  let pendingRoommates = 0;
+  let pendingStores = 0;
+  let pendingVerifications = 0;
+  let openReports = 0;
+
+  const emit = () => {
+    onUpdate({
+      pendingListings:
+        pendingProducts +
+        pendingAccommodations +
+        pendingRoommates +
+        pendingStores,
+      pendingVerifications,
+      openReports,
+    });
+  };
+
+  const handleErr = (err: unknown) => {
+    if (onError) {
+      onError(mapAdminError(err, 'Unable to sync real-time admin alerts.'));
+    }
+  };
+
+  const unsubProducts = onSnapshot(
+    query(collection(db, 'products'), where('isApproved', '==', false)),
+    (snap) => {
+      pendingProducts = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  const unsubAccommodations = onSnapshot(
+    query(collection(db, 'accommodations'), where('isApproved', '==', false)),
+    (snap) => {
+      pendingAccommodations = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  const unsubRoommates = onSnapshot(
+    query(collection(db, 'roommate_requests'), where('isApproved', '==', false)),
+    (snap) => {
+      pendingRoommates = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  const unsubStores = onSnapshot(
+    query(collection(db, 'stores'), where('isApproved', '==', false)),
+    (snap) => {
+      pendingStores = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  const unsubVerifications = onSnapshot(
+    query(collection(db, 'verification_requests'), where('status', '==', 'pending')),
+    (snap) => {
+      pendingVerifications = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  const unsubReports = onSnapshot(
+    query(collection(db, 'reports'), where('status', '==', 'open')),
+    (snap) => {
+      openReports = snap.size;
+      emit();
+    },
+    handleErr
+  );
+
+  return () => {
+    unsubProducts();
+    unsubAccommodations();
+    unsubRoommates();
+    unsubStores();
+    unsubVerifications();
+    unsubReports();
+  };
+}
+
 async function fetchPendingDocs<T>(collectionName: string): Promise<T[]> {
   if (!db) return [];
   const colRef = collection(db, collectionName);
@@ -242,6 +346,44 @@ export async function rejectPendingItem(item: PendingAdminItem): Promise<void> {
   } catch (err) {
     throw mapAdminError(err, 'Failed to reject and delete listing.');
   }
+}
+
+export async function bulkApprovePendingItems(items: PendingAdminItem[]): Promise<{
+  succeeded: PendingAdminItem[];
+  failedCount: number;
+}> {
+  const succeeded: PendingAdminItem[] = [];
+  let failedCount = 0;
+
+  for (const item of items) {
+    try {
+      await approvePendingItem(item);
+      succeeded.push(item);
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { succeeded, failedCount };
+}
+
+export async function bulkRejectPendingItems(items: PendingAdminItem[]): Promise<{
+  succeeded: PendingAdminItem[];
+  failedCount: number;
+}> {
+  const succeeded: PendingAdminItem[] = [];
+  let failedCount = 0;
+
+  for (const item of items) {
+    try {
+      await rejectPendingItem(item);
+      succeeded.push(item);
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { succeeded, failedCount };
 }
 
 /**

@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { LOGO_URL, SITE_NAME } from '../../lib/constants';
-import { getInitials } from '../../lib/authHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import {
   DASHBOARD_MODE_EVENT,
   getPreferredDashboardPath,
@@ -34,6 +34,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePWAInstall } from '../../contexts/PWAContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../ui/Button';
+import { UserAvatar } from '../ui/UserAvatar';
 import { OfflineBanner } from './OfflineBanner';
 
 const NAV_LINKS = [
@@ -48,7 +49,6 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [avatarLoadError, setAvatarLoadError] = useState(false);
   const [preferredDashboardPath, setPreferredDashboardPath] = useState<
     '/dashboard/buyer' | '/dashboard/seller'
   >(() => getPreferredDashboardPath());
@@ -63,18 +63,11 @@ export function Navbar() {
   const { showToast } = useToast();
 
   const displayName = profile?.fullName || user?.displayName || 'Campus User';
-  const initials = getInitials(
-    profile?.fullName || user?.displayName,
-    user?.email
-  );
+  const avatarSrc = getUserAvatarUrl(profile);
   const unreadCount = useMemo(
     () => countUnreadNotifications(notifications),
     [notifications]
   );
-
-  useEffect(() => {
-    setAvatarLoadError(false);
-  }, [profile?.avatarUrl]);
 
   useEffect(() => {
     setDropdownOpen(false);
@@ -361,20 +354,14 @@ export function Navbar() {
                     aria-haspopup="menu"
                     className="flex items-center gap-2 p-1 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                  {profile?.avatarUrl && !avatarLoadError ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={displayName}
-                      loading="lazy"
-                      decoding="async"
-                      onError={() => setAvatarLoadError(true)}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="w-8 h-8 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center">
-                      {initials}
-                    </span>
-                  )}
+                  <UserAvatar
+                    uid={user.uid}
+                    src={avatarSrc}
+                    name={displayName}
+                    email={user.email}
+                    size="sm"
+                    className="border-0"
+                  />
                   <span className="text-sm font-medium text-slate-700 max-w-[120px] truncate">
                     {displayName}
                   </span>
@@ -511,20 +498,16 @@ export function Navbar() {
                 <Link
                   to="/dashboard/profile"
                   aria-label="Go to profile"
-                  className="w-10 h-10 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center overflow-hidden transition-all duration-200 active:scale-95"
+                  className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden transition-all duration-200 active:scale-95 shrink-0"
                 >
-                  {profile?.avatarUrl && !avatarLoadError ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={displayName}
-                      loading="lazy"
-                      decoding="async"
-                      onError={() => setAvatarLoadError(true)}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    initials
-                  )}
+                  <UserAvatar
+                    uid={user.uid}
+                    src={avatarSrc}
+                    name={displayName}
+                    email={user.email}
+                    size="md"
+                    className="w-full h-full border-0"
+                  />
                 </Link>
               </>
             )}
@@ -579,9 +562,14 @@ export function Navbar() {
 
             {user && (
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="w-10 h-10 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
-                  {initials}
-                </span>
+                <UserAvatar
+                  uid={user.uid}
+                  src={avatarSrc}
+                  name={displayName}
+                  email={user.email}
+                  size="md"
+                  className="border-0"
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate">
                     {displayName}

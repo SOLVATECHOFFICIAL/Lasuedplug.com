@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getInitials } from '../../lib/authHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
 import { fetchReviewsForTarget } from '../../lib/reviewService';
@@ -28,6 +28,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { StarRating } from '../../components/ui/StarRating';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
@@ -67,7 +68,6 @@ export function SellerProfile() {
   );
   const [loading, setLoading] = useState(() => Boolean(uid) && !initialCached);
   const [error, setError] = useState<string | null>(null);
-  const [avatarFailed, setAvatarFailed] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const loadSellerProfile = useCallback(async () => {
@@ -88,7 +88,6 @@ export function SellerProfile() {
       setLoading(true);
     }
     setError(null);
-    setAvatarFailed(false);
 
     try {
       const [profileData, sellerStores, sellerProducts, sellerReviews] =
@@ -164,7 +163,6 @@ export function SellerProfile() {
     (isBusiness ? seller.businessName?.trim() : '') ||
     seller.fullName?.trim() ||
     'Campus Member';
-  const initials = getInitials(displayName, null);
   const whatsappDigits = seller.phone
     ? formatNigerianWhatsAppDigits(seller.phone)
     : '';
@@ -216,20 +214,13 @@ export function SellerProfile() {
       <Card hoverable={false} className="p-5 sm:p-7">
         <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
           <div className="flex flex-col sm:flex-row gap-5 items-start min-w-0 flex-1">
-            {seller.avatarUrl && !avatarFailed ? (
-              <img
-                src={seller.avatarUrl}
-                alt={displayName}
-                loading="lazy"
-                decoding="async"
-                onError={() => setAvatarFailed(true)}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border border-slate-200 shrink-0"
-              />
-            ) : (
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary-500 text-white text-xl sm:text-2xl font-bold flex items-center justify-center shrink-0">
-                {initials}
-              </div>
-            )}
+            <UserAvatar
+              uid={seller.uid}
+              src={getUserAvatarUrl(seller)}
+              name={displayName}
+              email={seller.email}
+              size="xl"
+            />
 
             <div className="space-y-2.5 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">

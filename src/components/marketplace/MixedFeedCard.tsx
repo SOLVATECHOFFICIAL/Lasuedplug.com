@@ -1,12 +1,14 @@
-import { memo } from 'react';
+import { memo, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Wrench } from 'lucide-react';
+import { MapPin, Share2, Wrench } from 'lucide-react';
 import { getCategoryName } from '../../lib/categories';
 import { getProductPriceDisplay } from '../../lib/marketplaceHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { formatSharePriceText, shareListing } from '../../lib/shareUtils';
 import { MixedFeedItem } from '../../lib/trendingHelpers';
 import { Service } from '../../types';
 import { Card } from '../ui/Card';
+import { UserAvatar } from '../ui/UserAvatar';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { AccommodationCard } from './AccommodationCard';
 import { ProductCard } from './ProductCard';
@@ -18,7 +20,7 @@ interface LegacyServiceCardProps {
   isVerified?: boolean;
 }
 
-const LegacyServiceCard = memo(function LegacyServiceCard({
+export const LegacyServiceCard = memo(function LegacyServiceCard({
   service,
   isVerified,
 }: LegacyServiceCardProps) {
@@ -41,16 +43,37 @@ const LegacyServiceCard = memo(function LegacyServiceCard({
     });
   };
 
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? service.id
+        ? `${window.location.origin}/marketplace/${service.id}`
+        : `${window.location.origin}/services`
+      : `/marketplace/${service.id || ''}`;
+  const sharePriceText =
+    service.priceRange?.trim() ||
+    formatSharePriceText({
+      priceType: service.priceType || 'contact',
+      price: service.price,
+      adType: 'service',
+    });
+
+  const handleShareClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void shareListing(service.title, sharePriceText, 'Service', shareUrl);
+  };
+
   return (
-    <Link
-      to={`/marketplace/${service.id}`}
-      onClick={handleTrackClick}
-      className="group block h-full focus:outline-none"
-    >
-      <Card
-        padded={false}
-        className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+    <div className="relative group h-full">
+      <Link
+        to={`/marketplace/${service.id}`}
+        onClick={handleTrackClick}
+        className="block h-full focus:outline-none"
       >
+        <Card
+          padded={false}
+          className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+        >
         <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
           <ProductImage
             src={service.images?.[0]}
@@ -73,8 +96,14 @@ const LegacyServiceCard = memo(function LegacyServiceCard({
             <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
               {service.title}
             </h3>
-            {(sellerName || verified) && (
-              <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+            {(sellerName || verified || service.sellerSnapshot?.profilePic) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+                <UserAvatar
+                  uid={service.providerId}
+                  src={service.sellerSnapshot?.profilePic}
+                  name={sellerName || 'Service Provider'}
+                  size="2xs"
+                />
                 <span className="truncate">{sellerName || 'Service Provider'}</span>
                 {verified && <VerifiedBadge size="xs" />}
               </p>
@@ -93,6 +122,17 @@ const LegacyServiceCard = memo(function LegacyServiceCard({
         </div>
       </Card>
     </Link>
+
+      <button
+        type="button"
+        onClick={handleShareClick}
+        aria-label={`Share ${service.title}`}
+        title="Share service"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    </div>
   );
 });
 

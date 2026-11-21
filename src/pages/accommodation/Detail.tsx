@@ -17,16 +17,15 @@ import {
   getAccommodationRent,
   getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
-import { getInitials } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
-import { shareListingLink } from '../../lib/shareUtils';
+import { shareListing } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
-import { useToast } from '../../contexts/ToastContext';
 import { Accommodation } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { Loading } from '../../components/feedback/Loading';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -35,7 +34,6 @@ import { SeoHead } from '../../components/seo/SeoHead';
 
 export function AccommodationDetail() {
   const { id } = useParams<{ id: string }>();
-  const { showToast } = useToast();
 
   const initialCached = id
     ? getFastCache<Omit<Accommodation, 'exactAddress'>>(`accommodation:${id}`)
@@ -162,12 +160,27 @@ export function AccommodationDetail() {
   const rentPrice = getAccommodationRent(item);
   const ownerName = item.ownerSnapshot?.fullName || 'Campus Landlord / Agent';
   const ownerVerified = Boolean(item.ownerSnapshot?.isVerified);
-  const ownerInitials = getInitials(ownerName, null);
   const amenities = Array.isArray(item.amenities) ? item.amenities : [];
   const whatsappHref = buildAccommodationWhatsAppUrl(
     item.whatsappNumber || '',
     item.title
   );
+
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? item.id
+        ? `${window.location.origin}/accommodation/${item.id}`
+        : window.location.href
+      : `/accommodation/${item.id || ''}`;
+
+  const handleShareClick = () => {
+    void shareListing(
+      item.title,
+      `${formatNaira(rentPrice)}/year`,
+      'Accommodation',
+      shareUrl
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-36 md:pb-12 space-y-6">
@@ -192,18 +205,7 @@ export function AccommodationDetail() {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            void shareListingLink({
-              title: item.title,
-              text: `Check out ${item.title} on LASUEDPLUG`,
-            }).then((outcome) => {
-              if (outcome === 'copied') {
-                showToast('Link copied! Share on WhatsApp.', 'success');
-              } else if (outcome === 'failed') {
-                showToast('Could not copy link. Please copy the URL from your browser.', 'error');
-              }
-            });
-          }}
+          onClick={handleShareClick}
         >
           <Share2 className="w-4 h-4" />
           <span>Share</span>
@@ -322,9 +324,13 @@ export function AccommodationDetail() {
                 className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
-                    {ownerInitials}
-                  </div>
+                  <UserAvatar
+                    uid={item.ownerId}
+                    src={item.ownerSnapshot?.profilePic}
+                    name={ownerName}
+                    size="md"
+                    className="w-11 h-11"
+                  />
                   <div className="min-w-0 space-y-0.5">
                     <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{ownerName}</span>
@@ -344,33 +350,51 @@ export function AccommodationDetail() {
               </Link>
             </div>
 
-            {/* Desktop WhatsApp Primary Action */}
-            <div className="hidden md:block pt-2">
+            {/* Desktop WhatsApp & Share Actions */}
+            <div className="hidden md:flex items-center gap-2.5 pt-2">
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-base font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                className="flex-1 min-w-0 min-h-[52px] inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 whitespace-nowrap"
               >
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-5 h-5 shrink-0" />
                 <span>Message Landlord/Agent</span>
               </a>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleShareClick}
+                className="min-h-[52px] px-4 py-3.5 rounded-xl text-sm shrink-0 whitespace-nowrap"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </Button>
             </div>
           </Card>
         </div>
       </div>
 
-      {/* Mobile Fixed WhatsApp CTA */}
-      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 py-2.5 shadow-sm">
+      {/* Mobile Fixed WhatsApp & Share CTA */}
+      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-3.5 py-2.5 shadow-sm flex items-center gap-2.5">
         <a
           href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
+          className="flex-1 min-w-0 min-h-[48px] inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
         >
-          <MessageCircle className="w-5 h-5" />
-          <span>Message Landlord/Agent</span>
+          <MessageCircle className="w-5 h-5 shrink-0" />
+          <span className="truncate">Message Landlord/Agent</span>
         </a>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleShareClick}
+          className="min-h-[48px] px-4 py-3 rounded-xl shrink-0"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Share</span>
+        </Button>
       </div>
     </div>
   );

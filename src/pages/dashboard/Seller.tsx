@@ -37,6 +37,7 @@ import {
   UnifiedSellerListing,
 } from '../../lib/sellerHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import {
   deleteUnifiedSellerListing,
@@ -50,6 +51,7 @@ import { ProductImage } from '../../components/marketplace/ProductImage';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { Button } from '../../components/ui/Button';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 const TAB_CONFIG: Array<{ id: SellerTab; label: string }> = [
   { id: 'all', label: 'All' },
@@ -139,7 +141,7 @@ function ModuleTypeBadge({ type }: { type: SellerModuleType }) {
 }
 
 export function SellerDashboard() {
-  const { user, loading: authLoading, isProfileComplete } = useAuth();
+  const { user, profile, loading: authLoading, isProfileComplete } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -428,13 +430,22 @@ export function SellerDashboard() {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
-        <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Seller Dashboard
-          </h1>
-          <p className="text-sm text-slate-600">
-            Manage all your Items, Services, Accommodations, Roommate posts, and Campus Stores in one place.
-          </p>
+        <div className="flex items-center gap-3.5 min-w-0">
+          <UserAvatar
+            uid={user?.uid}
+            src={getUserAvatarUrl(profile)}
+            name={profile?.fullName || user?.displayName}
+            email={user?.email}
+            size="md"
+          />
+          <div className="space-y-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Seller Dashboard
+            </h1>
+            <p className="text-sm text-slate-600">
+              Manage all your Items, Services, Accommodations, Roommate posts, and Campus Stores in one place.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0 w-full sm:w-auto">

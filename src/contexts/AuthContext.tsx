@@ -37,6 +37,8 @@ import {
   checkProfileCompleteness,
   formatFirebaseAuthError,
   getFieldCooldownStatus,
+  getProfilePicLockStatus,
+  getUserAvatarUrl,
   isAcademicFieldLocked,
   isAccountSuspended,
   NAME_LOCK_MESSAGE,
@@ -45,6 +47,7 @@ import {
 } from '../lib/authHelpers';
 import { AccountType, UserProfile } from '../types';
 import { getFastCache, invalidateFastCache, setFastCache } from '../lib/fastCache';
+import { primeUserProfilePic } from '../lib/userAvatarCache';
 
 export interface ProfileUpdateFields {
   fullName: string;
@@ -75,6 +78,7 @@ export interface AuthContextValue {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateUserProfile: (updates: ProfileUpdateFields) => Promise<void>;
+  updateProfilePicture: (profilePic: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -152,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setProfile(data);
           setFastCache(`user_profile:${uid}`, data);
+          primeUserProfilePic(uid, getUserAvatarUrl(data));
           return data;
         }
         if (email && (await isEmailBannedInFirestore(email))) {
@@ -218,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             setProfile(liveProfile);
             setFastCache(`user_profile:${firebaseUser.uid}`, liveProfile);
+            primeUserProfilePic(firebaseUser.uid, getUserAvatarUrl(liveProfile));
           },
           (err) => {
             console.warn('Profile status listener warning:', err);
@@ -501,6 +507,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, profile]
   );
 
+  const updateProfilePicture = useCallback(
+    async (profilePicBase64: string) => {
+      if (!auth || !db || !user || isAccountSuspended(profile)) {
+        throw new Error(
+          'You must be signed in with an active account to update your profile picture.'
+        );
+      }
+
+      const lockStatus = getProfilePicLockStatus(profile?.profilePicUpdatedAt);
+      if (lockStatus.isLocked && lockStatus.lockMessage) {
+        throw new Error(lockStatus.lockMessage);
+      }
+
+      const cleaned = profilePicBase64.trim();
+      if (!cleaned) {
+        throw new Error('Please choose a valid image file.');
+      }
+      if (cleaned.length > 150_000) {
+        throw new Error(
+          'Profile picture is too large after compression. Please select a smaller image.'
+        );
+      }
+
+      const nowLocal = new Date();
+      const userRef = doc(db, 'users', user.uid);
+      const firestoreUpdates: Record<string, unknown> = {
+        profilePic: cleaned,
+        profilePicUpdatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      try {
+        if (profile) {
+          await setDoc(userRef, firestoreUpdates, { merge: true });
+          const nextProfile: UserProfile = {
+            ...profile,
+            profilePic: cleaned,
+            profilePicUpdatedAt: nowLocal,
+            updatedAt: nowLocal,
+          };
+          setProfile(nextProfile);
+          setFastCache(`user_profile:${user.uid}`, nextProfile);
+        } else {
+          const baseProfile = buildNewUserProfile({
+            uid: user.uid,
+            email: user.email || '',
+            fullName: user.displayName || '',
+            accountType: 'student',
+            timestamp: serverTimestamp(),
+          });
+          await setDoc(
+            userRef,
+            {
+              ...baseProfile,
+              ...firestoreUpdates,
+            },
+            { merge: true }
+          );
+          const nextProfile: UserProfile = {
+            ...baseProfile,
+            profilePic: cleaned,
+            profilePicUpdatedAt: nowLocal,
+            createdAt: nowLocal,
+            updatedAt: nowLocal,
+          };
+          setProfile(nextProfile);
+          setFastCache(`user_profile:${user.uid}`, nextProfile);
+        }
+        primeUserProfilePic(user.uid, cleaned);
+      } catch (err) {
+        throw new Error(formatFirebaseAuthError(err));
+      }
+    },
+    [user, profile]
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -515,6 +597,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         refreshProfile,
         updateUserProfile,
+        updateProfilePicture,
       }}
     >
       {children}

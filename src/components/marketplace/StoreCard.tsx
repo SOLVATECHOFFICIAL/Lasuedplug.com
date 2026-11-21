@@ -1,10 +1,12 @@
-import { memo } from 'react';
+import { memo, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, MapPin, Store as StoreIcon } from 'lucide-react';
+import { Clock, MapPin, Share2, Store as StoreIcon } from 'lucide-react';
 import { Store } from '../../types';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { shareListing } from '../../lib/shareUtils';
 import { Card } from '../ui/Card';
 import { StarRating } from '../ui/StarRating';
+import { UserAvatar } from '../ui/UserAvatar';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { ProductImage } from './ProductImage';
 
@@ -36,16 +38,28 @@ export const StoreCard = memo(function StoreCard({
     });
   };
 
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${storeHref}`
+      : storeHref;
+
+  const handleShareClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void shareListing(store.name, 'Business', 'Store', shareUrl);
+  };
+
   return (
-    <Link
-      to={storeHref}
-      onClick={handleTrackClick}
-      className={`group block h-full focus:outline-none ${className}`.trim()}
-    >
-      <Card
-        padded={false}
-        className="h-full overflow-hidden flex flex-col justify-between group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+    <div className={`relative group h-full ${className}`.trim()}>
+      <Link
+        to={storeHref}
+        onClick={handleTrackClick}
+        className="block h-full focus:outline-none"
       >
+        <Card
+          padded={false}
+          className="h-full overflow-hidden flex flex-col justify-between group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+        >
         <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
           <ProductImage
             src={store.logoUrl}
@@ -70,6 +84,20 @@ export const StoreCard = memo(function StoreCard({
               </h3>
               {verified && <VerifiedBadge size="xs" />}
             </div>
+
+            {(store.ownerSnapshot?.fullName || store.ownerId) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+                <UserAvatar
+                  uid={store.ownerId}
+                  src={store.ownerSnapshot?.profilePic}
+                  name={store.ownerSnapshot?.fullName || store.name}
+                  size="2xs"
+                />
+                <span className="truncate">
+                  {store.ownerSnapshot?.fullName || 'Campus Store Owner'}
+                </span>
+              </p>
+            )}
 
             <StarRating
               rating={store.trustScore ?? 0}
@@ -101,5 +129,16 @@ export const StoreCard = memo(function StoreCard({
         </div>
       </Card>
     </Link>
+
+      <button
+        type="button"
+        onClick={handleShareClick}
+        aria-label={`Share ${store.name}`}
+        title="Share store"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    </div>
   );
 });

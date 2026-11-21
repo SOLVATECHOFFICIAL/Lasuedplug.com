@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BadgeCheck,
   Calendar,
@@ -11,9 +11,16 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  areAllVisibleSelected,
+  toggleBulkSelectionKey,
+  toggleSelectAllVisibleKeys,
+} from '../../lib/adminHelpers';
 import { formatVerificationDate } from '../../lib/verificationHelpers';
 import {
   approveVerificationRequest,
+  bulkApproveVerificationRequests,
+  bulkRejectVerificationRequests,
   fetchPendingVerificationRequests,
   rejectVerificationRequest,
 } from '../../lib/verificationService';
@@ -31,6 +38,9 @@ export function AdminVerifications() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewRequest, setPreviewRequest] =
     useState<VerificationRequest | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | null>(null);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
 
   const loadPending = useCallback(async () => {
     setLoading(true);
@@ -38,6 +48,7 @@ export function AdminVerifications() {
     try {
       const data = await fetchPendingVerificationRequests();
       setRequests(data);
+      setSelectedIds([]);
     } catch (err) {
       setError(
         err instanceof Error
@@ -54,22 +65,39 @@ export function AdminVerifications() {
   }, [loadPending]);
 
   useEffect(() => {
-    if (!previewRequest) return;
+    if (!previewRequest && !bulkRejectOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !bulkAction) {
         setPreviewRequest(null);
+        setBulkRejectOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [previewRequest]);
+  }, [previewRequest, bulkRejectOpen, bulkAction]);
+
+  const visibleIds = useMemo(
+    () => requests.map((r) => r.id).filter((id): id is string => Boolean(id)),
+    [requests]
+  );
+
+  const allSelected = useMemo(
+    () => areAllVisibleSelected(selectedIds, visibleIds),
+    [selectedIds, visibleIds]
+  );
+
+  const selectedRequests = useMemo(() => {
+    const selectedSet = new Set(selectedIds);
+    return requests.filter((req) => Boolean(req.id && selectedSet.has(req.id)));
+  }, [requests, selectedIds]);
 
   const handleApprove = async (req: VerificationRequest) => {
-    if (!req.id || busyId) return;
+    if (!req.id || busyId || bulkAction) return;
     setBusyId(req.id);
     try {
       await approveVerificationRequest(req);
       setRequests((prev) => prev.filter((item) => item.id !== req.id));
+      setSelectedIds((prev) => prev.filter((id) => id !== req.id));
       if (previewRequest?.id === req.id) {
         setPreviewRequest(null);
       }
@@ -87,11 +115,12 @@ export function AdminVerifications() {
   };
 
   const handleReject = async (req: VerificationRequest) => {
-    if (!req.id || busyId) return;
+    if (!req.id || busyId || bulkAction) return;
     setBusyId(req.id);
     try {
       await rejectVerificationRequest(req);
       setRequests((prev) => prev.filter((item) => item.id !== req.id));
+      setSelectedIds((prev) => prev.filter((id) => id !== req.id));
       if (previewRequest?.id === req.id) {
         setPreviewRequest(null);
       }
@@ -105,6 +134,69 @@ export function AdminVerifications() {
       );
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedRequests.length === 0 || busyId || bulkAction) return;
+    setBulkAction('approve');
+    try {
+      const { succeeded, failedCount } =
+        await bulkApproveVerificationRequests(selectedRequests);
+      const succeededIds = new Set(
+        succeeded.map((r) => r.id).filter((id): id is string => Boolean(id))
+      );
+      if (succeededIds.size > 0) {
+        setRequests((prev) =>
+          prev.filter((item) => !item.id || !succeededIds.has(item.id))
+        );
+        setSelectedIds((prev) => prev.filter((id) => !succeededIds.has(id)));
+      }
+      if (failedCount === 0) {
+        showToast(
+          `Approved & verified ${succeeded.length} ${succeeded.length === 1 ? 'student' : 'students'}!`,
+          'success'
+        );
+      } else {
+        showToast(
+          `Verified ${succeeded.length}, failed ${failedCount}. Please retry remaining requests.`,
+          'error'
+        );
+      }
+    } finally {
+      setBulkAction(null);
+    }
+  };
+
+  const handleConfirmBulkReject = async () => {
+    if (selectedRequests.length === 0 || busyId || bulkAction) return;
+    setBulkAction('reject');
+    try {
+      const { succeeded, failedCount } =
+        await bulkRejectVerificationRequests(selectedRequests);
+      const succeededIds = new Set(
+        succeeded.map((r) => r.id).filter((id): id is string => Boolean(id))
+      );
+      if (succeededIds.size > 0) {
+        setRequests((prev) =>
+          prev.filter((item) => !item.id || !succeededIds.has(item.id))
+        );
+        setSelectedIds((prev) => prev.filter((id) => !succeededIds.has(id)));
+      }
+      setBulkRejectOpen(false);
+      if (failedCount === 0) {
+        showToast(
+          `Rejected ${succeeded.length} verification ${succeeded.length === 1 ? 'request' : 'requests'}.`,
+          'info'
+        );
+      } else {
+        showToast(
+          `Rejected ${succeeded.length}, failed ${failedCount}. Please retry remaining requests.`,
+          'error'
+        );
+      }
+    } finally {
+      setBulkAction(null);
     }
   };
 
@@ -158,76 +250,126 @@ export function AdminVerifications() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-            <span>
-              {requests.length} pending{' '}
-              {requests.length === 1 ? 'request' : 'requests'} awaiting review
-            </span>
+          {/* Select All Header Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
+            <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                disabled={Boolean(busyId || bulkAction)}
+                onChange={() =>
+                  setSelectedIds((prev) =>
+                    toggleSelectAllVisibleKeys(prev, visibleIds)
+                  )
+                }
+                className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+              />
+              <span>
+                Select All ({requests.length} pending{' '}
+                {requests.length === 1 ? 'request' : 'requests'})
+              </span>
+            </label>
+
+            {selectedRequests.length > 0 && (
+              <button
+                type="button"
+                disabled={Boolean(bulkAction)}
+                onClick={() => setSelectedIds([])}
+                className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+              >
+                Clear selection
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4">
             {requests.map((req) => {
-              const isBusy = busyId === req.id;
+              const reqId = req.id || '';
+              const isBusy = busyId === reqId;
+              const isSelected = Boolean(reqId && selectedIds.includes(reqId));
 
               return (
                 <article
                   key={req.id || req.userId}
-                  className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 transition-shadow hover:shadow-sm"
+                  className={`bg-white rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
+                    isSelected
+                      ? 'border-primary-400 ring-1 ring-primary-200'
+                      : 'border-slate-200'
+                  }`}
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewRequest(req)}
-                        aria-label={`Inspect ID document for ${req.fullName}`}
-                        className="group relative w-full sm:w-48 h-36 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <img
-                          src={req.idCardImage}
-                          alt={`Student ID document submitted by ${req.fullName}`}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                        />
-                        <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-900/75 text-white text-[11px] font-medium">
-                          <Expand className="w-3 h-3" aria-hidden="true" />
-                          <span>Zoom</span>
-                        </span>
-                      </button>
+                    <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                      {reqId && (
+                        <label className="pt-1 flex items-center shrink-0 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={Boolean(busyId || bulkAction)}
+                            aria-label={`Select ${req.fullName}`}
+                            onChange={() =>
+                              setSelectedIds((prev) =>
+                                toggleBulkSelectionKey(prev, reqId)
+                              )
+                            }
+                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                          />
+                        </label>
+                      )}
 
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                            <BadgeCheck className="w-3.5 h-3.5" aria-hidden="true" />
-                            <span>Pending Verification</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewRequest(req)}
+                          aria-label={`Inspect ID document for ${req.fullName}`}
+                          className="group relative w-full sm:w-48 h-36 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <img
+                            src={req.idCardImage}
+                            alt={`Student ID document submitted by ${req.fullName}`}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                          <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-900/75 text-white text-[11px] font-medium">
+                            <Expand className="w-3 h-3" aria-hidden="true" />
+                            <span>Zoom</span>
                           </span>
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                            <span>Submitted {formatVerificationDate(req.createdAt)}</span>
-                          </span>
-                        </div>
+                        </button>
 
-                        <h2 className="text-lg font-bold text-slate-900 truncate">
-                          {req.fullName}
-                        </h2>
-
-                        <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                          <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>
-                            User ID:{' '}
-                            <span className="font-mono text-slate-700">
-                              {req.userId}
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <BadgeCheck className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>Pending Verification</span>
                             </span>
-                          </span>
-                        </p>
+                            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                              <span>Submitted {formatVerificationDate(req.createdAt)}</span>
+                            </span>
+                          </div>
 
-                        <p className="text-xs text-slate-600">
-                          Confirm the name on the uploaded Student ID or School Fee Receipt matches{' '}
-                          <span className="font-semibold text-slate-800">
+                          <h2 className="text-lg font-bold text-slate-900 truncate">
                             {req.fullName}
-                          </span>
-                          .
-                        </p>
+                          </h2>
+
+                          <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                            <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>
+                              User ID:{' '}
+                              <span className="font-mono text-slate-700">
+                                {req.userId}
+                              </span>
+                            </span>
+                          </p>
+
+                          <p className="text-xs text-slate-600">
+                            Confirm the name on the uploaded Student ID or School Fee Receipt matches{' '}
+                            <span className="font-semibold text-slate-800">
+                              {req.fullName}
+                            </span>
+                            .
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -235,7 +377,7 @@ export function AdminVerifications() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={Boolean(busyId)}
+                        disabled={Boolean(busyId || bulkAction)}
                         onClick={() => void handleReject(req)}
                         className="min-h-[40px] border-red-200 text-red-600 hover:bg-red-50"
                       >
@@ -246,7 +388,7 @@ export function AdminVerifications() {
                       <Button
                         variant="primary"
                         size="sm"
-                        disabled={Boolean(busyId)}
+                        disabled={Boolean(busyId || bulkAction)}
                         onClick={() => void handleApprove(req)}
                         className="min-h-[40px] bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500"
                       >
@@ -263,6 +405,51 @@ export function AdminVerifications() {
               );
             })}
           </div>
+
+          {/* Sticky Bottom Bulk Action Bar */}
+          {selectedRequests.length > 0 && (
+            <div
+              role="region"
+              aria-label="Bulk verification actions"
+              data-testid="verifications-bulk-action-bar"
+              className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <p className="text-sm font-semibold tabular-nums">
+                {selectedRequests.length}{' '}
+                {selectedRequests.length === 1 ? 'request' : 'requests'} selected
+              </p>
+              <div className="flex items-center gap-2.5">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={Boolean(bulkAction || busyId)}
+                  onClick={() => setBulkRejectOpen(true)}
+                  className="min-h-[40px]"
+                >
+                  {bulkAction === 'reject' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <X className="w-4 h-4" />
+                  )}
+                  <span>Reject Selected</span>
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={Boolean(bulkAction || busyId)}
+                  onClick={() => void handleBulkApprove()}
+                  className="min-h-[40px] bg-emerald-600 hover:bg-emerald-500 focus-visible:ring-emerald-400"
+                >
+                  {bulkAction === 'approve' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  <span>Approve Selected</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -335,6 +522,90 @@ export function AdminVerifications() {
                   <Check className="w-4 h-4" />
                 )}
                 <span>Approve &amp; Verify Student</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Bulk Reject Confirmation Modal */}
+      {bulkRejectOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-reject-verify-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => {
+            if (!bulkAction) setBulkRejectOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <X className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2
+                    id="bulk-reject-verify-title"
+                    className="text-lg font-bold text-slate-900"
+                  >
+                    Reject {selectedRequests.length} Verification{' '}
+                    {selectedRequests.length === 1 ? 'Request' : 'Requests'}?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Each student will receive a notification to re-upload a clearer document.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(bulkAction)}
+                onClick={() => setBulkRejectOpen(false)}
+                aria-label="Close bulk reject modal"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-600 leading-relaxed">
+              You are about to reject{' '}
+              <span className="font-semibold text-slate-900">
+                {selectedRequests.length} pending verification{' '}
+                {selectedRequests.length === 1 ? 'submission' : 'submissions'}
+              </span>
+              .
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                size="md"
+                disabled={Boolean(bulkAction)}
+                onClick={() => setBulkRejectOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                disabled={Boolean(bulkAction)}
+                onClick={() => void handleConfirmBulkReject()}
+              >
+                {bulkAction === 'reject' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="w-4 h-4" />
+                    <span>Reject Selected</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>

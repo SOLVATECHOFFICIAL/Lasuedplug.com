@@ -17,12 +17,17 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import {
   AdminModuleType,
+  areAllVisibleSelected,
   filterPendingAdminItems,
   getAdminModuleLabel,
   PendingAdminItem,
+  toggleBulkSelectionKey,
+  toggleSelectAllVisibleKeys,
 } from '../../lib/adminHelpers';
 import {
   approvePendingItem,
+  bulkApprovePendingItems,
+  bulkRejectPendingItems,
   fetchPendingApprovals,
   rejectPendingItem,
 } from '../../lib/adminService';
@@ -90,6 +95,9 @@ export function AdminListings() {
   const [moduleFilter, setModuleFilter] = useState<'all' | AdminModuleType>('all');
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PendingAdminItem | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | null>(null);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
 
   const loadPending = useCallback(async () => {
     setLoading(true);
@@ -97,6 +105,7 @@ export function AdminListings() {
     try {
       const data = await fetchPendingApprovals();
       setItems(data);
+      setSelectedKeys([]);
     } catch (err) {
       setError(
         err instanceof Error
@@ -113,15 +122,16 @@ export function AdminListings() {
   }, [loadPending]);
 
   useEffect(() => {
-    if (!rejectTarget) return;
+    if (!rejectTarget && !bulkRejectOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busyKey) {
+      if (event.key === 'Escape' && !busyKey && !bulkAction) {
         setRejectTarget(null);
+        setBulkRejectOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [rejectTarget, busyKey]);
+  }, [rejectTarget, bulkRejectOpen, busyKey, bulkAction]);
 
   const filterCounts = useMemo(() => {
     const counts: Record<'all' | AdminModuleType, number> = {
@@ -143,9 +153,26 @@ export function AdminListings() {
     [items, moduleFilter]
   );
 
+  const visibleKeys = useMemo(
+    () => visibleItems.map((item) => `${item.collectionName}:${item.id}`),
+    [visibleItems]
+  );
+
+  const allVisibleSelected = useMemo(
+    () => areAllVisibleSelected(selectedKeys, visibleKeys),
+    [selectedKeys, visibleKeys]
+  );
+
+  const selectedVisibleItems = useMemo(() => {
+    const selectedSet = new Set(selectedKeys);
+    return visibleItems.filter((item) =>
+      selectedSet.has(`${item.collectionName}:${item.id}`)
+    );
+  }, [selectedKeys, visibleItems]);
+
   const handleApprove = async (item: PendingAdminItem) => {
     const key = `${item.collectionName}:${item.id}`;
-    if (busyKey) return;
+    if (busyKey || bulkAction) return;
     setBusyKey(key);
     try {
       await approvePendingItem(item);
@@ -155,6 +182,7 @@ export function AdminListings() {
             !(row.id === item.id && row.collectionName === item.collectionName)
         )
       );
+      setSelectedKeys((prev) => prev.filter((k) => k !== key));
       showToast(`Approved "${item.title}" and notified owner.`, 'success');
     } catch (err) {
       showToast(
@@ -167,7 +195,7 @@ export function AdminListings() {
   };
 
   const handleConfirmReject = async () => {
-    if (!rejectTarget || busyKey) return;
+    if (!rejectTarget || busyKey || bulkAction) return;
     const key = `${rejectTarget.collectionName}:${rejectTarget.id}`;
     setBusyKey(key);
     try {
@@ -181,6 +209,7 @@ export function AdminListings() {
             )
         )
       );
+      setSelectedKeys((prev) => prev.filter((k) => k !== key));
       showToast(`Rejected and removed "${rejectTarget.title}".`, 'info');
       setRejectTarget(null);
     } catch (err) {
@@ -190,6 +219,73 @@ export function AdminListings() {
       );
     } finally {
       setBusyKey(null);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedVisibleItems.length === 0 || busyKey || bulkAction) return;
+    setBulkAction('approve');
+    try {
+      const { succeeded, failedCount } =
+        await bulkApprovePendingItems(selectedVisibleItems);
+      const succeededSet = new Set(
+        succeeded.map((item) => `${item.collectionName}:${item.id}`)
+      );
+      if (succeededSet.size > 0) {
+        setItems((prev) =>
+          prev.filter(
+            (row) => !succeededSet.has(`${row.collectionName}:${row.id}`)
+          )
+        );
+        setSelectedKeys((prev) => prev.filter((k) => !succeededSet.has(k)));
+      }
+      if (failedCount === 0) {
+        showToast(
+          `Approved ${succeeded.length} ${succeeded.length === 1 ? 'listing' : 'listings'} and notified owners.`,
+          'success'
+        );
+      } else {
+        showToast(
+          `Approved ${succeeded.length}, failed ${failedCount}. Please retry remaining items.`,
+          'error'
+        );
+      }
+    } finally {
+      setBulkAction(null);
+    }
+  };
+
+  const handleConfirmBulkReject = async () => {
+    if (selectedVisibleItems.length === 0 || busyKey || bulkAction) return;
+    setBulkAction('reject');
+    try {
+      const { succeeded, failedCount } =
+        await bulkRejectPendingItems(selectedVisibleItems);
+      const succeededSet = new Set(
+        succeeded.map((item) => `${item.collectionName}:${item.id}`)
+      );
+      if (succeededSet.size > 0) {
+        setItems((prev) =>
+          prev.filter(
+            (row) => !succeededSet.has(`${row.collectionName}:${row.id}`)
+          )
+        );
+        setSelectedKeys((prev) => prev.filter((k) => !succeededSet.has(k)));
+      }
+      setBulkRejectOpen(false);
+      if (failedCount === 0) {
+        showToast(
+          `Rejected and removed ${succeeded.length} ${succeeded.length === 1 ? 'listing' : 'listings'}.`,
+          'info'
+        );
+      } else {
+        showToast(
+          `Rejected ${succeeded.length}, failed ${failedCount}. Please retry remaining items.`,
+          'error'
+        );
+      }
+    } finally {
+      setBulkAction(null);
     }
   };
 
@@ -277,17 +373,66 @@ export function AdminListings() {
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Select All Row */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
+                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    disabled={Boolean(busyKey || bulkAction)}
+                    onChange={() =>
+                      setSelectedKeys((prev) =>
+                        toggleSelectAllVisibleKeys(prev, visibleKeys)
+                      )
+                    }
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                  />
+                  <span>Select All ({visibleItems.length})</span>
+                </label>
+
+                {selectedVisibleItems.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={Boolean(bulkAction)}
+                    onClick={() => setSelectedKeys([])}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+
               {visibleItems.map((item) => {
                 const key = `${item.collectionName}:${item.id}`;
                 const isBusy = busyKey === key;
+                const isSelected = selectedKeys.includes(key);
 
                 return (
                   <article
                     key={key}
-                    className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 transition-shadow hover:shadow-sm"
+                    className={`bg-white rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
+                      isSelected
+                        ? 'border-primary-400 ring-1 ring-primary-200'
+                        : 'border-slate-200'
+                    }`}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                      <div className="flex items-start gap-4 min-w-0 flex-1">
+                      <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                        <label className="pt-1 flex items-center shrink-0 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={Boolean(busyKey || bulkAction)}
+                            aria-label={`Select ${item.title}`}
+                            onChange={() =>
+                              setSelectedKeys((prev) =>
+                                toggleBulkSelectionKey(prev, key)
+                              )
+                            }
+                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                          />
+                        </label>
+
                         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
                           <ProductImage
                             src={item.thumbnail}
@@ -335,7 +480,7 @@ export function AdminListings() {
                         <Button
                           variant="danger"
                           size="sm"
-                          disabled={Boolean(busyKey)}
+                          disabled={Boolean(busyKey || bulkAction)}
                           onClick={() => setRejectTarget(item)}
                           className="min-h-[40px]"
                         >
@@ -345,7 +490,7 @@ export function AdminListings() {
                         <Button
                           variant="primary"
                           size="sm"
-                          disabled={Boolean(busyKey)}
+                          disabled={Boolean(busyKey || bulkAction)}
                           onClick={() => void handleApprove(item)}
                           className="min-h-[40px] bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500"
                         >
@@ -361,6 +506,51 @@ export function AdminListings() {
                   </article>
                 );
               })}
+
+              {/* Sticky Bottom Bulk Action Bar */}
+              {selectedVisibleItems.length > 0 && (
+                <div
+                  role="region"
+                  aria-label="Bulk listing actions"
+                  data-testid="listings-bulk-action-bar"
+                  className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <p className="text-sm font-semibold tabular-nums">
+                    {selectedVisibleItems.length}{' '}
+                    {selectedVisibleItems.length === 1 ? 'item' : 'items'} selected
+                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={Boolean(bulkAction || busyKey)}
+                      onClick={() => setBulkRejectOpen(true)}
+                      className="min-h-[40px]"
+                    >
+                      {bulkAction === 'reject' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                      <span>Reject Selected</span>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={Boolean(bulkAction || busyKey)}
+                      onClick={() => void handleBulkApprove()}
+                      className="min-h-[40px] bg-emerald-600 hover:bg-emerald-500 focus-visible:ring-emerald-400"
+                    >
+                      {bulkAction === 'approve' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                      <span>Approve Selected</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -441,6 +631,90 @@ export function AdminListings() {
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>Reject &amp; Delete</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Bulk Reject Confirmation Modal */}
+      {bulkRejectOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-reject-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => {
+            if (!bulkAction) setBulkRejectOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2
+                    id="bulk-reject-modal-title"
+                    className="text-lg font-bold text-slate-900"
+                  >
+                    Reject {selectedVisibleItems.length} Selected{' '}
+                    {selectedVisibleItems.length === 1 ? 'Item' : 'Items'}?
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Each owner will receive a rejection notification.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(bulkAction)}
+                onClick={() => setBulkRejectOpen(false)}
+                aria-label="Close bulk reject modal"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-600 leading-relaxed">
+              You are about to permanently remove{' '}
+              <span className="font-semibold text-slate-900">
+                {selectedVisibleItems.length} pending{' '}
+                {selectedVisibleItems.length === 1 ? 'submission' : 'submissions'}
+              </span>{' '}
+              from LASUEDPLUG.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                size="md"
+                disabled={Boolean(bulkAction)}
+                onClick={() => setBulkRejectOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                disabled={Boolean(bulkAction)}
+                onClick={() => void handleConfirmBulkReject()}
+              >
+                {bulkAction === 'reject' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Reject Selected</span>
                   </>
                 )}
               </Button>

@@ -16,6 +16,7 @@ import {
 import { createAccommodation } from '../../lib/accommodationService';
 import { compressImageToBase64, isImageFile } from '../../lib/imageUtils';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
+import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AccommodationType } from '../../types';
@@ -170,6 +171,9 @@ export function AccommodationCreate() {
     setSubmitting(true);
 
     try {
+      const totalImagesChars = images.reduce((sum, img) => sum + img.length, 0);
+      const ownerAvatar = getUserAvatarUrl(profile);
+
       await createAccommodation({
         ownerId: user.uid,
         type,
@@ -185,6 +189,10 @@ export function AccommodationCreate() {
           fullName:
             profile?.fullName || user.displayName || 'LASUEDPLUG Landlord',
           isVerified: Boolean(profile?.isVerified),
+          ...(ownerAvatar &&
+          totalImagesChars + ownerAvatar.length <= MAX_DOCUMENT_IMAGE_BYTES
+            ? { profilePic: ownerAvatar }
+            : {}),
         },
       });
 

@@ -8,11 +8,14 @@ import {
   getFieldCooldownStatus,
   getInitials,
   getPrimaryRoleLabel,
+  getProfilePicLockStatus,
   getProtectedRouteDecision,
+  getUserAvatarUrl,
   isAcademicFieldLocked,
   isAccountBanned,
   isAccountSuspended,
   PHONE_UPDATE_COOLDOWN_DAYS,
+  PROFILE_PIC_COOLDOWN_DAYS,
   SUSPENDED_ACCOUNT_MESSAGE,
   validateEmailField,
   validateLoginForm,
@@ -226,3 +229,48 @@ test('isAcademicFieldLocked and getFieldCooldownStatus enforce permanent lock an
   );
   assert.equal(phoneUnlocked.isLocked, false);
 });
+
+test('getUserAvatarUrl prioritizes profilePic over avatarUrl', () => {
+  assert.equal(getUserAvatarUrl(null), '');
+  assert.equal(
+    getUserAvatarUrl({ avatarUrl: 'https://example.com/old.jpg' }),
+    'https://example.com/old.jpg'
+  );
+  assert.equal(
+    getUserAvatarUrl({
+      profilePic: 'data:image/jpeg;base64,NEW',
+      avatarUrl: 'https://example.com/old.jpg',
+    }),
+    'data:image/jpeg;base64,NEW'
+  );
+});
+
+test('getProfilePicLockStatus enforces 7-day DP lock and constructs lock message', () => {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const baseMs = Date.UTC(2026, 2, 10, 12, 0, 0);
+
+  const neverSet = getProfilePicLockStatus(null, baseMs);
+  assert.equal(neverSet.isLocked, false);
+  assert.equal(neverSet.lockMessage, null);
+
+  const locked = getProfilePicLockStatus(
+    { seconds: Math.floor(baseMs / 1000) },
+    baseMs + 3 * dayMs
+  );
+  assert.equal(locked.isLocked, true);
+  assert.equal(locked.remainingDays, PROFILE_PIC_COOLDOWN_DAYS - 3);
+  assert.ok(locked.lockMessage);
+  assert.ok(
+    locked.lockMessage.startsWith(
+      '🔒 Profile picture locked. You can change it again on '
+    )
+  );
+
+  const unlocked = getProfilePicLockStatus(
+    { seconds: Math.floor(baseMs / 1000) },
+    baseMs + PROFILE_PIC_COOLDOWN_DAYS * dayMs
+  );
+  assert.equal(unlocked.isLocked, false);
+  assert.equal(unlocked.lockMessage, null);
+});
+

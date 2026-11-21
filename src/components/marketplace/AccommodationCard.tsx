@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { memo, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, MapPin } from 'lucide-react';
+import { Building2, MapPin, Share2 } from 'lucide-react';
 import { Accommodation } from '../../types';
 import {
   getAccommodationPublicLocation,
@@ -8,8 +8,10 @@ import {
   getAccommodationTypeLabel,
 } from '../../lib/accommodationHelpers';
 import { saveRecentlyViewed } from '../../lib/recentlyViewed';
+import { shareListing } from '../../lib/shareUtils';
 import { formatNaira } from '../../lib/utils';
 import { Card } from '../ui/Card';
+import { UserAvatar } from '../ui/UserAvatar';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
 import { ProductImage } from './ProductImage';
 
@@ -46,16 +48,35 @@ export const AccommodationCard = memo(function AccommodationCard({
     });
   };
 
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? accommodation.id
+        ? `${window.location.origin}/accommodation/${accommodation.id}`
+        : `${window.location.origin}/accommodation`
+      : `/accommodation/${accommodation.id || ''}`;
+
+  const handleShareClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void shareListing(
+      accommodation.title,
+      `${formatNaira(rent)}/year`,
+      'Accommodation',
+      shareUrl
+    );
+  };
+
   return (
-    <Link
-      to={`/accommodation/${accommodation.id}`}
-      onClick={handleTrackClick}
-      className={`group block h-full focus:outline-none ${className}`.trim()}
-    >
-      <Card
-        padded={false}
-        className="h-full overflow-hidden flex flex-col justify-between group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+    <div className={`relative group h-full ${className}`.trim()}>
+      <Link
+        to={`/accommodation/${accommodation.id}`}
+        onClick={handleTrackClick}
+        className="block h-full focus:outline-none"
       >
+        <Card
+          padded={false}
+          className="h-full overflow-hidden flex flex-col justify-between group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
+        >
         <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
           <ProductImage
             src={accommodation.images?.[0]}
@@ -77,8 +98,14 @@ export const AccommodationCard = memo(function AccommodationCard({
             <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
               {accommodation.title}
             </h3>
-            {(ownerName || verified) && (
-              <p className="text-xs text-slate-600 flex items-center gap-1 min-w-0">
+            {(ownerName || verified || accommodation.ownerSnapshot?.profilePic) && (
+              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+                <UserAvatar
+                  uid={accommodation.ownerId}
+                  src={accommodation.ownerSnapshot?.profilePic}
+                  name={ownerName || 'Campus Host'}
+                  size="2xs"
+                />
                 <span className="truncate">{ownerName || 'Campus Host'}</span>
                 {verified && <VerifiedBadge size="xs" />}
               </p>
@@ -96,5 +123,16 @@ export const AccommodationCard = memo(function AccommodationCard({
         </div>
       </Card>
     </Link>
+
+      <button
+        type="button"
+        onClick={handleShareClick}
+        aria-label={`Share ${accommodation.title}`}
+        title="Share accommodation"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    </div>
   );
 });

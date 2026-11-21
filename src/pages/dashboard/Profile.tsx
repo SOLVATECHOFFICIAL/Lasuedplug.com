@@ -4,6 +4,7 @@ import {
   AlertCircle,
   BadgeCheck,
   Building2,
+  Camera,
   Check,
   CheckCircle2,
   Clock,
@@ -24,8 +25,9 @@ import { useToast } from '../../contexts/ToastContext';
 import {
   ACADEMIC_LOCK_MESSAGE,
   getFieldCooldownStatus,
-  getInitials,
   getPrimaryRoleLabel,
+  getProfilePicLockStatus,
+  getUserAvatarUrl,
   isAcademicFieldLocked,
   NAME_LOCK_MESSAGE,
   PHONE_UPDATE_COOLDOWN_DAYS,
@@ -49,6 +51,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { StarRating } from '../../components/ui/StarRating';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 interface FieldErrors {
   fullName?: string;
@@ -79,7 +82,13 @@ function ensureOptionPresent(
 }
 
 export function ProfilePage() {
-  const { user, profile, isProfileComplete, updateUserProfile } = useAuth();
+  const {
+    user,
+    profile,
+    isProfileComplete,
+    updateUserProfile,
+    updateProfilePicture,
+  } = useAuth();
   const { showToast } = useToast();
   const location = useLocation();
   const shownRedirectToastRef = useRef<string | null>(null);
@@ -97,7 +106,11 @@ export function ProfilePage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [avatarLoadError, setAvatarLoadError] = useState(false);
+
+  // Profile picture (DP) upload state
+  const [uploadingPic, setUploadingPic] = useState(false);
+  const [picError, setPicError] = useState<string | null>(null);
+  const dpFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Student Verification workflow state
   const [verificationRequests, setVerificationRequests] = useState<
@@ -122,10 +135,6 @@ export function ProfilePage() {
       showToast(msg, 'info');
     }
   }, [location.state, showToast]);
-
-  useEffect(() => {
-    setAvatarLoadError(false);
-  }, [profile?.avatarUrl]);
 
   useEffect(() => {
     setFullName(profile?.fullName || user?.displayName || '');
@@ -188,7 +197,11 @@ export function ProfilePage() {
 
   const displayName = profile?.fullName || user?.displayName || 'Campus Member';
   const email = profile?.email || user?.email || '';
-  const initials = getInitials(displayName, email);
+  const avatarSrc = getUserAvatarUrl(profile);
+  const picLock = useMemo(
+    () => getProfilePicLockStatus(profile?.profilePicUpdatedAt),
+    [profile?.profilePicUpdatedAt]
+  );
   const roleLabel = getPrimaryRoleLabel(profile?.roles);
   const isVerified = Boolean(profile?.isVerified);
   const verificationUiState = useMemo(
@@ -291,6 +304,44 @@ export function ProfilePage() {
     }
   };
 
+  const handleProfilePicSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (picLock.isLocked) {
+      if (picLock.lockMessage) {
+        setPicError(picLock.lockMessage);
+        showToast(picLock.lockMessage, 'info');
+      }
+      return;
+    }
+
+    if (!isImageFile(file)) {
+      const msg = 'Please select a valid image file (JPG, PNG, or WEBP).';
+      setPicError(msg);
+      showToast(msg, 'error');
+      return;
+    }
+
+    setPicError(null);
+    setUploadingPic(true);
+    try {
+      const compressed = await compressImageToBase64(file);
+      await updateProfilePicture(compressed);
+      showToast('Profile picture updated! Locked for 7 days.', 'success');
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Unable to update profile picture. Please try again.';
+      setPicError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setUploadingPic(false);
+    }
+  };
+
   const handleOpenVerifyModal = () => {
     setVerifyError(null);
     setVerifyImageBase64(null);
@@ -373,100 +424,176 @@ export function ProfilePage() {
         </p>
       </div>
 
-      {/* Profile Overview Card */}
-      <Card
-        hoverable={false}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-5"
-      >
-        <div className="flex items-center gap-4 min-w-0">
-          {profile?.avatarUrl && !avatarLoadError ? (
-            <img
-              src={profile.avatarUrl}
-              alt={displayName}
-              loading="lazy"
-              decoding="async"
-              onError={() => setAvatarLoadError(true)}
-              className="w-16 h-16 rounded-full object-cover border border-slate-200 shrink-0"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-primary-500 text-white text-xl font-bold flex items-center justify-center shrink-0">
-              {initials}
-            </div>
-          )}
-
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-900 truncate">
-                {displayName}
-              </h2>
-              {isVerified && (
-                <BadgeCheck
-                  className="w-5 h-5 text-emerald-600 shrink-0"
-                  aria-label="Verified Student"
-                />
-              )}
-            </div>
-            <p className="text-sm text-slate-500 flex items-center gap-1.5 truncate">
-              <Mail className="w-4 h-4 shrink-0" />
-              <span className="truncate">{email}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Badge variant="role">
-                {isBusinessAccount ? 'Business / Landlord' : roleLabel}
-              </Badge>
-              {isVerified ? (
-                <Badge variant="verified">
-                  <Check className="w-3.5 h-3.5 mr-1" />
-                  Verified Student
-                </Badge>
-              ) : verificationUiState === 'pending' ? (
-                <Badge variant="pending">
-                  <Clock className="w-3.5 h-3.5 mr-1" />
-                  Pending
-                </Badge>
-              ) : (
-                <Badge variant="pending">
-                  <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                  Unverified
-                </Badge>
-              )}
-              <Badge variant={isProfileComplete ? 'verified' : 'pending'}>
-                {isProfileComplete ? 'Profile Complete' : 'Incomplete Profile'}
-              </Badge>
-            </div>
-            <div className="pt-1">
-              <StarRating
-                rating={profile?.trustScore ?? 0}
-                reviewCount={profile?.reviewCount ?? 0}
-                size="xs"
+      {/* Profile Overview & Circular DP Upload Section */}
+      <Card hoverable={false} className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="relative shrink-0">
+              <UserAvatar
+                uid={user?.uid}
+                src={avatarSrc}
+                name={displayName}
+                email={email}
+                size="lg"
+                className="ring-2 ring-slate-100"
+              />
+              <button
+                type="button"
+                disabled={uploadingPic || picLock.isLocked}
+                onClick={() => dpFileInputRef.current?.click()}
+                aria-label={
+                  picLock.isLocked
+                    ? picLock.lockMessage || 'Profile picture locked'
+                    : avatarSrc
+                      ? 'Change profile picture'
+                      : 'Upload profile picture'
+                }
+                title={
+                  picLock.isLocked
+                    ? picLock.lockMessage || 'Profile picture locked'
+                    : avatarSrc
+                      ? 'Change profile picture'
+                      : 'Upload profile picture'
+                }
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-700 hover:text-primary-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingPic ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-600" />
+                ) : picLock.isLocked ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                ) : (
+                  <Camera className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <input
+                ref={dpFileInputRef}
+                type="file"
+                accept="image/*"
+                disabled={uploadingPic || picLock.isLocked}
+                onChange={(e) => void handleProfilePicSelect(e)}
+                className="hidden"
+                data-testid="profile-pic-input"
               />
             </div>
-            {!isVerified && verificationUiState === 'pending' && (
-              <p className="text-xs text-amber-700 pt-0.5">
-                Your verification document is awaiting Support review.
-              </p>
-            )}
-            {!isVerified && verificationUiState === 'rejected' && (
-              <p className="text-xs text-red-600 pt-0.5">
-                Your previous submission was rejected. Upload a clearer ID or fee receipt to reapply.
-              </p>
-            )}
-          </div>
-        </div>
 
-        {!isVerified && verificationUiState !== 'pending' && (
-          <div className="shrink-0">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900 truncate">
+                  {displayName}
+                </h2>
+                {isVerified && (
+                  <BadgeCheck
+                    className="w-5 h-5 text-emerald-600 shrink-0"
+                    aria-label="Verified Student"
+                  />
+                )}
+              </div>
+              <p className="text-sm text-slate-500 flex items-center gap-1.5 truncate">
+                <Mail className="w-4 h-4 shrink-0" />
+                <span className="truncate">{email}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Badge variant="role">
+                  {isBusinessAccount ? 'Business / Landlord' : roleLabel}
+                </Badge>
+                {isVerified ? (
+                  <Badge variant="verified">
+                    <Check className="w-3.5 h-3.5 mr-1" />
+                    Verified Student
+                  </Badge>
+                ) : verificationUiState === 'pending' ? (
+                  <Badge variant="pending">
+                    <Clock className="w-3.5 h-3.5 mr-1" />
+                    Pending
+                  </Badge>
+                ) : (
+                  <Badge variant="pending">
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                    Unverified
+                  </Badge>
+                )}
+                <Badge variant={isProfileComplete ? 'verified' : 'pending'}>
+                  {isProfileComplete ? 'Profile Complete' : 'Incomplete Profile'}
+                </Badge>
+              </div>
+              <div className="pt-1">
+                <StarRating
+                  rating={profile?.trustScore ?? 0}
+                  reviewCount={profile?.reviewCount ?? 0}
+                  size="xs"
+                />
+              </div>
+              {!isVerified && verificationUiState === 'pending' && (
+                <p className="text-xs text-amber-700 pt-0.5">
+                  Your verification document is awaiting Support review.
+                </p>
+              )}
+              {!isVerified && verificationUiState === 'rejected' && (
+                <p className="text-xs text-red-600 pt-0.5">
+                  Your previous submission was rejected. Upload a clearer ID or fee receipt to reapply.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={loadingVerification}
-              onClick={handleOpenVerifyModal}
-              className="border-emerald-200 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300"
+              disabled={uploadingPic || picLock.isLocked}
+              onClick={() => dpFileInputRef.current?.click()}
             >
-              <BadgeCheck className="w-4 h-4" />
-              <span>Apply for Verification</span>
+              {uploadingPic ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-4 h-4" />
+                  <span>{avatarSrc ? 'Change Photo' : 'Upload Photo'}</span>
+                </>
+              )}
             </Button>
+
+            {!isVerified && verificationUiState !== 'pending' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loadingVerification}
+                onClick={handleOpenVerifyModal}
+                className="border-emerald-200 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300"
+              >
+                <BadgeCheck className="w-4 h-4" />
+                <span>Apply for Verification</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {picLock.isLocked && picLock.lockMessage ? (
+          <div
+            role="status"
+            data-testid="profile-pic-lock-notice"
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs sm:text-sm font-medium text-amber-900"
+          >
+            <span>{picLock.lockMessage}</span>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Upload a clear profile photo (auto-compressed under 100KB). Once updated, your photo locks for 7 days.
+          </p>
+        )}
+
+        {picError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700"
+          >
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <span>{picError}</span>
           </div>
         )}
       </Card>
