@@ -611,15 +611,15 @@ export function MarketplaceCreate() {
       <div className="space-y-2">
         <Link
           to="/marketplace"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Marketplace</span>
         </Link>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
           Post a Listing
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           List an item for sale or offer a campus service to LASUED, LASU, and Epe
           students. New listings are reviewed quickly before going live.
         </p>
@@ -628,9 +628,9 @@ export function MarketplaceCreate() {
       {submitError && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700"
+          className="flex items-start gap-2.5 p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300"
         >
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <span>{submitError}</span>
         </div>
       )}
@@ -638,7 +638,7 @@ export function MarketplaceCreate() {
       <form onSubmit={handleSubmit} noValidate className="space-y-6">
         {/* Step 1: Type Selector */}
         <Card hoverable={false} className="space-y-3">
-          <p className="text-sm font-semibold text-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
             What are you posting?
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -648,24 +648,24 @@ export function MarketplaceCreate() {
               aria-pressed={adType === 'item'}
               className={`flex items-center gap-3.5 p-4 rounded-xl border text-left transition-all ${
                 adType === 'item'
-                  ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/30 shadow-sm'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
+                  ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 dark:border-blue-500 ring-2 ring-blue-500/30 shadow-sm'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/70'
               }`}
             >
               <div
                 className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
                   adType === 'item'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-slate-100 text-slate-600'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <span className="block text-base font-bold text-slate-900">
+                <span className="block text-base font-bold text-slate-900 dark:text-white">
                   Sell an Item (Product)
                 </span>
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
                   Electronics, fashion, books, hostel essentials, or food.
                 </span>
               </div>
@@ -677,24 +677,24 @@ export function MarketplaceCreate() {
               aria-pressed={adType === 'service'}
               className={`flex items-center gap-3.5 p-4 rounded-xl border text-left transition-all ${
                 adType === 'service'
-                  ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-500/30 shadow-sm'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
+                  ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/50 dark:border-blue-500 ring-2 ring-blue-500/30 shadow-sm'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/70'
               }`}
             >
               <div
                 className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
                   adType === 'service'
                     ? 'bg-primary-600 text-white'
-                    : 'bg-slate-100 text-slate-600'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <Wrench className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <span className="block text-base font-bold text-slate-900">
+                <span className="block text-base font-bold text-slate-900 dark:text-white">
                   Offer a Service
                 </span>
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
                   Repairs, beauty &amp; grooming, cyber, tutoring, or laundry.
                 </span>
               </div>
@@ -707,14 +707,14 @@ export function MarketplaceCreate() {
           <Card hoverable={false} className="space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <StoreIcon className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-bold text-slate-900">
+                <StoreIcon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                   Store Connection (Optional)
                 </h2>
               </div>
               <Link
                 to="/store/create"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
               >
                 {userStores.length > 0 ? '+ Open Another Store' : '+ Open a Store'}
               </Link>
@@ -730,11 +730,11 @@ export function MarketplaceCreate() {
                 helperText="Linking a store displays your storefront name on this listing."
               />
             ) : (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Selling regularly on campus?{' '}
                 <Link
                   to="/store/create"
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="font-semibold text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Create a Store profile
                 </Link>{' '}
@@ -746,9 +746,9 @@ export function MarketplaceCreate() {
 
         {/* Section A: Details, Categories, and Compulsory Images */}
         <Card hoverable={false} className="space-y-5">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Tag className="w-4 h-4 text-primary-600" />
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <Tag className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               {adType === 'service' ? 'Service Details' : 'Item Details'}
             </h2>
           </div>
@@ -776,7 +776,7 @@ export function MarketplaceCreate() {
           <div className="w-full space-y-1.5">
             <label
               htmlFor="listing-description"
-              className="block text-sm font-medium text-slate-700"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-200"
             >
               Description
               <span className="text-red-500 ml-0.5">*</span>
@@ -796,19 +796,19 @@ export function MarketplaceCreate() {
                   ? 'Describe your service experience, turnaround time, availability, and what is included...'
                   : 'Describe condition, specs, size, defects, or what is included...'
               }
-              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 ${
+              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 ${
                 fieldErrors.description
                   ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                  : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                  : 'border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500'
               }`}
               required
             />
             {fieldErrors.description ? (
-              <p className="text-xs font-medium text-red-600" role="alert">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                 {fieldErrors.description}
               </p>
             ) : (
-              <p className="text-xs text-slate-500">Minimum 5 characters.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Minimum 5 characters.</p>
             )}
           </div>
 
@@ -852,7 +852,7 @@ export function MarketplaceCreate() {
             {aiSuggesting && (
               <p
                 role="status"
-                className="text-xs font-medium text-primary-600 inline-flex items-center gap-1.5"
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 inline-flex items-center gap-1.5"
               >
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>
@@ -865,7 +865,7 @@ export function MarketplaceCreate() {
             {!aiSuggesting && aiSuggested && (
               <p
                 role="status"
-                className="text-xs font-medium text-primary-600 inline-flex items-center gap-1.5"
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 inline-flex items-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
                 <span>Suggested category based on your title.</span>
@@ -888,8 +888,8 @@ export function MarketplaceCreate() {
 
         {/* Section B: Pricing & Stock (or Service Pricing & Shop Rule) */}
         <Card hoverable={false} className="space-y-5">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               {adType === 'item'
                 ? 'Pricing & Stock'
                 : 'Service Pricing & Operation Mode'}
@@ -954,9 +954,9 @@ export function MarketplaceCreate() {
           </div>
 
           {adType === 'service' && (
-            <div className="space-y-4 pt-2 border-t border-slate-100">
+            <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-slate-700">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                   Do you operate from a physical shop?{' '}
                   <span className="text-red-500">*</span>
                 </p>
@@ -967,8 +967,8 @@ export function MarketplaceCreate() {
                     onClick={() => handleTogglePhysicalShop(true)}
                     className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-all ${
                       hasPhysicalShop
-                        ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-500'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                     }`}
                   >
                     <MapPin className="w-4 h-4 shrink-0" />
@@ -980,8 +980,8 @@ export function MarketplaceCreate() {
                     onClick={() => handleTogglePhysicalShop(false)}
                     className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-all ${
                       !hasPhysicalShop
-                        ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-500'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                     }`}
                   >
                     <Globe className="w-4 h-4 shrink-0" />
@@ -992,7 +992,7 @@ export function MarketplaceCreate() {
 
               {!hasPhysicalShop && (
                 <fieldset className="space-y-2">
-                  <legend className="block text-xs font-medium text-slate-600">
+                  <legend className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                     How do you deliver your service?
                   </legend>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1001,8 +1001,8 @@ export function MarketplaceCreate() {
                         key={option.value}
                         className={`flex items-start gap-2.5 p-3.5 rounded-xl border cursor-pointer transition-colors ${
                           nonShopServiceMode === option.value
-                            ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500'
-                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                            ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/50 ring-1 ring-blue-500'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                         }`}
                       >
                         <input
@@ -1011,13 +1011,13 @@ export function MarketplaceCreate() {
                           value={option.value}
                           checked={nonShopServiceMode === option.value}
                           onChange={() => setNonShopServiceMode(option.value)}
-                          className="mt-0.5 w-4 h-4 text-primary-600 border-slate-300 focus:ring-blue-500"
+                          className="mt-0.5 w-4 h-4 text-primary-600 border-slate-300 dark:border-slate-600 focus:ring-blue-500"
                         />
                         <div className="space-y-0.5">
-                          <span className="block text-sm font-semibold text-slate-900">
+                          <span className="block text-sm font-semibold text-slate-900 dark:text-white">
                             {option.label}
                           </span>
-                          <span className="block text-xs text-slate-500">
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
                             {option.description}
                           </span>
                         </div>
@@ -1032,9 +1032,9 @@ export function MarketplaceCreate() {
 
         {/* Section C: Location & Contact */}
         <Card hoverable={false} className="space-y-5">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <MapPin className="w-4 h-4 text-primary-600" />
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <MapPin className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Location &amp; Contact
             </h2>
           </div>
@@ -1056,7 +1056,7 @@ export function MarketplaceCreate() {
 
           {adType === 'item' && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Item Pickup / Fulfillment Location{' '}
                 <span className="text-red-500">*</span>
               </p>
@@ -1067,8 +1067,8 @@ export function MarketplaceCreate() {
                   onClick={() => handleSwitchItemLocation('physical')}
                   className={`flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all ${
                     itemLocationType === 'physical'
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:border-blue-500 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                   }`}
                 >
                   <MapPin className="w-4 h-4 shrink-0" />
@@ -1087,8 +1087,8 @@ export function MarketplaceCreate() {
                   onClick={() => handleSwitchItemLocation('online')}
                   className={`flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all ${
                     itemLocationType === 'online'
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:border-blue-500 text-blue-900 dark:text-blue-200 ring-1 ring-blue-500'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                   }`}
                 >
                   <Truck className="w-4 h-4 shrink-0" />
@@ -1109,8 +1109,8 @@ export function MarketplaceCreate() {
             <div className="space-y-4 pt-1">
               {adType === 'service' && (
                 <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                    <Clock className="w-4 h-4 text-slate-500" />
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                     <span>
                       Shop Opening &amp; Closing Hours{' '}
                       <span className="text-red-500">*</span>
@@ -1120,7 +1120,7 @@ export function MarketplaceCreate() {
                     <div className="space-y-1">
                       <label
                         htmlFor="service-opening-time-start"
-                        className="block text-xs font-medium text-slate-600"
+                        className="block text-xs font-medium text-slate-600 dark:text-slate-300"
                       >
                         Opening Time
                       </label>
@@ -1133,13 +1133,13 @@ export function MarketplaceCreate() {
                           setOpeningTimeStart(e.target.value);
                           clearFieldError('openingHours');
                         }}
-                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                     <div className="space-y-1">
                       <label
                         htmlFor="service-opening-time-end"
-                        className="block text-xs font-medium text-slate-600"
+                        className="block text-xs font-medium text-slate-600 dark:text-slate-300"
                       >
                         Closing Time
                       </label>
@@ -1152,22 +1152,22 @@ export function MarketplaceCreate() {
                           setOpeningTimeEnd(e.target.value);
                           clearFieldError('openingHours');
                         }}
-                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                   </div>
                   {openingTimeStart &&
                     openingTimeEnd &&
                     !fieldErrors.openingHours && (
-                      <p className="text-xs font-medium text-slate-600">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                         Displayed as:{' '}
-                        <span className="text-slate-900">
+                        <span className="text-slate-900 dark:text-white">
                           {formatOpeningHoursRange(openingTimeStart, openingTimeEnd)}
                         </span>
                       </p>
                     )}
                   {fieldErrors.openingHours && (
-                    <p className="text-xs font-medium text-red-600" role="alert">
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                       {fieldErrors.openingHours}
                     </p>
                   )}
@@ -1212,23 +1212,23 @@ export function MarketplaceCreate() {
               />
 
               {adType === 'item' && (
-                <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 cursor-pointer hover:bg-slate-100/70 transition-colors">
+                <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800 transition-colors">
                   <input
                     type="checkbox"
                     checked={hasDelivery}
                     onChange={(e) => setHasDelivery(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                   />
-                  <Truck className="w-4 h-4 text-slate-600 shrink-0" />
-                  <span className="text-sm font-medium text-slate-800">
+                  <Truck className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
                     I also offer delivery
                   </span>
                 </label>
               )}
             </div>
           ) : (
-            <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-3.5 text-xs text-emerald-900 flex items-center gap-2">
-              <Truck className="w-4 h-4 text-emerald-700 shrink-0" />
+            <div className="rounded-xl bg-emerald-50/70 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+              <Truck className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
               <span>
                 {adType === 'item'
                   ? 'Listed as Online / Delivery Only — physical address and GPS pin are not required.'

@@ -249,7 +249,7 @@ export function StoreProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
@@ -265,7 +265,7 @@ export function StoreProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
@@ -349,7 +349,7 @@ export function StoreProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Services & Stores'}</span>
@@ -359,9 +359,9 @@ export function StoreProfile() {
       {!store.isApproved && (
         <div
           role="status"
-          className="flex items-center gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900"
+          className="flex items-center gap-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"
         >
-          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+          <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span>
             This storefront is currently pending admin approval and is not visible to other students yet.
           </span>
@@ -373,13 +373,13 @@ export function StoreProfile() {
         <div className="flex flex-col md:flex-row gap-6 items-start justify-between">
           <div className="flex flex-col sm:flex-row gap-5 items-start min-w-0 flex-1">
             <div className="space-y-2 shrink-0">
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <ProductImage
                   src={activeStoreImage}
                   alt={store.name}
                   priority
                   className="w-full h-full object-cover"
-                  iconClassName="w-9 h-9 text-slate-400"
+                  iconClassName="w-9 h-9 text-slate-400 dark:text-slate-500"
                 />
               </div>
               {storeImages.length > 1 && (
@@ -393,14 +393,14 @@ export function StoreProfile() {
                       className={`w-7 h-7 rounded-md overflow-hidden border transition-all ${
                         idx === selectedStoreImageIndex
                           ? 'border-blue-600 ring-1 ring-blue-500'
-                          : 'border-slate-200 opacity-75 hover:opacity-100'
+                          : 'border-slate-200 dark:border-slate-700 opacity-75 hover:opacity-100'
                       }`}
                     >
                       <ProductImage
                         src={imgSrc}
                         alt={`${store.name} thumbnail ${idx + 1}`}
                         className="w-full h-full object-cover"
-                        iconClassName="w-3 h-3 text-slate-400"
+                        iconClassName="w-3 h-3 text-slate-400 dark:text-slate-500"
                       />
                     </button>
                   ))}
@@ -422,7 +422,7 @@ export function StoreProfile() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {store.name}
                 </h1>
                 {isVerified && (
@@ -444,19 +444,19 @@ export function StoreProfile() {
                 size="md"
               />
 
-              <p className="text-sm text-slate-600 leading-relaxed max-w-2xl whitespace-pre-line">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl whitespace-pre-line">
                 {store.description}
               </p>
 
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                  <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
                   <span>{store.locationName || 'LASUED Campus'}</span>
                 </span>
 
                 {openingHours && (
-                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                    <Clock className="w-4 h-4 text-primary-500 shrink-0" />
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
+                    <Clock className="w-4 h-4 text-primary-500 dark:text-blue-400 shrink-0" />
                     <span>Open: {openingHours}</span>
                   </span>
                 )}
@@ -466,7 +466,7 @@ export function StoreProfile() {
                     href={`https://www.google.com/maps?q=${store.latitude},${store.longitude}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                    className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     <span>View on Map</span>
@@ -477,7 +477,7 @@ export function StoreProfile() {
               <div className="pt-1">
                 <Link
                   to={`/seller/${store.ownerId}`}
-                  className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-600 hover:text-primary-600 transition-colors"
+                  className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
                 >
                   <UserAvatar
                     uid={store.ownerId}
@@ -490,7 +490,7 @@ export function StoreProfile() {
                   />
                   <span>
                     Owned by{' '}
-                    <span className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2">
+                    <span className="font-semibold text-slate-900 dark:text-white underline decoration-slate-300 dark:decoration-slate-600 underline-offset-2">
                       {ownerName}
                     </span>
                   </span>
@@ -538,7 +538,7 @@ export function StoreProfile() {
                 variant="outline"
                 size="sm"
                 onClick={handleReportClick}
-                className="text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 self-stretch sm:self-end"
+                className="text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/50 self-stretch sm:self-end"
               >
                 <Flag className="w-3.5 h-3.5" />
                 <span>Report User</span>
@@ -552,10 +552,10 @@ export function StoreProfile() {
       <section aria-label="Store listings" className="space-y-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Listings from {store.name}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 tabular-nums">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 tabular-nums">
               {products.length} active {products.length === 1 ? 'listing' : 'listings'}
             </p>
           </div>

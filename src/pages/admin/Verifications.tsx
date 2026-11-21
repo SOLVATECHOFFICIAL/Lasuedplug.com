@@ -242,13 +242,13 @@ export function AdminVerifications() {
           {Array.from({ length: 3 }).map((_, idx) => (
             <div
               key={idx}
-              className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col sm:flex-row gap-4 animate-pulse"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col sm:flex-row gap-4 animate-pulse"
             >
-              <div className="w-full sm:w-48 h-32 rounded-lg bg-slate-200 shrink-0" />
+              <div className="w-full sm:w-48 h-32 rounded-lg bg-slate-200 dark:bg-slate-800 shrink-0" />
               <div className="flex-1 space-y-2.5">
-                <div className="h-4 w-28 bg-slate-200 rounded" />
-                <div className="h-5 w-1/2 bg-slate-200 rounded" />
-                <div className="h-4 w-1/3 bg-slate-200 rounded" />
+                <div className="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-5 w-1/2 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-4 w-1/3 bg-slate-200 dark:bg-slate-800 rounded" />
               </div>
             </div>
           ))}
@@ -260,12 +260,12 @@ export function AdminVerifications() {
           onRetry={() => void loadPending()}
         />
       ) : requests.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2.5">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2.5">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
             No pending verification requests
           </h2>
-          <p className="text-sm text-slate-500 max-w-md mx-auto">
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
             All student and marketer identity submissions have been reviewed.
           </p>
         </div>
@@ -275,7 +275,7 @@ export function AdminVerifications() {
           <div
             role="tablist"
             aria-label="Filter verification requests by account type"
-            className="inline-flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200"
+            className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800"
           >
             {(
               [
@@ -302,7 +302,7 @@ export function AdminVerifications() {
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                     active
                       ? 'bg-primary-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -310,7 +310,7 @@ export function AdminVerifications() {
                     className={`px-1.5 py-0.5 rounded-full text-[11px] tabular-nums ${
                       active
                         ? 'bg-white/20 text-white'
-                        : 'bg-slate-100 text-slate-600'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                     }`}
                   >
                     {tab.count}
@@ -321,15 +321,15 @@ export function AdminVerifications() {
           </div>
 
           {filteredRequests.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
               No pending {accountFilter === 'business' ? 'marketer' : 'student'}{' '}
               verification requests right now.
             </div>
           ) : (
             <>
               {/* Select All Header Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
-                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-slate-100 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -339,7 +339,7 @@ export function AdminVerifications() {
                         toggleSelectAllVisibleKeys(prev, visibleIds)
                       )
                     }
-                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                   />
                   <span>
                     Select All ({filteredRequests.length} pending{' '}
@@ -352,7 +352,7 @@ export function AdminVerifications() {
                     type="button"
                     disabled={Boolean(bulkAction)}
                     onClick={() => setSelectedIds([])}
-                    className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                    className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50"
                   >
                     Clear selection
                   </button>
@@ -372,10 +372,10 @@ export function AdminVerifications() {
               return (
                 <article
                   key={req.id || req.userId}
-                  className={`bg-white rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
+                  className={`bg-white dark:bg-slate-900 rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
                     isSelected
-                      ? 'border-primary-400 ring-1 ring-primary-200'
-                      : 'border-slate-200'
+                      ? 'border-primary-400 dark:border-primary-500 ring-1 ring-primary-200 dark:ring-primary-800'
+                      : 'border-slate-200 dark:border-slate-800'
                   }`}
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
@@ -392,7 +392,7 @@ export function AdminVerifications() {
                                 toggleBulkSelectionKey(prev, reqId)
                               )
                             }
-                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                           />
                         </label>
                       )}
@@ -402,7 +402,7 @@ export function AdminVerifications() {
                           type="button"
                           onClick={() => setPreviewRequest(req)}
                           aria-label={`Inspect ID document for ${req.fullName}`}
-                          className="group relative w-full sm:w-48 h-36 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="group relative w-full sm:w-48 h-36 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                           <img
                             src={req.idCardImage}
@@ -424,43 +424,43 @@ export function AdminVerifications() {
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                                 isMarketer
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/70'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                               }`}
                             >
                               {isMarketer ? 'Marketer' : 'Student'}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70">
                               <BadgeCheck className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>{docLabel}</span>
                             </span>
-                            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                            <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                               <span>Submitted {formatVerificationDate(req.createdAt)}</span>
                             </span>
                           </div>
 
-                          <h2 className="text-lg font-bold text-slate-900 truncate">
+                          <h2 className="text-lg font-bold text-slate-900 dark:text-white truncate">
                             {req.fullName}
                           </h2>
 
-                          <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                            <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <UserIcon className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                             <span>
                               User ID:{' '}
-                              <span className="font-mono text-slate-700">
+                              <span className="font-mono text-slate-700 dark:text-slate-300">
                                 {req.userId}
                               </span>
                             </span>
                           </p>
 
-                          <p className="text-xs text-slate-600">
+                          <p className="text-xs text-slate-600 dark:text-slate-300">
                             Confirm the name on the uploaded{' '}
-                            <span className="font-semibold text-slate-800">
+                            <span className="font-semibold text-slate-800 dark:text-white">
                               {docLabel}
                             </span>{' '}
                             matches{' '}
-                            <span className="font-semibold text-slate-800">
+                            <span className="font-semibold text-slate-800 dark:text-white">
                               {req.fullName}
                             </span>
                             .
@@ -469,13 +469,13 @@ export function AdminVerifications() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
+                    <div className="flex items-center justify-end gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={Boolean(busyId || bulkAction)}
                         onClick={() => void handleReject(req)}
-                        className="min-h-[40px] border-red-200 text-red-600 hover:bg-red-50"
+                        className="min-h-[40px] border-red-200 dark:border-red-800/70 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                       >
                         <X className="w-4 h-4" />
                         <span>Reject</span>
@@ -508,7 +508,7 @@ export function AdminVerifications() {
               role="region"
               aria-label="Bulk verification actions"
               data-testid="verifications-bulk-action-bar"
-              className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl border border-slate-800 dark:border-slate-700 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <p className="text-sm font-semibold tabular-nums">
                 {selectedRequests.length}{' '}
@@ -557,18 +557,18 @@ export function AdminVerifications() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="id-preview-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 dark:bg-black/80 backdrop-blur-sm"
           onClick={() => setPreviewRequest(null)}
         >
           <div
-            className="w-full max-w-2xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h2
                   id="id-preview-modal-title"
-                  className="text-base font-bold text-slate-900"
+                  className="text-base font-bold text-slate-900 dark:text-white"
                 >
                   {previewRequest.fullName} —{' '}
                   {previewRequest.documentType ||
@@ -576,7 +576,7 @@ export function AdminVerifications() {
                       ? 'Marketer ID Document'
                       : 'Student Verification Document')}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {isMarketerProfile(previewRequest)
                     ? 'Marketer Account'
                     : 'Student Account'}{' '}
@@ -587,7 +587,7 @@ export function AdminVerifications() {
                 type="button"
                 onClick={() => setPreviewRequest(null)}
                 aria-label="Close document preview"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -603,13 +603,13 @@ export function AdminVerifications() {
               />
             </div>
 
-            <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+            <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={Boolean(busyId)}
                 onClick={() => void handleReject(previewRequest)}
-                className="border-red-200 text-red-600 hover:bg-red-50"
+                className="border-red-200 dark:border-red-800/70 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
               >
                 <X className="w-4 h-4" />
                 <span>Reject</span>
@@ -642,29 +642,29 @@ export function AdminVerifications() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="bulk-reject-verify-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
           onClick={() => {
             if (!bulkAction) setBulkRejectOpen(false);
           }}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
                   <X className="w-5 h-5" />
                 </div>
                 <div>
                   <h2
                     id="bulk-reject-verify-title"
-                    className="text-lg font-bold text-slate-900"
+                    className="text-lg font-bold text-slate-900 dark:text-white"
                   >
                     Reject {selectedRequests.length} Verification{' '}
                     {selectedRequests.length === 1 ? 'Request' : 'Requests'}?
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Each applicant will receive a notification to re-upload a clearer document.
                   </p>
                 </div>
@@ -674,15 +674,15 @@ export function AdminVerifications() {
                 disabled={Boolean(bulkAction)}
                 onClick={() => setBulkRejectOpen(false)}
                 aria-label="Close bulk reject modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               You are about to reject{' '}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedRequests.length} pending verification{' '}
                 {selectedRequests.length === 1 ? 'submission' : 'submissions'}
               </span>

@@ -36,6 +36,9 @@ export function SeoHead({
       ? window.location.href
       : `https://${SITE_DOMAIN}`);
 
+  const safeImage =
+    image && !image.trim().startsWith('data:') ? image.trim() : LOGO_URL;
+
   return (
     <Helmet>
       <title>{resolvedPageTitle}</title>
@@ -44,12 +47,12 @@ export function SeoHead({
       <meta property="og:site_name" content={SITE_NAME} />
       <meta property="og:title" content={resolvedOgTitle} />
       <meta property="og:description" content={resolvedDescription} />
-      <meta property="og:image" content={image} />
+      <meta property="og:image" content={safeImage} />
       <meta property="og:url" content={resolvedUrl} />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={resolvedOgTitle} />
       <meta name="twitter:description" content={resolvedDescription} />
-      <meta name="twitter:image" content={image} />
+      <meta name="twitter:image" content={safeImage} />
     </Helmet>
   );
 }

@@ -50,28 +50,28 @@ function AdminModuleBadge({ type }: { type: AdminModuleType }) {
   switch (type) {
     case 'service':
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/70">
           <Wrench className="w-3 h-3" aria-hidden="true" />
           <span>{label}</span>
         </span>
       );
     case 'room':
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/70">
           <Building2 className="w-3 h-3" aria-hidden="true" />
           <span>{label}</span>
         </span>
       );
     case 'roommate':
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/70">
           <Users className="w-3 h-3" aria-hidden="true" />
           <span>{label}</span>
         </span>
       );
     case 'store':
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/70">
           <StoreIcon className="w-3 h-3" aria-hidden="true" />
           <span>{label}</span>
         </span>
@@ -79,7 +79,7 @@ function AdminModuleBadge({ type }: { type: AdminModuleType }) {
     case 'item':
     default:
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70">
           <ShoppingBag className="w-3 h-3" aria-hidden="true" />
           <span>{label}</span>
         </span>
@@ -310,13 +310,13 @@ export function AdminListings() {
           {Array.from({ length: 3 }).map((_, idx) => (
             <div
               key={idx}
-              className="bg-white rounded-xl border border-slate-200 p-5 flex gap-4 animate-pulse"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 flex gap-4 animate-pulse"
             >
-              <div className="w-24 h-24 rounded-lg bg-slate-200 shrink-0" />
+              <div className="w-24 h-24 rounded-lg bg-slate-200 dark:bg-slate-800 shrink-0" />
               <div className="flex-1 space-y-2.5">
-                <div className="h-4 w-24 bg-slate-200 rounded" />
-                <div className="h-5 w-1/2 bg-slate-200 rounded" />
-                <div className="h-4 w-2/3 bg-slate-200 rounded" />
+                <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-5 w-1/2 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-800 rounded" />
               </div>
             </div>
           ))}
@@ -340,14 +340,14 @@ export function AdminListings() {
                   onClick={() => setModuleFilter(tab.id)}
                   className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium border whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
                     selected
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      ? 'bg-slate-900 dark:bg-primary-600 text-white border-slate-900 dark:border-primary-600'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   <span>{tab.label}</span>
                   <span
                     className={`text-xs tabular-nums ${
-                      selected ? 'text-slate-300' : 'text-slate-400'
+                      selected ? 'text-slate-300 dark:text-blue-100' : 'text-slate-400 dark:text-slate-500'
                     }`}
                   >
                     {filterCounts[tab.id]}
@@ -358,12 +358,12 @@ export function AdminListings() {
           </div>
 
           {visibleItems.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 All caught up!
               </h2>
-              <p className="text-sm text-slate-500 max-w-md mx-auto">
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                 There are no pending{' '}
                 {moduleFilter === 'all'
                   ? 'listings'
@@ -374,8 +374,8 @@ export function AdminListings() {
           ) : (
             <div className="space-y-3">
               {/* Select All Row */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-slate-200">
-                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 cursor-pointer select-none">
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <label className="inline-flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-slate-100 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
@@ -385,7 +385,7 @@ export function AdminListings() {
                         toggleSelectAllVisibleKeys(prev, visibleKeys)
                       )
                     }
-                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                   />
                   <span>Select All ({visibleItems.length})</span>
                 </label>
@@ -395,7 +395,7 @@ export function AdminListings() {
                     type="button"
                     disabled={Boolean(bulkAction)}
                     onClick={() => setSelectedKeys([])}
-                    className="text-xs font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                    className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50"
                   >
                     Clear selection
                   </button>
@@ -410,10 +410,10 @@ export function AdminListings() {
                 return (
                   <article
                     key={key}
-                    className={`bg-white rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
+                    className={`bg-white dark:bg-slate-900 rounded-xl border p-4 sm:p-5 transition-all hover:shadow-sm ${
                       isSelected
-                        ? 'border-primary-400 ring-1 ring-primary-200'
-                        : 'border-slate-200'
+                        ? 'border-primary-400 dark:border-primary-500 ring-1 ring-primary-200 dark:ring-primary-800'
+                        : 'border-slate-200 dark:border-slate-800'
                     }`}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -429,11 +429,11 @@ export function AdminListings() {
                                 toggleBulkSelectionKey(prev, key)
                               )
                             }
-                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                           />
                         </label>
 
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0">
                           <ProductImage
                             src={item.thumbnail}
                             alt={item.title}
@@ -446,37 +446,37 @@ export function AdminListings() {
                           <div className="flex flex-wrap items-center gap-2">
                             <AdminModuleBadge type={item._type} />
                             {item.needsAiReview && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                                 Needs Review
                               </span>
                             )}
-                            <span className="text-xs font-semibold text-primary-700 tabular-nums">
+                            <span className="text-xs font-semibold text-primary-700 dark:text-primary-400 tabular-nums">
                               {item.priceOrSubtitle}
                             </span>
                           </div>
 
-                          <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
                             {item.title}
                           </h2>
 
-                          <p className="text-xs sm:text-sm text-slate-600 line-clamp-2">
+                          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
                             {item.description}
                           </p>
 
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
-                            <span className="inline-flex items-center gap-1 font-medium text-slate-700">
-                              <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-0.5">
+                            <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                              <UserIcon className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                               <span>{item.ownerName}</span>
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                               <span>{item.locationLabel}</span>
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-end gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
+                      <div className="flex items-center justify-end gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
                         <Button
                           variant="danger"
                           size="sm"
@@ -513,7 +513,7 @@ export function AdminListings() {
                   role="region"
                   aria-label="Bulk listing actions"
                   data-testid="listings-bulk-action-bar"
-                  className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="sticky bottom-16 md:bottom-4 z-40 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl border border-slate-800 dark:border-slate-700 shadow-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <p className="text-sm font-semibold tabular-nums">
                     {selectedVisibleItems.length}{' '}
@@ -562,28 +562,28 @@ export function AdminListings() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="reject-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
           onClick={() => {
             if (!busyKey) setRejectTarget(null);
           }}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
                   <Trash2 className="w-5 h-5" />
                 </div>
                 <div>
                   <h2
                     id="reject-modal-title"
-                    className="text-lg font-bold text-slate-900"
+                    className="text-lg font-bold text-slate-900 dark:text-white"
                   >
                     Reject &amp; Delete Submission?
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     The owner will receive a rejection notification.
                   </p>
                 </div>
@@ -593,15 +593,15 @@ export function AdminListings() {
                 disabled={Boolean(busyKey)}
                 onClick={() => setRejectTarget(null)}
                 aria-label="Close modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               You are about to permanently remove{' '}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 &ldquo;{rejectTarget.title}&rdquo;
               </span>{' '}
               ({getAdminModuleLabel(rejectTarget._type)}) from LASUEDPLUG.
@@ -644,29 +644,29 @@ export function AdminListings() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="bulk-reject-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
           onClick={() => {
             if (!bulkAction) setBulkRejectOpen(false);
           }}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5"
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
                   <Trash2 className="w-5 h-5" />
                 </div>
                 <div>
                   <h2
                     id="bulk-reject-modal-title"
-                    className="text-lg font-bold text-slate-900"
+                    className="text-lg font-bold text-slate-900 dark:text-white"
                   >
                     Reject {selectedVisibleItems.length} Selected{' '}
                     {selectedVisibleItems.length === 1 ? 'Item' : 'Items'}?
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Each owner will receive a rejection notification.
                   </p>
                 </div>
@@ -676,15 +676,15 @@ export function AdminListings() {
                 disabled={Boolean(bulkAction)}
                 onClick={() => setBulkRejectOpen(false)}
                 aria-label="Close bulk reject modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               You are about to permanently remove{' '}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedVisibleItems.length} pending{' '}
                 {selectedVisibleItems.length === 1 ? 'submission' : 'submissions'}
               </span>{' '}

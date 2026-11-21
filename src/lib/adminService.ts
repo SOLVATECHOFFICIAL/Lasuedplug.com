@@ -51,6 +51,7 @@ import {
 import { buildListingRejectedNotification } from './notificationHelpers';
 import { createNotification, notifyListingApproved } from './notificationService';
 import { fetchPendingVerificationRequests } from './verificationService';
+import { primeUserProfilePic } from './userAvatarCache';
 import {
   Accommodation,
   AccountType,
@@ -780,6 +781,196 @@ export async function updateUserAccountTypeAdmin(
     invalidateFastCachePrefix('seller_profile:');
   } catch (err) {
     throw mapAdminError(err, 'Failed to update user account type.');
+  }
+}
+
+export interface AdminOverrideUserInput {
+  fullName: string;
+  phone: string;
+  accountType: AccountType;
+  campus: string;
+  department: string;
+  level: string;
+  businessName: string;
+  isVerified: boolean;
+  status: 'active' | 'suspended';
+  profilePic: string;
+}
+
+/**
+ * Admin God Mode: Directly updates a user's core profile, verification, role, status,
+ * academic/business fields, and profile photo on `users/{uid}`, bypassing 1-year/7-day user locks
+ * and syncing snapshots across all user listings, stores, and verification requests.
+ */
+export async function updateUserProfileAdmin(
+  uid: string,
+  input: AdminOverrideUserInput
+): Promise<void> {
+  if (!db) {
+    throw new Error('Firebase is not configured. Check .env.local.');
+  }
+  const cleanUid = uid.trim();
+  if (!cleanUid) {
+    throw new Error('User ID is missing.');
+  }
+
+  const cleanFullName = input.fullName.trim();
+  if (!cleanFullName) {
+    throw new Error('Full Name is required.');
+  }
+
+  const cleanPhone = input.phone.trim();
+  const cleanCampus = input.campus.trim();
+  const cleanDepartment = input.department.trim();
+  const cleanLevel = input.level.trim();
+  const cleanBusinessName = input.businessName.trim();
+  const cleanProfilePic = input.profilePic.trim();
+  const nextAccountType: AccountType =
+    input.accountType === 'business' ? 'business' : 'student';
+  const nextStatus: 'active' | 'suspended' =
+    input.status === 'suspended' ? 'suspended' : 'active';
+
+  try {
+    const firestore = db;
+    const userRef = doc(firestore, 'users', cleanUid);
+
+    const userUpdates: Record<string, unknown> = {
+      fullName: cleanFullName,
+      phone: cleanPhone,
+      accountType: nextAccountType,
+      campus: cleanCampus,
+      department: cleanDepartment,
+      level: cleanLevel,
+      isVerified: Boolean(input.isVerified),
+      status: nextStatus,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (nextStatus === 'active') {
+      userUpdates.isBanned = false;
+    }
+
+    if (nextAccountType === 'business') {
+      userUpdates.businessName = cleanBusinessName;
+    } else {
+      userUpdates['roles.landlord'] = deleteField();
+      userUpdates.businessName = deleteField();
+      userUpdates.shopAddress = deleteField();
+      userUpdates.isOnlineOnly = deleteField();
+    }
+
+    if (cleanProfilePic) {
+      userUpdates.profilePic = cleanProfilePic;
+      userUpdates.avatarUrl = cleanProfilePic;
+      userUpdates.profilePicUpdatedAt = serverTimestamp();
+    } else {
+      userUpdates.profilePic = deleteField();
+      userUpdates.avatarUrl = deleteField();
+    }
+
+    await updateDoc(userRef, userUpdates);
+
+    if (nextStatus === 'suspended') {
+      await hideAllUserListings(cleanUid);
+    }
+
+    // Best-effort snapshot sync across listings, stores, and verification requests
+    try {
+      const snapshotTargets: Array<{
+        collectionName: string;
+        ownerField: string;
+        snapshotKey: string | null;
+      }> = [
+        {
+          collectionName: 'products',
+          ownerField: 'sellerId',
+          snapshotKey: 'sellerSnapshot',
+        },
+        {
+          collectionName: 'accommodations',
+          ownerField: 'ownerId',
+          snapshotKey: 'ownerSnapshot',
+        },
+        {
+          collectionName: 'roommate_requests',
+          ownerField: 'userId',
+          snapshotKey: 'userSnapshot',
+        },
+        {
+          collectionName: 'stores',
+          ownerField: 'ownerId',
+          snapshotKey: 'ownerSnapshot',
+        },
+        {
+          collectionName: 'verification_requests',
+          ownerField: 'userId',
+          snapshotKey: null,
+        },
+      ];
+
+      const pendingUpdates: Array<{
+        ref: DocumentReference;
+        data: Record<string, unknown>;
+      }> = [];
+
+      await Promise.all(
+        snapshotTargets.map(async (target) => {
+          const snap = await getDocs(
+            query(
+              collection(firestore, target.collectionName),
+              where(target.ownerField, '==', cleanUid)
+            )
+          );
+          snap.docs.forEach((docSnap) => {
+            if (target.snapshotKey) {
+              pendingUpdates.push({
+                ref: docSnap.ref,
+                data: {
+                  [`${target.snapshotKey}.fullName`]: cleanFullName,
+                  [`${target.snapshotKey}.accountType`]: nextAccountType,
+                  [`${target.snapshotKey}.isVerified`]: Boolean(
+                    input.isVerified
+                  ),
+                  [`${target.snapshotKey}.profilePic`]: cleanProfilePic
+                    ? cleanProfilePic
+                    : deleteField(),
+                },
+              });
+            } else {
+              pendingUpdates.push({
+                ref: docSnap.ref,
+                data: {
+                  fullName: cleanFullName,
+                  accountType: nextAccountType,
+                },
+              });
+            }
+          });
+        })
+      );
+
+      const BATCH_LIMIT = 400;
+      for (let i = 0; i < pendingUpdates.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(firestore);
+        const chunk = pendingUpdates.slice(i, i + BATCH_LIMIT);
+        chunk.forEach(({ ref, data }) => {
+          batch.update(ref, data);
+        });
+        await batch.commit();
+      }
+    } catch (syncErr) {
+      console.warn('Could not sync user override across existing listings:', syncErr);
+    }
+
+    primeUserProfilePic(cleanUid, cleanProfilePic);
+    invalidatePublicFeedCaches({ sellerId: cleanUid });
+    invalidateFastCache('admin_users');
+    invalidateFastCache('admin_stats');
+    invalidateFastCache('admin_overview');
+    invalidateFastCache(`seller_public_user:${cleanUid}`);
+    invalidateFastCache(`user_trust:${cleanUid}`);
+  } catch (err) {
+    throw mapAdminError(err, 'Failed to save user profile overrides.');
   }
 }
 

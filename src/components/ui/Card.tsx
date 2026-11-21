@@ -19,8 +19,8 @@ export const Card = memo(function Card({
 
   return (
     <div
-      className={`${hasCustomBg ? '' : 'bg-white'} rounded-xl border ${
-        hasCustomBorder ? '' : 'border-slate-200'
+      className={`${hasCustomBg ? '' : 'bg-white dark:bg-slate-900'} rounded-xl border ${
+        hasCustomBorder ? '' : 'border-slate-200 dark:border-slate-700'
       } shadow-sm transition-all duration-200 ${
         hoverable ? 'hover:shadow-lg md:hover:-translate-y-1 active:scale-95' : ''
       } ${padded ? 'p-5 sm:p-6' : ''} ${className}`.trim()}

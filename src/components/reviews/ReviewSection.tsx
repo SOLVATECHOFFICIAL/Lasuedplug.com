@@ -96,10 +96,10 @@ export function ReviewSection({
     <section aria-label="Reviews and Ratings" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
             Reviews &amp; Trust Score
           </h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Verified student feedback for {targetName}.
           </p>
         </div>
@@ -109,8 +109,8 @@ export function ReviewSection({
       {/* Leave a Review Form (only visible to logged-in users) */}
       {user ? (
         isOwnTarget ? (
-          <Card hoverable={false} className="bg-slate-50 border-slate-200 p-4">
-            <p className="text-xs sm:text-sm text-slate-600">
+          <Card hoverable={false} className="bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
               You cannot leave a review on your own{' '}
               {targetType === 'store' ? 'store' : 'profile'}.
             </p>
@@ -118,8 +118,8 @@ export function ReviewSection({
         ) : (
           <Card hoverable={false} className="space-y-4">
             <div className="flex items-center gap-2">
-              <MessageSquarePlus className="w-4 h-4 text-primary-600" />
-              <h3 className="text-base font-bold text-slate-900">
+              <MessageSquarePlus className="w-4 h-4 text-primary-600 dark:text-blue-400" />
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 Leave a Review
               </h3>
             </div>
@@ -127,7 +127,7 @@ export function ReviewSection({
             {formError && (
               <p
                 role="alert"
-                className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+                className="text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2"
               >
                 {formError}
               </p>
@@ -135,7 +135,7 @@ export function ReviewSection({
 
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
               <div className="space-y-1.5">
-                <span className="block text-sm font-medium text-slate-700">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Your Rating
                 </span>
                 <div className="flex items-center gap-3">
@@ -146,7 +146,7 @@ export function ReviewSection({
                     size="md"
                     onChange={setRating}
                   />
-                  <span className="text-xs font-semibold text-slate-600 tabular-nums">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
                     {rating} / 5
                   </span>
                 </div>
@@ -155,7 +155,7 @@ export function ReviewSection({
               <div className="space-y-1.5">
                 <label
                   htmlFor="review-comment"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
                   Your Experience
                 </label>
@@ -168,7 +168,7 @@ export function ReviewSection({
                     if (formError) setFormError(null);
                   }}
                   placeholder={`Share how dealing with ${targetName} went...`}
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
               </div>
@@ -194,8 +194,8 @@ export function ReviewSection({
           </Card>
         )
       ) : (
-        <Card hoverable={false} className="bg-slate-50 border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-600">
+        <Card hoverable={false} className="bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 p-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Have you bought from {targetName}? Log in to leave a review.
           </p>
           <Link to="/login">
@@ -229,10 +229,10 @@ export function ReviewSection({
                       {reviewerInitials}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                         {review.reviewerName || 'Campus Member'}
                       </p>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {formatNotificationTime(review.createdAt)}
                       </p>
                     </div>
@@ -244,7 +244,7 @@ export function ReviewSection({
                     className="shrink-0"
                   />
                 </div>
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                   {review.comment}
                 </p>
               </Card>

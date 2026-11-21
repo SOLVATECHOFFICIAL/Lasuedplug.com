@@ -13,6 +13,7 @@ import { AccountType } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function SignupPage() {
   const [accountType, setAccountType] = useState<AccountType>('student');
@@ -100,6 +101,10 @@ export function SignupPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-10 sm:py-14">
+      <SeoHead
+        title="Create Account"
+        description="Join LASUED, LASU, and Epe students buying, selling, and discovering campus services on LASUEDPLUG."
+      />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
           <img
@@ -109,10 +114,10 @@ export function SignupPage() {
             decoding="async"
             className="h-12 w-auto mx-auto object-contain"
           />
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Create your account
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Join LASUED, LASU, and Epe students buying and selling on campus.
           </p>
         </div>
@@ -120,9 +125,9 @@ export function SignupPage() {
         {formError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-sm text-red-700 dark:text-red-300"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{formError}</span>
           </div>
         )}
@@ -146,7 +151,7 @@ export function SignupPage() {
           />
 
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-slate-700">
+            <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
               Account Type
             </span>
             <div
@@ -161,8 +166,8 @@ export function SignupPage() {
                 onClick={() => setAccountType('student')}
                 className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
                   accountType === 'student'
-                    ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-500 text-primary-700 dark:text-primary-300 ring-1 ring-primary-500'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
               >
                 <GraduationCap className="w-4 h-4 shrink-0" />
@@ -175,19 +180,19 @@ export function SignupPage() {
                 onClick={() => setAccountType('business')}
                 className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 ${
                   accountType === 'business'
-                    ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-500 text-primary-700 dark:text-primary-300 ring-1 ring-primary-500'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
               >
                 <Building2 className="w-4 h-4 shrink-0" />
                 <span>I am a Marketer</span>
               </button>
             </div>
-            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200/80 rounded-lg px-3 py-2 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 rounded-lg px-3 py-2 leading-relaxed">
               {accountType === 'business'
                 ? 'Marketer account: Physical shops set opening/closing hours, address & GPS pin (online marketers can be contacted anytime). Verify identity with NIN, Driver’s License, Voter’s Card, or Passport.'
                 : 'Student account: Complete your campus academic details and verify with your Student ID Card or School Fee Receipt.'}{' '}
-              <span className="font-medium text-slate-700">
+              <span className="font-medium text-slate-700 dark:text-slate-200">
                 Choose carefully — this can only be selected once at signup unless Admin changes it for you.
               </span>
             </p>
@@ -247,7 +252,7 @@ export function SignupPage() {
             required
           />
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 p-3.5">
             <label
               htmlFor="signup-legal-agreement"
               className="flex items-start gap-3 cursor-pointer select-none"
@@ -263,17 +268,17 @@ export function SignupPage() {
                     setFormError(null);
                   }
                 }}
-                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 shrink-0 cursor-pointer"
+                className="mt-0.5 h-5 w-5 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-primary-500 shrink-0 cursor-pointer"
                 required
               />
-              <span className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+              <span className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 I agree to the{' '}
                 <Link
                   to="/terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                  className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2"
                 >
                   Terms of Service
                 </Link>
@@ -283,7 +288,7 @@ export function SignupPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                  className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2"
                 >
                   Privacy Policy
                 </Link>
@@ -293,7 +298,7 @@ export function SignupPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                  className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2"
                 >
                   Safety Rules
                 </Link>
@@ -315,11 +320,11 @@ export function SignupPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
           Already have an account?{' '}
           <Link
             to="/login"
-            className="font-semibold text-blue-600 hover:text-blue-700"
+            className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
           >
             Log in
           </Link>

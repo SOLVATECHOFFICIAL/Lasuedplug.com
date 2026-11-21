@@ -107,7 +107,7 @@ export const ProductCard = memo(function ProductCard({
           padded={false}
           className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
         >
-        <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+        <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
           <ProductImage
             src={product.images?.[0]}
             alt={product.title}
@@ -118,7 +118,7 @@ export const ProductCard = memo(function ProductCard({
             className={`absolute top-2.5 left-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border shadow-sm backdrop-blur-sm ${
               isServiceListing
                 ? 'bg-blue-600/95 text-white border-blue-500'
-                : 'bg-white/95 text-slate-800 border-slate-200'
+                : 'bg-white/95 dark:bg-slate-800/95 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'
             }`}
           >
             {isServiceListing ? (
@@ -133,21 +133,21 @@ export const ProductCard = memo(function ProductCard({
         <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5">
           <div className="space-y-1">
             {categoryLabel && (
-              <p className="text-xs font-medium text-slate-500 truncate">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
                 {categoryLabel}
               </p>
             )}
-            <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
               {product.title}
             </h3>
             {storeTitle && (
-              <p className="text-[11px] font-medium text-slate-500 truncate flex items-center gap-1">
-                <Store className="w-3 h-3 shrink-0 text-slate-400" aria-hidden="true" />
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
+                <Store className="w-3 h-3 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                 <span className="truncate">{storeTitle}</span>
               </p>
             )}
             {(sellerName || isSellerVerified || product.sellerSnapshot?.profilePic) && (
-              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+              <p className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 min-w-0">
                 <UserAvatar
                   uid={product.sellerId}
                   src={product.sellerSnapshot?.profilePic}
@@ -163,15 +163,15 @@ export const ProductCard = memo(function ProductCard({
                 )}
               </p>
             )}
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pt-0.5 min-w-0">
               {isOnlineListing ? (
-                <span className="truncate font-medium text-emerald-700 inline-flex items-center gap-1">
+                <span className="truncate font-medium text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
                   <Truck className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                   <span>Online / Delivery</span>
                 </span>
               ) : (
                 <>
-                  <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                  <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
                   <span className="truncate">
                     {isServiceListing
                       ? product.serviceLocation === 'shop' &&
@@ -182,11 +182,11 @@ export const ProductCard = memo(function ProductCard({
                   </span>
                   {!isServiceListing && product.hasDelivery && (
                     <>
-                      <span aria-hidden="true" className="text-slate-300 shrink-0">
+                      <span aria-hidden="true" className="text-slate-300 dark:text-slate-600 shrink-0">
                         ·
                       </span>
                       <span
-                        className="inline-flex items-center gap-1 text-emerald-700 font-medium shrink-0"
+                        className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium shrink-0"
                         title="Delivery available"
                         aria-label="Delivery available"
                       >
@@ -204,8 +204,8 @@ export const ProductCard = memo(function ProductCard({
             <p
               className={`text-sm sm:text-base tabular-nums truncate ${
                 priceInfo.isContact
-                  ? 'font-semibold text-blue-600'
-                  : 'font-bold text-slate-900'
+                  ? 'font-semibold text-blue-600 dark:text-blue-400'
+                  : 'font-bold text-slate-900 dark:text-white'
               }`}
             >
               {priceInfo.isContact && priceInfo.unitSuffix
@@ -216,10 +216,10 @@ export const ProductCard = memo(function ProductCard({
               <span
                 className={`text-[11px] font-medium shrink-0 tabular-nums ${
                   stockCount === 0
-                    ? 'text-red-600'
+                    ? 'text-red-600 dark:text-red-400'
                     : stockCount === 1
-                      ? 'text-amber-700'
-                      : 'text-slate-500'
+                      ? 'text-amber-700 dark:text-amber-400'
+                      : 'text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {stockCount === 0
@@ -239,7 +239,7 @@ export const ProductCard = memo(function ProductCard({
         onClick={handleShareClick}
         aria-label={`Share ${product.title}`}
         title="Share listing"
-        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 dark:bg-slate-800/95 hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200/90 dark:border-slate-700 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
       </button>

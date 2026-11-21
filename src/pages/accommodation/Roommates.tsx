@@ -1,5 +1,6 @@
 import {
   FormEvent,
+  memo,
   MouseEvent,
   useCallback,
   useEffect,
@@ -75,11 +76,131 @@ import { AccommodationSubNav } from '../../components/accommodation/Accommodatio
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { ImageUploadGrid } from '../../components/forms/ImageUploadGrid';
 import { LocationPinField } from '../../components/forms/LocationPinField';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 interface RoommatesViewState {
   typeFilter: 'all' | RoommateRequestType;
   searchQuery: string;
 }
+
+interface RoommateRequestCardProps {
+  request: RoommateRequest;
+  priority: boolean;
+  onOpen: (req: RoommateRequest) => void;
+  onShare: (req: RoommateRequest, e: MouseEvent<HTMLButtonElement>) => void;
+}
+
+const RoommateRequestCard = memo(function RoommateRequestCard({
+  request: req,
+  priority,
+  onOpen,
+  onShare,
+}: RoommateRequestCardProps) {
+  const typeLabel = getRoommateTypeLabel(req.type);
+  const posterName = req.userSnapshot?.fullName || 'LASUEDPLUG Student';
+  const isVerified = Boolean(req.userSnapshot?.isVerified);
+
+  return (
+    <Card
+      padded={false}
+      className="relative flex flex-col justify-between overflow-hidden hover:border-primary-200 dark:hover:border-blue-600 transition-colors"
+    >
+      <button
+        type="button"
+        onClick={() => onOpen(req)}
+        className="w-full h-full text-left p-5 flex flex-col justify-between gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl"
+      >
+        <div className="space-y-3 w-full">
+          <div className="flex items-center justify-between gap-2 pr-10">
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
+                req.type === 'room_available'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+              }`}
+            >
+              {typeLabel}
+            </span>
+
+            {isVerified && (
+              <Badge variant="verified">
+                <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                Verified
+              </Badge>
+            )}
+          </div>
+
+          {req.images && req.images.length > 0 && (
+            <div className="w-full h-36 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <ProductImage
+                src={req.images[0]}
+                alt={req.title}
+                priority={priority}
+                className="w-full h-full object-cover"
+                iconClassName="w-8 h-8 text-slate-400 dark:text-slate-500"
+              />
+            </div>
+          )}
+
+          <h2 className="text-base font-bold text-slate-900 dark:text-white line-clamp-2">
+            {req.title}
+          </h2>
+
+          <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <p className="flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+              <span className="truncate">{req.generalLocation}</span>
+            </p>
+            <p className="text-slate-500 dark:text-slate-400 line-clamp-2">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                Preferences:
+              </span>{' '}
+              {req.preferences}
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 min-w-0">
+              <UserAvatar
+                uid={req.userId}
+                src={req.userSnapshot?.profilePic}
+                name={posterName}
+                size="2xs"
+              />
+              <span className="truncate">By {posterName}</span>
+              {isVerified && (
+                <VerifiedBadge
+                  size="xs"
+                  accountType={req.userSnapshot?.accountType}
+                />
+              )}
+            </p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white tabular-nums">
+              {typeof req.budget === 'number' && req.budget > 0
+                ? `${formatNaira(req.budget)} / yr`
+                : 'Flexible Budget'}
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+            View &amp; Connect →
+          </span>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={(e) => onShare(req, e)}
+        aria-label={`Share ${req.title}`}
+        title="Share roommate request"
+        className="absolute top-3.5 right-3.5 z-10 w-8 h-8 rounded-full bg-white/95 dark:bg-slate-800/95 hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200/90 dark:border-slate-700 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+    </Card>
+  );
+});
 
 export function Roommates() {
   const navigate = useNavigate();
@@ -412,6 +533,20 @@ export function Roommates() {
 
   return (
     <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-5 sm:space-y-6">
+      <SeoHead
+        title={selectedRequest ? selectedRequest.title : 'Roommate Matching'}
+        ogTitle={
+          selectedRequest
+            ? selectedRequest.title
+            : 'Roommate Matching | LASUEDPLUG'
+        }
+        description={
+          selectedRequest
+            ? selectedRequest.description?.trim() ||
+              `${getRoommateTypeLabel(selectedRequest.type)} in ${selectedRequest.generalLocation} on LASUEDPLUG.`
+            : 'Connect with compatible LASUED & LASU peers to share rent safely around Epe.'
+        }
+      />
       <AccommodationSubNav
         actionSlot={
           <Button
@@ -429,10 +564,10 @@ export function Roommates() {
 
       {/* Page Heading */}
       <div className="space-y-1 min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Roommate Matching
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Connect with compatible LASUED &amp; LASU peers to share rent safely around Epe.
         </p>
       </div>
@@ -440,14 +575,14 @@ export function Roommates() {
       {/* Sticky Filter Bar */}
       <section
         aria-label="Filter roommate requests"
-        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-2 bg-slate-50/95 backdrop-blur-sm"
+        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm"
       >
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2.5 sm:p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-2.5 sm:p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             <div className="space-y-1 min-w-0">
               <label
                 htmlFor="roommate-type-filter"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Request Type
               </label>
@@ -458,7 +593,7 @@ export function Roommates() {
                 onChange={(e) =>
                   setTypeFilter(e.target.value as 'all' | RoommateRequestType)
                 }
-                className="block w-full min-w-0 px-3 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                className="block w-full min-w-0 px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
               >
                 <option value="all">All Requests</option>
                 {ROOMMATE_TYPE_OPTIONS.map((opt) => (
@@ -472,12 +607,12 @@ export function Roommates() {
             <div className="space-y-1 min-w-0">
               <label
                 htmlFor="roommate-search"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Location or Preferences
               </label>
               <div className="relative min-w-0">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   id="roommate-search"
                   type="search"
@@ -485,7 +620,7 @@ export function Roommates() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Location or preference (Igbogbo, female, quiet)..."
                   aria-label="Location or Preferences"
-                  className="block w-full min-w-0 pl-9 pr-3 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="block w-full min-w-0 pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                 />
               </div>
             </div>
@@ -531,114 +666,15 @@ export function Roommates() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {filteredRequests.map((req, index) => {
-            const typeLabel = getRoommateTypeLabel(req.type);
-            const posterName =
-              req.userSnapshot?.fullName || 'LASUEDPLUG Student';
-            const isVerified = Boolean(req.userSnapshot?.isVerified);
-
-            return (
-              <Card
-                key={req.id || req.title}
-                padded={false}
-                className="relative flex flex-col justify-between overflow-hidden hover:border-primary-200 transition-colors"
-              >
-                <button
-                  type="button"
-                  onClick={() => handleOpenRoommateDetail(req)}
-                  className="w-full h-full text-left p-5 flex flex-col justify-between gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl"
-                >
-                  <div className="space-y-3 w-full">
-                    <div className="flex items-center justify-between gap-2 pr-10">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
-                          req.type === 'room_available'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-blue-50 text-blue-700 border-blue-200'
-                        }`}
-                      >
-                        {typeLabel}
-                      </span>
-
-                      {isVerified && (
-                        <Badge variant="verified">
-                          <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                          Verified
-                        </Badge>
-                      )}
-                    </div>
-
-                    {req.images && req.images.length > 0 && (
-                      <div className="w-full h-36 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-                        <ProductImage
-                          src={req.images[0]}
-                          alt={req.title}
-                          priority={index < 3}
-                          className="w-full h-full object-cover"
-                          iconClassName="w-8 h-8 text-slate-400"
-                        />
-                      </div>
-                    )}
-
-                    <h2 className="text-base font-bold text-slate-900 line-clamp-2">
-                      {req.title}
-                    </h2>
-
-                    <div className="space-y-1.5 text-xs text-slate-600">
-                      <p className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{req.generalLocation}</span>
-                      </p>
-                      <p className="text-slate-500 line-clamp-2">
-                        <span className="font-semibold text-slate-700">
-                          Preferences:
-                        </span>{' '}
-                        {req.preferences}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="w-full pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 min-w-0">
-                        <UserAvatar
-                          uid={req.userId}
-                          src={req.userSnapshot?.profilePic}
-                          name={posterName}
-                          size="2xs"
-                        />
-                        <span className="truncate">By {posterName}</span>
-                        {isVerified && (
-                          <VerifiedBadge
-                            size="xs"
-                            accountType={req.userSnapshot?.accountType}
-                          />
-                        )}
-                      </p>
-                      <p className="text-sm font-bold text-slate-900 tabular-nums">
-                        {typeof req.budget === 'number' && req.budget > 0
-                          ? `${formatNaira(req.budget)} / yr`
-                          : 'Flexible Budget'}
-                      </p>
-                    </div>
-                    <span className="text-xs font-semibold text-blue-600 shrink-0">
-                      View &amp; Connect →
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => handleShareRoommate(req, e)}
-                  aria-label={`Share ${req.title}`}
-                  title="Share roommate request"
-                  className="absolute top-3.5 right-3.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </Card>
-            );
-          })}
+          {filteredRequests.map((req, index) => (
+            <RoommateRequestCard
+              key={req.id || req.title}
+              request={req}
+              priority={index < 3}
+              onOpen={handleOpenRoommateDetail}
+              onShare={handleShareRoommate}
+            />
+          ))}
         </div>
       )}
 
@@ -652,7 +688,7 @@ export function Roommates() {
           onClick={handleCloseRoommateDetail}
         >
           <div
-            className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -660,15 +696,15 @@ export function Roommates() {
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
                     selectedRequest.type === 'room_available'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-blue-50 text-blue-700 border-blue-200'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                   }`}
                 >
                   {getRoommateTypeLabel(selectedRequest.type)}
                 </span>
                 <h2
                   id="roommate-detail-title"
-                  className="text-xl font-bold text-slate-900 leading-snug"
+                  className="text-xl font-bold text-slate-900 dark:text-white leading-snug"
                 >
                   {selectedRequest.title}
                 </h2>
@@ -677,7 +713,7 @@ export function Roommates() {
                 type="button"
                 onClick={handleCloseRoommateDetail}
                 aria-label="Close details"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -688,24 +724,24 @@ export function Roommates() {
                 {selectedRequest.images.map((imgSrc, idx) => (
                   <div
                     key={`${selectedRequest.id || 'req'}-img-${idx}`}
-                    className="aspect-square rounded-lg overflow-hidden bg-slate-100 border border-slate-200"
+                    className="aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
                   >
                     <ProductImage
                       src={imgSrc}
                       alt={`${selectedRequest.title} photo ${idx + 1}`}
                       className="w-full h-full object-cover"
-                      iconClassName="w-6 h-6 text-slate-400"
+                      iconClassName="w-6 h-6 text-slate-400 dark:text-slate-500"
                     />
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-500">Location</p>
-                <p className="font-semibold text-slate-900 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Location</p>
+                <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-primary-500 dark:text-blue-400 shrink-0" />
                   <span>{selectedRequest.generalLocation}</span>
                 </p>
                 {typeof selectedRequest.latitude === 'number' &&
@@ -714,7 +750,7 @@ export function Roommates() {
                       href={`https://www.google.com/maps?q=${selectedRequest.latitude},${selectedRequest.longitude}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
                     >
                       <ExternalLink className="w-3 h-3 shrink-0" />
                       <span>View on Map</span>
@@ -722,10 +758,10 @@ export function Roommates() {
                   )}
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Annual Budget Share
                 </p>
-                <p className="font-bold text-primary-600 mt-0.5 tabular-nums">
+                <p className="font-bold text-primary-600 dark:text-blue-400 mt-0.5 tabular-nums">
                   {typeof selectedRequest.budget === 'number' &&
                   selectedRequest.budget > 0
                     ? `${formatNaira(selectedRequest.budget)} / year`
@@ -735,26 +771,26 @@ export function Roommates() {
             </div>
 
             <div className="space-y-1.5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Roommate Preferences
               </h3>
-              <p className="text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <p className="text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
                 {selectedRequest.preferences}
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Details
               </h3>
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                 {selectedRequest.description}
               </p>
             </div>
 
             <Link
               to={`/seller/${selectedRequest.userId}`}
-              className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
+              className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-100/70 dark:hover:bg-slate-800 transition-colors group"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <UserAvatar
@@ -764,7 +800,7 @@ export function Roommates() {
                   size="md"
                 />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center gap-1.5 min-w-0 transition-colors">
                     <span className="truncate">
                       {selectedRequest.userSnapshot?.fullName ||
                         'LASUEDPLUG Student'}
@@ -776,7 +812,7 @@ export function Roommates() {
                       />
                     )}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     View student profile &amp; reviews →
                   </p>
                 </div>
@@ -826,18 +862,18 @@ export function Roommates() {
           onClick={() => !submitting && setCreateOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
                 <h2
                   id="create-roommate-title"
-                  className="text-lg font-bold text-slate-900"
+                  className="text-lg font-bold text-slate-900 dark:text-white"
                 >
                   Post Roommate Request
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Requests require 1–{MAX_LISTING_IMAGES} photos, budget, and a pinned physical location.
                 </p>
               </div>
@@ -846,7 +882,7 @@ export function Roommates() {
                 disabled={submitting}
                 onClick={() => setCreateOpen(false)}
                 aria-label="Close modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -860,14 +896,14 @@ export function Roommates() {
               {formError && (
                 <div
                   role="alert"
-                  className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700"
+                  className="p-3 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-xs font-medium text-red-700 dark:text-red-300"
                 >
                   {formError}
                 </div>
               )}
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-slate-700">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Request Type <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2.5">
@@ -878,8 +914,8 @@ export function Roommates() {
                       onClick={() => setReqType(opt.value)}
                       className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
                         reqType === opt.value
-                          ? 'bg-primary-50 border-primary-400 text-primary-700'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          ? 'bg-primary-50 dark:bg-blue-950/60 border-primary-400 dark:border-blue-500 text-primary-700 dark:text-blue-300'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
                       }`}
                     >
                       {opt.label}
@@ -929,7 +965,7 @@ export function Roommates() {
               <div className="space-y-1.5">
                 <label
                   htmlFor="roommate-description"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
                   Description <span className="text-red-500">*</span>
                 </label>
@@ -940,9 +976,9 @@ export function Roommates() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe the apartment/room arrangement, move-in timeline, and expectations..."
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <p className="text-xs text-slate-500">Minimum 5 characters.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Minimum 5 characters.</p>
               </div>
 
               <Input

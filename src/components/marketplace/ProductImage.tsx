@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { Camera } from 'lucide-react';
-import { isImageWarmed, markImageWarmed } from '../../lib/imageCache';
+import { markImageWarmed } from '../../lib/imageCache';
 import { resolveListingImageUrl } from '../../lib/seedAssets';
 
 interface ProductImageProps {
@@ -29,14 +29,13 @@ export const ProductImage = memo(function ProductImage({
     return (
       <div
         aria-label={alt}
-        className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-1.5 text-slate-400"
+        className="w-full h-full bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center gap-1.5 text-slate-400 dark:text-slate-500"
       >
         <Camera className={iconClassName} />
       </div>
     );
   }
 
-  const alreadyWarm = priority || isImageWarmed(resolvedSrc);
   const priorityProps = priority
     ? ({ fetchpriority: 'high' } as Record<string, string>)
     : undefined;
@@ -45,8 +44,8 @@ export const ProductImage = memo(function ProductImage({
     <img
       src={resolvedSrc}
       alt={alt}
-      loading={alreadyWarm ? 'eager' : 'lazy'}
-      decoding={alreadyWarm ? 'sync' : 'async'}
+      loading="lazy"
+      decoding="async"
       referrerPolicy="no-referrer"
       onLoad={() => markImageWarmed(resolvedSrc)}
       onError={() => setFailed(true)}

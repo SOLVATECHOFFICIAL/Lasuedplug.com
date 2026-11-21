@@ -114,7 +114,7 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
           padded={false}
           className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
         >
-        <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+        <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
           <ProductImage
             src={service.images?.[0]}
             alt={service.title}
@@ -130,15 +130,15 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
         <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between gap-2.5">
           <div className="space-y-1 min-w-0">
             {categoryLabel && (
-              <p className="text-xs font-medium text-slate-500 truncate">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
                 {categoryLabel}
               </p>
             )}
-            <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
               {service.title}
             </h3>
             {(sellerName || verified || service.sellerSnapshot?.profilePic) && (
-              <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+              <p className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 min-w-0">
                 <UserAvatar
                   uid={service.providerId}
                   src={service.sellerSnapshot?.profilePic}
@@ -155,14 +155,14 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
               </p>
             )}
             {service.locationName && (
-              <p className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5 min-w-0">
-                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pt-0.5 min-w-0">
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                 <span className="truncate">{service.locationName}</span>
               </p>
             )}
           </div>
 
-          <p className="text-sm sm:text-base font-semibold text-blue-600 tabular-nums truncate">
+          <p className="text-sm sm:text-base font-semibold text-blue-600 dark:text-blue-400 tabular-nums truncate">
             {priceText}
           </p>
         </div>
@@ -174,7 +174,7 @@ export const LegacyServiceCard = memo(function LegacyServiceCard({
         onClick={handleShareClick}
         aria-label={`Share ${service.title}`}
         title="Share service"
-        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 border border-slate-200/90 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/95 dark:bg-slate-800/95 hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200/90 dark:border-slate-700 shadow-sm backdrop-blur-sm flex items-center justify-center transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
       </button>

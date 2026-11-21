@@ -64,7 +64,7 @@ export function UserAvatar({
         loading="lazy"
         decoding="async"
         onError={() => setFailed(true)}
-        className={`${sizeClass} rounded-full object-cover border border-slate-200 shrink-0 bg-slate-100 ${className}`.trim()}
+        className={`${sizeClass} rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-800 ${className}`.trim()}
       />
     );
   }

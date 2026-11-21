@@ -72,8 +72,8 @@ export function AdminSettings() {
               <div
                 className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
                   maintenanceMode
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-emerald-50 text-emerald-700'
+                    ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
+                    : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
                 }`}
               >
                 {maintenanceMode ? (
@@ -84,20 +84,20 @@ export function AdminSettings() {
               </div>
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                     Maintenance Mode
                   </h2>
                   <span
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold ${
                       maintenanceMode
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
+                        ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                        : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                     }`}
                   >
                     {maintenanceMode ? 'Active' : 'Site Live'}
                   </span>
                 </div>
-                <p className="text-sm text-slate-600 leading-relaxed max-w-xl">
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
                   When enabled, public visitors and regular student and marketer accounts see a
                   full-screen &ldquo;We&apos;ll be right back&rdquo; maintenance notice.
                   Your verified Admin session keeps full access so you can finish
@@ -115,7 +115,7 @@ export function AdminSettings() {
                 disabled={loading || saving}
                 onClick={() => void handleToggleMaintenance()}
                 className={`relative inline-flex h-8 w-14 min-h-[44px] items-center rounded-full px-1 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
-                  maintenanceMode ? 'bg-amber-600' : 'bg-slate-300'
+                  maintenanceMode ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'
                 }`}
               >
                 <span
@@ -124,7 +124,7 @@ export function AdminSettings() {
                   }`}
                 />
               </button>
-              <span className="text-sm font-semibold text-slate-800 min-w-[68px]">
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 min-w-[68px]">
                 {loading
                   ? 'Loading...'
                   : saving
@@ -139,14 +139,14 @@ export function AdminSettings() {
           <div
             className={`rounded-xl border p-4 flex items-start gap-3 text-sm ${
               maintenanceMode
-                ? 'bg-amber-50 border-amber-200 text-amber-900'
-                : 'bg-slate-50 border-slate-200 text-slate-700'
+                ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200'
+                : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
             }`}
           >
             {maintenanceMode ? (
-              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             ) : (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             )}
             <p className="leading-relaxed">
               {maintenanceMode
@@ -156,13 +156,13 @@ export function AdminSettings() {
           </div>
         </Card>
 
-        <Card hoverable={false} className="bg-slate-50 border-slate-200 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-            <ShieldAlert className="w-4 h-4 text-primary-600" aria-hidden="true" />
+        <Card hoverable={false} className="bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+            <ShieldAlert className="w-4 h-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
             <span>Firestore Security Enforcement</span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Settings are stored at <code className="font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-slate-200">platform_settings/global</code> and write-locked exclusively to the verified Admin account.
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            Settings are stored at <code className="font-mono text-xs bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">platform_settings/global</code> and write-locked exclusively to the verified Admin account.
           </p>
         </Card>
       </div>

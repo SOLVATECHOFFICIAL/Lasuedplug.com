@@ -76,7 +76,7 @@ const CATEGORIES = [
       'Textbooks, electronics, dorm essentials, and everyday items from students near you.',
     path: '/marketplace',
     icon: ShoppingBag,
-    iconBg: 'bg-primary-50 text-primary-500',
+    iconBg: 'bg-primary-50 dark:bg-primary-900/40 text-primary-500 dark:text-primary-300',
   },
   {
     title: 'Services',
@@ -84,7 +84,7 @@ const CATEGORIES = [
       'Campus stores, tutoring, repairs, printing, tailoring, catering, and student skills.',
     path: '/services',
     icon: Wrench,
-    iconBg: 'bg-orange-50 text-accent-500',
+    iconBg: 'bg-orange-50 dark:bg-orange-950/50 text-accent-500 dark:text-orange-400',
   },
   {
     title: 'Accommodation',
@@ -92,7 +92,7 @@ const CATEGORIES = [
       'Browse verified off-campus lodges, self-contained rooms, and hostels around Epe.',
     path: '/accommodation',
     icon: Building2,
-    iconBg: 'bg-emerald-50 text-emerald-600',
+    iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400',
   },
   {
     title: 'Roommates',
@@ -100,7 +100,7 @@ const CATEGORIES = [
       'Connect with compatible LASUED and LASU students looking to share accommodation.',
     path: '/roommates',
     icon: Users,
-    iconBg: 'bg-indigo-50 text-indigo-600',
+    iconBg: 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400',
   },
 ];
 
@@ -542,7 +542,7 @@ export function Home() {
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center justify-center gap-2 py-2.5 bg-primary-50 border-b border-primary-100 text-xs font-semibold text-primary-700 transition-all"
+          className="flex items-center justify-center gap-2 py-2.5 bg-primary-50 dark:bg-slate-900 border-b border-primary-100 dark:border-slate-800 text-xs font-semibold text-primary-700 dark:text-primary-300 transition-all"
         >
           {refreshing ? (
             <>
@@ -564,12 +564,12 @@ export function Home() {
       )}
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 border-b border-slate-200/80">
+      <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-b border-slate-200/80 dark:border-slate-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center space-y-5">
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
+          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
             Discover Your Campus Marketplace
           </h1>
-          <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
             {SITE_TAGLINE} — built for LASUED students, LASU students, and the Epe
             community.
           </p>
@@ -580,7 +580,7 @@ export function Home() {
             aria-label="Search campus marketplace, services, stores, and accommodation"
             className="max-w-2xl mx-auto pt-1"
           >
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
               <div className="flex items-center gap-2.5 flex-1 px-2.5">
                 <Search className="w-5 h-5 text-slate-400 shrink-0" />
                 <input
@@ -595,14 +595,14 @@ export function Home() {
                   }}
                   placeholder="Search products, services, stores, or lodges..."
                   aria-label="Search products, services, stores, or accommodation"
-                  className="w-full py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none"
+                  className="w-full py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 bg-transparent focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={handleClearHomeSearch}
                     aria-label="Clear search"
-                    className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -615,14 +615,14 @@ export function Home() {
           </form>
 
           {activeSearch && (
-            <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-600 dark:text-slate-300">
               <span>
                 Showing matching results for &ldquo;{activeSearch}&rdquo;.
               </span>
               <button
                 type="button"
                 onClick={handleClearHomeSearch}
-                className="font-semibold text-blue-600 hover:text-blue-700"
+                className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 Clear Search
               </button>
@@ -638,10 +638,10 @@ export function Home() {
       {!activeSearch && (
         <section className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 pt-8 pb-4 space-y-5">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               Browse by Category
             </h2>
-            <p className="text-sm text-slate-600 mt-0.5">
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
               Everything students need across campus life in one place.
             </p>
           </div>
@@ -651,7 +651,7 @@ export function Home() {
               const Icon = category.icon;
               return (
                 <Link key={category.path} to={category.path} className="group block h-full">
-                  <Card className="h-full flex flex-col justify-between space-y-3 p-4 sm:p-5 group-hover:border-primary-100">
+                  <Card className="h-full flex flex-col justify-between space-y-3 p-4 sm:p-5 group-hover:border-primary-100 dark:group-hover:border-primary-800">
                     <div className="space-y-3">
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center ${category.iconBg}`}
@@ -659,11 +659,11 @@ export function Home() {
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-sm sm:text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors duration-200 flex items-center justify-between gap-2">
+                        <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200 flex items-center justify-between gap-2">
                           <span>{category.title}</span>
-                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all duration-200 shrink-0" />
+                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all duration-200 shrink-0" />
                         </h3>
-                        <p className="text-xs sm:text-sm text-slate-500 leading-relaxed line-clamp-2">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
                           {category.description}
                         </p>
                       </div>
@@ -683,14 +683,14 @@ export function Home() {
       >
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
           <div className="space-y-1">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {sortMode === 'trending'
                 ? 'Trending Around Campus'
                 : sortMode === 'top_rated'
                   ? 'Top Rated Sellers & Stores'
                   : 'Campus Feed'}
             </h2>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               {sortMode === 'trending'
                 ? 'Hot items and services rotated automatically every 2 hours.'
                 : 'Latest items, campus services, stores, and rooms.'}
@@ -702,7 +702,7 @@ export function Home() {
               type="button"
               onClick={() => void loadFeeds(true)}
               disabled={refreshing || loading}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 transition-colors"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`}
@@ -712,7 +712,7 @@ export function Home() {
             </button>
             <Link
               to="/marketplace"
-              className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 px-2 py-2 whitespace-nowrap shrink-0"
+              className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 inline-flex items-center gap-1 px-2 py-2 whitespace-nowrap shrink-0"
             >
               Explore Marketplace <ArrowRight className="w-4 h-4" />
             </Link>
@@ -720,13 +720,13 @@ export function Home() {
         </div>
 
         {/* Sort Tabs, Type Filter & Verified Checkbox Toolbar */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-sm space-y-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 shadow-sm space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Sort Tabs */}
             <div
               role="tablist"
               aria-label="Feed sort order"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start max-w-full overflow-x-auto"
+              className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start max-w-full overflow-x-auto"
             >
               {SORT_TABS.map((tab) => {
                 const Icon = tab.icon;
@@ -740,8 +740,8 @@ export function Home() {
                     onClick={() => void handleSortTabChange(tab.id)}
                     className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 transition-all ${
                       active
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <Icon
@@ -751,7 +751,7 @@ export function Home() {
                             ? 'text-orange-500'
                             : tab.id === 'top_rated'
                               ? 'text-amber-500'
-                              : 'text-blue-600'
+                              : 'text-blue-600 dark:text-blue-400'
                           : 'text-slate-400'
                       }`}
                       aria-hidden="true"
@@ -763,22 +763,22 @@ export function Home() {
             </div>
 
             {/* Verified Filter Checkbox */}
-            <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-700 cursor-pointer select-none py-1">
+            <label className="inline-flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none py-1">
               <input
                 type="checkbox"
                 checked={verifiedOnly}
                 onChange={(e) => setVerifiedOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
               />
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
                 <span>Only show Verified Sellers</span>
               </span>
             </label>
           </div>
 
           {/* Content Type Filter Row */}
-          <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
               {TYPE_FILTERS.map((opt) => {
                 const active = typeFilter === opt.id;
@@ -790,7 +790,7 @@ export function Home() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 border transition-colors ${
                       active
                         ? 'bg-primary-500 text-white border-primary-500'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
                     {opt.label}
@@ -800,7 +800,7 @@ export function Home() {
             </div>
 
             {!isFeedSkeletonVisible && (
-              <p className="text-xs font-medium text-slate-500 tabular-nums">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums">
                 Showing {displayedFeed.length} of {processedFeed.length}{' '}
                 {processedFeed.length === 1 ? 'listing' : 'listings'}
               </p>
@@ -931,17 +931,17 @@ export function Home() {
         {/* Community Suggestions & Updates Group Callout */}
         <div
           aria-label="Suggestions and updates"
-          className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+          className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
         >
           <div className="flex items-start gap-4 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center shrink-0">
               <Lightbulb className="w-5 h-5" aria-hidden="true" />
             </div>
             <div className="space-y-1 min-w-0">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
                 Help Shape What We Add Next
               </h2>
-              <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
                 Want a new feature on LASUEDPLUG? Send us a suggestion or join our
                 WhatsApp group to get new app &amp; site updates first.
               </p>

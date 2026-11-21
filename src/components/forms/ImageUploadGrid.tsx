@@ -94,14 +94,14 @@ export function ImageUploadGrid({
       <div className="flex items-center justify-between gap-2">
         <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-slate-700"
+          className="block text-sm font-medium text-slate-700 dark:text-slate-200"
         >
           {label} <span className="text-red-500 ml-0.5">*</span>{' '}
-          <span className="text-xs font-normal text-slate-500">
+          <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
             (Min {MIN_LISTING_IMAGES}, Max {maxImages} images, auto-compressed)
           </span>
         </label>
-        <span className="text-xs font-medium text-slate-500 tabular-nums shrink-0">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
           {images.length} / {maxImages} selected
         </span>
       </div>
@@ -120,7 +120,7 @@ export function ImageUploadGrid({
         {images.map((imgSrc, idx) => (
           <div
             key={`${imgSrc.slice(0, 24)}-${idx}`}
-            className={`relative ${aspectClass} rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group`}
+            className={`relative ${aspectClass} rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group`}
           >
             <img
               src={imgSrc}
@@ -153,9 +153,9 @@ export function ImageUploadGrid({
             onClick={() => fileInputRef.current?.click()}
             className={`${aspectClass} rounded-xl border-2 border-dashed ${
               error
-                ? 'border-red-300 bg-red-50/30 hover:border-red-400'
-                : 'border-slate-300 hover:border-blue-500 hover:bg-blue-50/40'
-            } flex flex-col items-center justify-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors p-3 text-center disabled:opacity-60`}
+                ? 'border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-950/30 hover:border-red-400'
+                : 'border-slate-300 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/30'
+            } flex flex-col items-center justify-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-3 text-center disabled:opacity-60`}
           >
             {compressing ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -170,10 +170,10 @@ export function ImageUploadGrid({
       </div>
 
       {helperText && !error && (
-        <p className="text-xs text-slate-500">{helperText}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{helperText}</p>
       )}
       {error && (
-        <p role="alert" className="text-xs font-medium text-red-600">
+        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
           {error}
         </p>
       )}

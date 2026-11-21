@@ -30,10 +30,10 @@ export function VerifiedBadge({
   if (showLabel) {
     return (
       <span
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 ${className}`.trim()}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap shrink-0 ${className}`.trim()}
         title={resolvedLabel}
       >
-        <BadgeCheck className={`${iconSize} text-emerald-600 shrink-0`} aria-hidden="true" />
+        <BadgeCheck className={`${iconSize} text-emerald-600 dark:text-emerald-400 shrink-0`} aria-hidden="true" />
         <span>{resolvedLabel}</span>
       </span>
     );
@@ -41,7 +41,7 @@ export function VerifiedBadge({
 
   return (
     <span
-      className={`inline-flex items-center shrink-0 text-emerald-600 ${className}`.trim()}
+      className={`inline-flex items-center shrink-0 text-emerald-600 dark:text-emerald-400 ${className}`.trim()}
       title={resolvedLabel}
       aria-label={resolvedLabel}
     >

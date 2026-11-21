@@ -36,6 +36,7 @@ import { ErrorState } from '../../components/feedback/ErrorState';
 import { Card } from '../../components/ui/Card';
 import { UserAvatar } from '../../components/ui/UserAvatar';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 type BuyerTab = 'saved' | 'enquiries';
 
@@ -53,9 +54,9 @@ const SavedListingCard = memo(function SavedListingCard({
   if (!listing) {
     return (
       <Card padded={false} className="overflow-hidden flex flex-col justify-between">
-        <div className="relative aspect-[4/3] w-full bg-slate-100 flex flex-col items-center justify-center gap-2 text-slate-400">
+        <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500">
           <PackageOpen className="w-8 h-8" aria-hidden="true" />
-          <span className="text-xs font-medium text-slate-500">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Listing unavailable
           </span>
           <button
@@ -63,16 +64,16 @@ const SavedListingCard = memo(function SavedListingCard({
             disabled={isRemoving}
             onClick={() => onUnsave(entry)}
             aria-label="Remove unavailable listing from favorites"
-            className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 transition-transform"
+            className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center hover:scale-105 transition-transform"
           >
             <Heart className="w-4 h-4 fill-red-500 text-red-500" />
           </button>
         </div>
         <div className="p-3.5 sm:p-4 space-y-1">
-          <p className="text-sm font-semibold text-slate-700">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             Item no longer available
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Saved on {formatEnquiryDate(favorite.createdAt)}
           </p>
         </div>
@@ -91,7 +92,7 @@ const SavedListingCard = memo(function SavedListingCard({
 
   return (
     <Card padded={false} className="overflow-hidden flex flex-col group">
-      <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+      <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
         <Link to={`/marketplace/${favorite.listingId}`} className="block w-full h-full">
           <ProductImage
             src={listing.images?.[0]}
@@ -106,7 +107,7 @@ const SavedListingCard = memo(function SavedListingCard({
           onClick={() => onUnsave(entry)}
           aria-label={`Remove ${listing.title} from favorites`}
           title="Remove from favorites"
-          className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 backdrop-blur-sm border border-slate-200 shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
+          className="absolute top-2.5 right-2.5 z-10 w-9 h-9 rounded-full bg-white/95 dark:bg-slate-900/90 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
         >
           <Heart className="w-4 h-4 fill-red-500 text-red-500" />
         </button>
@@ -118,15 +119,15 @@ const SavedListingCard = memo(function SavedListingCard({
       >
         <div className="space-y-1">
           {categoryLabel && (
-            <p className="text-xs font-medium text-slate-500 truncate">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
               {categoryLabel}
             </p>
           )}
-          <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+          <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
             {listing.title}
           </h3>
           {(listing.sellerSnapshot?.fullName || listing.sellerSnapshot?.isVerified) && (
-            <p className="text-xs text-slate-600 flex items-center gap-1.5 min-w-0">
+            <p className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 min-w-0">
               <UserAvatar
                 uid={listing.sellerId}
                 src={listing.sellerSnapshot?.profilePic}
@@ -144,15 +145,15 @@ const SavedListingCard = memo(function SavedListingCard({
               )}
             </p>
           )}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-0.5 min-w-0">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pt-0.5 min-w-0">
             {isOnlineListing ? (
-              <span className="truncate font-medium text-emerald-700 inline-flex items-center gap-1">
+              <span className="truncate font-medium text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
                 <Truck className="w-3.5 h-3.5 shrink-0" />
                 <span>Online / Delivery</span>
               </span>
             ) : (
               <>
-                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
                 <span className="truncate">{locationLabel}</span>
               </>
             )}
@@ -161,7 +162,9 @@ const SavedListingCard = memo(function SavedListingCard({
 
         <p
           className={`text-sm sm:text-base tabular-nums truncate ${
-            priceInfo.isContact ? 'font-semibold text-blue-600' : 'font-bold text-slate-900'
+            priceInfo.isContact
+              ? 'font-semibold text-blue-600 dark:text-blue-400'
+              : 'font-bold text-slate-900 dark:text-white'
           }`}
         >
           {priceInfo.isContact && priceInfo.unitSuffix
@@ -284,10 +287,14 @@ export function BuyerDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 space-y-6">
+      <SeoHead
+        title="Buyer Dashboard"
+        description="View your saved marketplace items and track sellers you have contacted on LASUEDPLUG."
+      />
       <DashboardModeSwitcher activeMode="buyer" />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3.5 min-w-0">
           <UserAvatar
             uid={user?.uid}
@@ -297,10 +304,10 @@ export function BuyerDashboard() {
             size="md"
           />
           <div className="space-y-1 min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               My Dashboard
             </h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               View your saved marketplace items and track sellers you have contacted.
             </p>
           </div>
@@ -312,7 +319,7 @@ export function BuyerDashboard() {
         <div
           role="tablist"
           aria-label="Buyer dashboard sections"
-          className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl max-w-full w-full sm:w-auto"
+          className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl max-w-full w-full sm:w-auto"
         >
           <button
             type="button"
@@ -321,15 +328,17 @@ export function BuyerDashboard() {
             onClick={() => setActiveTab('saved')}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 flex items-center justify-center gap-2 min-h-[48px] md:min-h-[38px] ${
               activeTab === 'saved'
-                ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-semibold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Heart className="w-4 h-4 text-red-500" aria-hidden="true" />
             <span>Saved Items</span>
             <span
               className={`tabular-nums text-xs ${
-                activeTab === 'saved' ? 'text-primary-600' : 'text-slate-400'
+                activeTab === 'saved'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-400 dark:text-slate-500'
               }`}
             >
               {savedItems.length}
@@ -343,15 +352,17 @@ export function BuyerDashboard() {
             onClick={() => setActiveTab('enquiries')}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 flex items-center justify-center gap-2 min-h-[48px] md:min-h-[38px] ${
               activeTab === 'enquiries'
-                ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-semibold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <MessageCircle className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+            <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             <span>My Enquiries</span>
             <span
               className={`tabular-nums text-xs ${
-                activeTab === 'enquiries' ? 'text-primary-600' : 'text-slate-400'
+                activeTab === 'enquiries'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-400 dark:text-slate-500'
               }`}
             >
               {enquiries.length}
@@ -373,10 +384,10 @@ export function BuyerDashboard() {
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 space-y-2.5 animate-pulse"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-2.5 animate-pulse"
               >
-                <div className="h-5 w-1/2 bg-slate-200 rounded" />
-                <div className="h-4 w-1/3 bg-slate-200 rounded" />
+                <div className="h-5 w-1/2 bg-slate-200 dark:bg-slate-800 rounded" />
+                <div className="h-4 w-1/3 bg-slate-200 dark:bg-slate-800 rounded" />
               </div>
             ))}
           </div>
@@ -421,35 +432,35 @@ export function BuyerDashboard() {
           {enquiries.map((enquiry, index) => (
             <div
               key={enquiry.id || `${enquiry.listingId}-${index}`}
-              className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:shadow-sm transition-shadow"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:shadow-sm transition-shadow"
             >
               <div className="space-y-1.5 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <MessageCircle
-                    className="w-4 h-4 text-emerald-600 shrink-0"
+                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
                     aria-hidden="true"
                   />
                   <Link
                     to={`/marketplace/${enquiry.listingId}`}
-                    className="text-base font-bold text-slate-900 hover:text-primary-600 transition-colors truncate"
+                    className="text-base font-bold text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors truncate"
                   >
                     {enquiry.listingTitle}
                   </Link>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                   <span className="inline-flex items-center gap-1.5">
-                    <UserIcon className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                    <UserIcon className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                     <span>
                       Seller ID:{' '}
-                      <span className="font-mono text-slate-700">
+                      <span className="font-mono text-slate-700 dark:text-slate-300">
                         {enquiry.sellerId}
                       </span>
                     </span>
                   </span>
 
                   <span className="inline-flex items-center gap-1.5 tabular-nums">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                     <span>Contacted {formatEnquiryDate(enquiry.createdAt)}</span>
                   </span>
                 </div>
@@ -457,7 +468,7 @@ export function BuyerDashboard() {
 
               <Link
                 to={`/marketplace/${enquiry.listingId}`}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[48px] md:min-h-[38px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 self-start sm:self-auto"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[48px] md:min-h-[38px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 self-start sm:self-auto"
               >
                 <span>View Listing</span>
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />

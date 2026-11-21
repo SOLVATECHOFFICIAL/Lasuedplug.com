@@ -29,14 +29,14 @@ export function EmptyState({
 
   return (
     <div
-      className={`w-full max-w-md mx-auto my-8 sm:my-12 p-6 sm:p-8 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-center space-y-4 shadow-sm transition-all duration-200 ${className}`.trim()}
+      className={`w-full max-w-md mx-auto my-8 sm:my-12 p-6 sm:p-8 bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center space-y-4 shadow-sm transition-all duration-200 ${className}`.trim()}
     >
-      <div className="w-14 h-14 mx-auto rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center">
+      <div className="w-14 h-14 mx-auto rounded-2xl bg-primary-50 dark:bg-blue-950/60 text-primary-600 dark:text-blue-400 flex items-center justify-center">
         <Icon className="w-7 h-7" aria-hidden="true" />
       </div>
       <div className="space-y-1.5">
-        <h2 className="text-lg sm:text-xl font-bold text-slate-900">{title}</h2>
-        <p className="text-sm text-slate-500 leading-relaxed">{description}</p>
+        <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{description}</p>
       </div>
       {(showPrimaryAction || (secondaryActionLabel && onSecondaryAction)) && (
         <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2.5">

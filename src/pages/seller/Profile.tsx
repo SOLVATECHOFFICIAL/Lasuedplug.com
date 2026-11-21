@@ -197,7 +197,7 @@ export function SellerProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
@@ -213,7 +213,7 @@ export function SellerProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
@@ -281,7 +281,7 @@ export function SellerProfile() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Marketplace'}</span>
@@ -313,7 +313,7 @@ export function SellerProfile() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {displayName}
                 </h1>
                 {seller.isVerified && (
@@ -329,7 +329,7 @@ export function SellerProfile() {
                 seller.businessName?.trim() &&
                 seller.fullName?.trim() &&
                 seller.businessName.trim() !== seller.fullName.trim() && (
-                  <p className="text-xs sm:text-sm text-slate-500">
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                     Managed by {seller.fullName.trim()}
                   </p>
                 )}
@@ -341,29 +341,29 @@ export function SellerProfile() {
               />
 
               {seller.bio?.trim() && (
-                <p className="text-sm text-slate-600 leading-relaxed max-w-2xl whitespace-pre-line">
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl whitespace-pre-line">
                   {seller.bio.trim()}
                 </p>
               )}
 
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                 {isBusiness ? (
                   <>
                     {!seller.isOnlineOnly && seller.openingHours?.trim() && (
-                      <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                        <Clock className="w-4 h-4 text-primary-500 shrink-0" />
+                      <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
+                        <Clock className="w-4 h-4 text-primary-500 dark:text-blue-400 shrink-0" />
                         <span>Hours: {seller.openingHours.trim()}</span>
                       </span>
                     )}
                     <span className="inline-flex items-center gap-1.5">
                       {seller.isOnlineOnly ? (
                         <>
-                          <Globe className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                           <span>Online Only · Available anytime</span>
                         </>
                       ) : (
                         <>
-                          <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                          <Building2 className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
                           <span>
                             {seller.shopAddress?.trim() || 'Physical Shop Available'}
                           </span>
@@ -377,7 +377,7 @@ export function SellerProfile() {
                           href={`https://www.google.com/maps?q=${seller.latitude},${seller.longitude}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                          className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline"
                         >
                           <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                           <span>View Shop on Map</span>
@@ -388,13 +388,13 @@ export function SellerProfile() {
                   <>
                     {seller.campus?.trim() && (
                       <span className="inline-flex items-center gap-1.5">
-                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                        <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span>{seller.campus.trim()}</span>
                       </span>
                     )}
                     {(seller.department?.trim() || seller.level?.trim()) && (
                       <span className="inline-flex items-center gap-1.5">
-                        <GraduationCap className="w-4 h-4 text-slate-400 shrink-0" />
+                        <GraduationCap className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span>
                           {[
                             seller.department?.trim(),
@@ -432,7 +432,7 @@ export function SellerProfile() {
                 variant="outline"
                 size="sm"
                 onClick={handleReportClick}
-                className="text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50"
+                className="text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/50"
               >
                 <Flag className="w-3.5 h-3.5" />
                 <span>Report User</span>
@@ -445,7 +445,7 @@ export function SellerProfile() {
       {/* Seller's Approved Stores */}
       {stores.length > 0 && (
         <section aria-label="Seller storefronts" className="space-y-4">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
             Campus Storefronts
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -459,10 +459,10 @@ export function SellerProfile() {
       {/* Active Listings */}
       <section aria-label="Seller listings" className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
             Active Listings
           </h2>
-          <p className="text-xs sm:text-sm text-slate-600 tabular-nums">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 tabular-nums">
             {products.length} published {products.length === 1 ? 'listing' : 'listings'}
           </p>
         </div>

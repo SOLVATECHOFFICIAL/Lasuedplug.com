@@ -224,7 +224,7 @@ export function AdminReports() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="bg-white rounded-xl border border-slate-200 p-5 h-24 animate-pulse"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 h-24 animate-pulse"
             />
           ))}
         </div>
@@ -235,12 +235,12 @@ export function AdminReports() {
           onRetry={() => void loadReports()}
         />
       ) : reports.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
             No open reports
           </h2>
-          <p className="text-sm text-slate-500 max-w-md mx-auto">
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
             All flagged content has been reviewed.
           </p>
         </div>
@@ -251,43 +251,43 @@ export function AdminReports() {
             return (
               <article
                 key={report.id}
-                className="bg-white rounded-xl border border-slate-200 hover:border-primary-300 transition-colors overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary-300 dark:hover:border-primary-600 transition-colors overflow-hidden"
               >
                 <button
                   type="button"
                   onClick={() => setSelectedReport(item)}
                   aria-label={`Review report for ${item.listingTitle}`}
-                  className="w-full text-left p-4 sm:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+                  className="w-full text-left p-4 sm:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/60 transition-colors"
                 >
                   <div className="space-y-1.5 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/70">
                         <Flag className="w-3 h-3" aria-hidden="true" />
                         <span>{formatReportTargetType(report.targetType)}</span>
                       </span>
-                      <span className="text-xs font-medium text-slate-700 truncate">
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
                         {item.listingTitle}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
                         · {formatNotificationTime(report.createdAt)}
                       </span>
                     </div>
 
-                    <p className="text-sm font-semibold text-slate-900 line-clamp-2">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">
                       {report.reason}
                     </p>
-                    <p className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span>
-                        Reporter: <strong className="font-medium text-slate-700">{item.reporterName}</strong>
+                        Reporter: <strong className="font-medium text-slate-700 dark:text-slate-200">{item.reporterName}</strong>
                       </span>
                       <span>
-                        Offender: <strong className="font-medium text-slate-700">{item.offenderName}</strong>
+                        Offender: <strong className="font-medium text-slate-700 dark:text-slate-200">{item.offenderName}</strong>
                       </span>
                     </p>
                   </div>
 
                   <div className="flex items-center justify-end shrink-0">
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-200">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800/70">
                       <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Review Report</span>
                     </span>
@@ -305,28 +305,28 @@ export function AdminReports() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="report-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
           onClick={() => {
             if (!busyAction) setSelectedReport(null);
           }}
         >
           <div
-            className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
                   <Flag className="w-5 h-5" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <h2
                     id="report-modal-title"
-                    className="text-lg font-bold text-slate-900"
+                    className="text-lg font-bold text-slate-900 dark:text-white"
                   >
                     Review Report
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {formatReportTargetType(selectedReport.report.targetType)} ·{' '}
                     {formatNotificationTime(selectedReport.report.createdAt)}
                   </p>
@@ -337,7 +337,7 @@ export function AdminReports() {
                 disabled={Boolean(busyAction)}
                 onClick={() => setSelectedReport(null)}
                 aria-label="Close report modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -345,32 +345,32 @@ export function AdminReports() {
 
             {/* Report Details */}
             <div className="space-y-3.5 text-sm">
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 space-y-2.5">
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Reporter
                   </span>
-                  <span className="font-semibold text-slate-900 text-right">
+                  <span className="font-semibold text-slate-900 dark:text-white text-right">
                     {selectedReport.reporterName}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-700">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Offender
                   </span>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <span className="font-semibold text-slate-900">
+                    <span className="font-semibold text-slate-900 dark:text-white">
                       {selectedReport.offenderName}
                     </span>
                     {selectedReport.offenderStatus === 'suspended' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/70">
                         <ShieldAlert className="w-3 h-3" />
                         <span>Suspended</span>
                       </span>
                     )}
                     {selectedReport.offenderIsBanned && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-900 text-white">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-900 dark:bg-slate-700 text-white">
                         <Ban className="w-3 h-3" />
                         <span>Banned</span>
                       </span>
@@ -379,7 +379,7 @@ export function AdminReports() {
                       <Link
                         to={selectedReport.offenderProfileUrl}
                         onClick={() => setSelectedReport(null)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2"
                       >
                         <UserIcon className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>View Profile</span>
@@ -388,12 +388,12 @@ export function AdminReports() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-700">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Reported Listing
                   </span>
                   <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
-                    <span className="font-medium text-slate-800 truncate max-w-[200px]">
+                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                       {selectedReport.listingTitle}
                     </span>
                     {selectedReport.listingUrl && (
@@ -401,7 +401,7 @@ export function AdminReports() {
                         to={selectedReport.listingUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                       >
                         <span>View Listing</span>
                         <ExternalLink className="w-3 h-3" aria-hidden="true" />
@@ -412,18 +412,18 @@ export function AdminReports() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Reason Provided
                 </p>
-                <div className="rounded-xl bg-red-50/70 border border-red-200/80 p-3.5 text-sm text-slate-900 leading-relaxed">
+                <div className="rounded-xl bg-red-50/70 dark:bg-red-950/40 border border-red-200/80 dark:border-red-800/70 p-3.5 text-sm text-slate-900 dark:text-red-100 leading-relaxed">
                   {selectedReport.report.reason}
                 </div>
               </div>
             </div>
 
             {/* 4 Moderation Action Buttons */}
-            <div className="space-y-2.5 pt-2 border-t border-slate-100">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Moderation Actions
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

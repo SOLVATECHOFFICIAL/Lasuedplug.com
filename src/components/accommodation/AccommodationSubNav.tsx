@@ -13,17 +13,17 @@ export function AccommodationSubNav({ actionSlot }: AccommodationSubNavProps) {
     location.pathname.startsWith('/accommodation/roommates');
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-200">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
       <nav
         aria-label="Accommodation and Roommates Sections"
-        className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto"
+        className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full sm:w-auto"
       >
         <Link
           to="/accommodation"
           className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 min-h-[48px] md:min-h-[40px] rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 ${
             !isRoommates
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <Building2 className="w-4 h-4 shrink-0" />
@@ -33,8 +33,8 @@ export function AccommodationSubNav({ actionSlot }: AccommodationSubNavProps) {
           to="/roommates"
           className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 min-h-[48px] md:min-h-[40px] rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 ${
             isRoommates
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <Users className="w-4 h-4 shrink-0" />

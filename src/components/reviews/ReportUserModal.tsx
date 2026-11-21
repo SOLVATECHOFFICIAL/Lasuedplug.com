@@ -63,17 +63,17 @@ export function ReportUserModal({
       onClick={() => !submitting && onClose()}
     >
       <div
-        className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4"
+        className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-full bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
               <Flag className="w-4 h-4" />
             </div>
             <h2
               id="report-user-modal-title"
-              className="text-lg font-bold text-slate-900"
+              className="text-lg font-bold text-slate-900 dark:text-white"
             >
               Report User
             </h2>
@@ -83,14 +83,14 @@ export function ReportUserModal({
             disabled={submitting}
             onClick={onClose}
             aria-label="Close report user modal"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-600 leading-relaxed">
-          Report <span className="font-semibold text-slate-900">{targetUserName}</span>{' '}
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          Report <span className="font-semibold text-slate-900 dark:text-white">{targetUserName}</span>{' '}
           to LASUEDPLUG Admins if you suspect fraud, impersonation, harassment, or unsafe conduct.
         </p>
 
@@ -99,7 +99,7 @@ export function ReportUserModal({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Describe why you are reporting this user..."
-          className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
 
         <div className="flex items-center justify-end gap-2.5 pt-1">

@@ -157,7 +157,7 @@ export function AccommodationDetail() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
@@ -173,7 +173,7 @@ export function AccommodationDetail() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
@@ -195,14 +195,14 @@ export function AccommodationDetail() {
           hoverable={false}
           className="border-dashed text-center py-10 space-y-4"
         >
-          <div className="w-12 h-12 mx-auto rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-primary-50 dark:bg-blue-950/60 text-primary-600 dark:text-blue-400 flex items-center justify-center">
             <Building2 className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
               Accommodation not found
             </h1>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               This lodge listing may have been rented out or removed.
             </p>
           </div>
@@ -262,7 +262,7 @@ export function AccommodationDetail() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Accommodation'}</span>
@@ -282,13 +282,13 @@ export function AccommodationDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Image Carousel / Gallery */}
         <div className="lg:col-span-7 space-y-3">
-          <div className="aspect-[4/3] w-full rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shadow-sm">
+          <div className="aspect-[4/3] w-full rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
             <ProductImage
               src={activeImage}
               alt={item.title}
               priority
               className="w-full h-full object-cover"
-              iconClassName="w-12 h-12 text-slate-400"
+              iconClassName="w-12 h-12 text-slate-400 dark:text-slate-500"
             />
           </div>
 
@@ -302,15 +302,15 @@ export function AccommodationDetail() {
                   aria-label={`View photo ${idx + 1}`}
                   className={`w-20 h-16 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
                     idx === selectedImageIndex
-                      ? 'border-blue-600 ring-2 ring-blue-100'
-                      : 'border-slate-200 hover:border-slate-300'
+                      ? 'border-blue-600 ring-2 ring-blue-100 dark:ring-blue-900'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
                 >
                   <ProductImage
                     src={imgUrl}
                     alt={`${item.title} photo ${idx + 1}`}
                     className="w-full h-full object-cover"
-                    iconClassName="w-5 h-5 text-slate-400"
+                    iconClassName="w-5 h-5 text-slate-400 dark:text-slate-500"
                   />
                 </button>
               ))}
@@ -322,18 +322,18 @@ export function AccommodationDetail() {
         <div className="lg:col-span-5 space-y-6">
           <Card hoverable={false} className="space-y-5">
             <div className="space-y-2.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
                 <Building2 className="w-3.5 h-3.5" />
                 <span>{typeLabel}</span>
               </span>
 
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
                 {item.title}
               </h1>
 
-              <p className="text-2xl font-extrabold text-primary-600 tabular-nums">
+              <p className="text-2xl font-extrabold text-primary-600 dark:text-blue-400 tabular-nums">
                 {formatNaira(rentPrice)}
-                <span className="text-sm font-medium text-slate-500">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
                   {' '}
                   / year
                 </span>
@@ -341,8 +341,8 @@ export function AccommodationDetail() {
 
               {/* Public General Location (NEVER renders exactAddress) */}
               <div className="pt-1 space-y-1.5">
-                <p className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-primary-500 shrink-0" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-primary-500 dark:text-blue-400 shrink-0" />
                   <span>{publicLocation}</span>
                 </p>
                 {typeof item.latitude === 'number' &&
@@ -351,14 +351,14 @@ export function AccommodationDetail() {
                       href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
                     >
                       <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                       <span>View on Map</span>
                     </a>
                   )}
-                <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                   <span>
                     Exact address is shared directly upon inspection request for safety.
                   </span>
@@ -367,17 +367,17 @@ export function AccommodationDetail() {
             </div>
 
             {amenities.length > 0 && (
-              <div className="pt-4 border-t border-slate-100 space-y-2.5">
-                <h2 className="text-sm font-semibold text-slate-900">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                   Amenities Included
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {amenities.map((amenity) => (
                     <span
                       key={amenity}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-50 text-slate-700 border border-slate-200"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>{amenity}</span>
                     </span>
                   ))}
@@ -385,23 +385,23 @@ export function AccommodationDetail() {
               </div>
             )}
 
-            <div className="pt-4 border-t border-slate-100 space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                 Description
               </h2>
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                 {item.description}
               </p>
             </div>
 
             {/* Owner Card */}
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-              <h2 className="text-sm font-semibold text-slate-900">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                 Property Host / Marketer
               </h2>
               <Link
                 to={`/seller/${item.ownerId}`}
-                className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-slate-100/70 transition-colors group"
+                className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-100/70 dark:hover:bg-slate-800 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <UserAvatar
@@ -412,7 +412,7 @@ export function AccommodationDetail() {
                     className="w-11 h-11"
                   />
                   <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 min-w-0 transition-colors">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center gap-1.5 min-w-0 transition-colors">
                       <span className="truncate">{ownerName}</span>
                       {ownerVerified && (
                         <VerifiedBadge
@@ -421,7 +421,7 @@ export function AccommodationDetail() {
                         />
                       )}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       View host profile &amp; reviews →
                     </p>
                   </div>
@@ -461,7 +461,7 @@ export function AccommodationDetail() {
       </div>
 
       {/* Mobile Fixed WhatsApp & Share CTA */}
-      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-3.5 py-2.5 shadow-sm flex items-center gap-2.5">
+      <div className="md:hidden fixed bottom-[calc(55px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-3.5 py-2.5 shadow-sm flex items-center gap-2.5">
         <a
           href={whatsappHref}
           target="_blank"

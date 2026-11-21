@@ -33,12 +33,12 @@ export const RecentlyViewedRow = memo(function RecentlyViewedRow({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <History className="w-4 h-4 text-primary-600 shrink-0" aria-hidden="true" />
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+          <History className="w-4 h-4 text-primary-600 dark:text-blue-400 shrink-0" aria-hidden="true" />
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
             Jump Back In
           </h2>
         </div>
-        <span className="text-xs text-slate-500">Recently viewed</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">Recently viewed</span>
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto pb-2 snap-x snap-mandatory hide-scrollbar">
@@ -74,14 +74,14 @@ export const RecentlyViewedRow = memo(function RecentlyViewedRow({
               padded={false}
               className="h-full overflow-hidden flex flex-col group-focus-visible:ring-2 group-focus-visible:ring-blue-500"
             >
-              <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden shrink-0">
+              <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
                 <ProductImage
                   src={item.imageUrl}
                   alt={item.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  iconClassName="w-7 h-7 text-slate-400"
+                  iconClassName="w-7 h-7 text-slate-400 dark:text-slate-500"
                 />
-                <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-white/95 border border-slate-200 text-[10px] font-semibold text-slate-700 shadow-sm">
+                <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-white/95 dark:bg-slate-800/95 border border-slate-200 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-100 shadow-sm">
                   {TYPE_LABEL_MAP[item._type] || 'Listing'}
                 </span>
               </div>
@@ -89,19 +89,19 @@ export const RecentlyViewedRow = memo(function RecentlyViewedRow({
               <div className="p-2.5 sm:p-3 flex-1 flex flex-col justify-between gap-1.5">
                 <div className="space-y-0.5 min-w-0">
                   <div className="flex items-center gap-1 min-w-0">
-                    <h3 className="text-xs sm:text-sm font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                       {item.title}
                     </h3>
                     {item.isVerified && <VerifiedBadge size="xs" />}
                   </div>
                   {item.subtitle && (
-                    <p className="text-[11px] text-slate-500 truncate">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                       {item.subtitle}
                     </p>
                   )}
                 </div>
 
-                <p className="text-xs sm:text-sm font-bold text-primary-600 tabular-nums truncate">
+                <p className="text-xs sm:text-sm font-bold text-primary-600 dark:text-blue-400 tabular-nums truncate">
                   {item.priceLabel}
                 </p>
               </div>

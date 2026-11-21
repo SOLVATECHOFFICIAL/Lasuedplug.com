@@ -109,12 +109,12 @@ export function LocationPinField({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="block text-sm font-medium text-slate-700">
+        <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
           {label}
           {required && <span className="text-red-500 ml-0.5">*</span>}
         </span>
         {isPinned && (
-          <span className="text-xs font-medium text-emerald-700 inline-flex items-center gap-1">
+          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
             <span>
               Pinned{lastAccuracy !== null ? ` (±${lastAccuracy}m)` : ''}
@@ -150,7 +150,7 @@ export function LocationPinField({
             type="button"
             onClick={handleRemovePin}
             disabled={pinning}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 border border-red-200 dark:border-red-800 transition-colors disabled:opacity-50"
           >
             <span>❌ Remove Pin</span>
           </button>
@@ -158,8 +158,8 @@ export function LocationPinField({
       </div>
 
       {isPinned && typeof latitude === 'number' && typeof longitude === 'number' && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 tabular-nums">
-          <MapPin className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 tabular-nums">
+          <MapPin className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
           <span>
             GPS Locked: {latitude.toFixed(5)}, {longitude.toFixed(5)}
             {lastAccuracy !== null ? ` (Accuracy: ±${lastAccuracy}m)` : ''}
@@ -168,11 +168,11 @@ export function LocationPinField({
       )}
 
       {helperText && !error && !gpsNotice && (
-        <p className="text-xs text-slate-500">{helperText}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{helperText}</p>
       )}
 
       {(error || gpsNotice) && (
-        <p role="alert" className="text-xs font-medium text-red-600">
+        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
           {error || gpsNotice}
         </p>
       )}
@@ -187,21 +187,21 @@ export function LocationPinField({
           onClick={() => setConfirmOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4"
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="space-y-1.5">
                 <h3
                   id="pin-location-modal-title"
-                  className="text-lg font-bold text-slate-900"
+                  className="text-lg font-bold text-slate-900 dark:text-white"
                 >
                   Pin Your Exact Location
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                   ⚠️ Please make sure you are standing exactly at the location of your shop, room, or item. Buyers will use this to find you.
                 </p>
               </div>

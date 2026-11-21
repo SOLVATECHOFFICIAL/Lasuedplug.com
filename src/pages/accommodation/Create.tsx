@@ -160,7 +160,7 @@ export function AccommodationCreate() {
       <div>
         <Link
           to="/accommodation"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Accommodation</span>
@@ -168,14 +168,14 @@ export function AccommodationCreate() {
       </div>
 
       <div className="space-y-1">
-        <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary-600">
+        <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-blue-400">
           <Building2 className="w-4 h-4" />
           <span>Campus Housing</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           List Accommodation
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Post a verified student room, self-contain, or shared flat around Epe. Physical location GPS pin and 1–{MAX_LISTING_IMAGES} photos are required.
         </p>
       </div>
@@ -185,7 +185,7 @@ export function AccommodationCreate() {
           {formError && (
             <div
               role="alert"
-              className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm font-medium text-red-700"
+              className="p-3.5 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-sm font-medium text-red-700 dark:text-red-300"
             >
               {formError}
             </div>
@@ -196,7 +196,7 @@ export function AccommodationCreate() {
             <div className="space-y-1.5">
               <label
                 htmlFor="accommodation-type"
-                className="block text-sm font-medium text-slate-700"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
                 Accommodation Type <span className="text-red-500">*</span>
               </label>
@@ -204,7 +204,7 @@ export function AccommodationCreate() {
                 id="accommodation-type"
                 value={type}
                 onChange={(e) => setType(e.target.value as AccommodationType)}
-                className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 {ACCOMMODATION_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -239,7 +239,7 @@ export function AccommodationCreate() {
           <div className="space-y-1.5">
             <label
               htmlFor="accommodation-description"
-              className="block text-sm font-medium text-slate-700"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
             >
               Description <span className="text-red-500">*</span>
             </label>
@@ -250,9 +250,9 @@ export function AccommodationCreate() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe room size, proximity to campus, compound environment, light/water situation, and inspection rules..."
-              className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-xs text-slate-500">Minimum 5 characters.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Minimum 5 characters.</p>
           </div>
 
           {/* Public General Location vs Private Exact Address */}
@@ -274,8 +274,8 @@ export function AccommodationCreate() {
                 onChange={(e) => setExactAddress(e.target.value)}
                 placeholder="e.g. House 14, Odo-Egiri Street"
               />
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                 <span>Private — only visible to you and admins, never public.</span>
               </p>
             </div>
@@ -300,7 +300,7 @@ export function AccommodationCreate() {
 
           {/* Amenities */}
           <div className="space-y-3">
-            <p className="text-sm font-medium text-slate-700">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
               Amenities <span className="text-red-500">*</span>
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -314,15 +314,15 @@ export function AccommodationCreate() {
                     aria-pressed={checked}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border text-left transition-colors ${
                       checked
-                        ? 'bg-primary-50 border-primary-300 text-primary-700'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        ? 'bg-primary-50 dark:bg-blue-950/60 border-primary-300 dark:border-blue-600 text-primary-700 dark:text-blue-300'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
                     <span
                       className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${
                         checked
                           ? 'bg-primary-600 border-primary-600 text-white'
-                          : 'border-slate-300 bg-white'
+                          : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
                       }`}
                     >
                       {checked && <Check className="w-3 h-3" />}

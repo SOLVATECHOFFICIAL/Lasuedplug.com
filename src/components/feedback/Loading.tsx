@@ -11,18 +11,18 @@ interface LoadingProps {
 export function CardSkeleton({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm animate-pulse flex flex-col ${className}`.trim()}
+      className={`bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm animate-pulse flex flex-col ${className}`.trim()}
     >
-      <div className="aspect-[4/3] w-full bg-slate-200" />
+      <div className="aspect-[4/3] w-full bg-slate-200 dark:bg-slate-800" />
       <div className="p-3.5 sm:p-4 space-y-2.5 flex-1 flex flex-col justify-between">
         <div className="space-y-2">
-          <div className="h-3 w-1/3 bg-slate-200 rounded" />
-          <div className="h-4 w-5/6 bg-slate-200 rounded" />
-          <div className="h-3.5 w-2/3 bg-slate-200 rounded" />
+          <div className="h-3 w-1/3 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="h-4 w-5/6 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="h-3.5 w-2/3 bg-slate-200 dark:bg-slate-800 rounded" />
         </div>
         <div className="pt-1 flex items-center justify-between gap-2">
-          <div className="h-5 w-1/2 bg-slate-200 rounded" />
-          <div className="h-3.5 w-1/4 bg-slate-200 rounded" />
+          <div className="h-5 w-1/2 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="h-3.5 w-1/4 bg-slate-200 dark:bg-slate-800 rounded" />
         </div>
       </div>
     </div>
@@ -75,11 +75,11 @@ export function Loading({
   return (
     <div
       role="status"
-      className={`flex flex-col items-center justify-center gap-3 text-slate-500 ${
+      className={`flex flex-col items-center justify-center gap-3 text-slate-500 dark:text-slate-400 ${
         fullScreen ? 'min-h-[60vh]' : 'py-12'
       }`}
     >
-      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
       <p className="text-sm font-medium">{message}</p>
     </div>
   );

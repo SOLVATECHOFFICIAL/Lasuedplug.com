@@ -63,7 +63,7 @@ export function StarRating({
                   className={`${starClass} ${
                     isSelected
                       ? 'fill-amber-400 text-amber-400'
-                      : 'text-slate-300 hover:text-amber-300'
+                      : 'text-slate-300 dark:text-slate-600 hover:text-amber-300'
                   }`}
                 />
               </button>
@@ -76,7 +76,7 @@ export function StarRating({
               className={`relative inline-block ${starClass}`}
               aria-hidden="true"
             >
-              <Star className={`${starClass} text-slate-300`} />
+              <Star className={`${starClass} text-slate-300 dark:text-slate-600`} />
               {fillRatio > 0 && (
                 <span
                   className="absolute inset-0 overflow-hidden"
@@ -92,14 +92,14 @@ export function StarRating({
 
       {showText && (
         <span
-          className={`tabular-nums text-slate-600 ${
+          className={`tabular-nums text-slate-600 dark:text-slate-300 ${
             size === 'xs' ? 'text-[11px]' : 'text-xs sm:text-sm'
           }`}
         >
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-slate-900 dark:text-white">
             {safeRating.toFixed(1)}
           </span>{' '}
-          <span className="text-slate-500">
+          <span className="text-slate-500 dark:text-slate-400">
             ({safeCount} {safeCount === 1 ? 'review' : 'reviews'})
           </span>
         </span>

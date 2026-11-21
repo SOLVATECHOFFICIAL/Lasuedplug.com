@@ -215,15 +215,15 @@ export function CreateStore() {
       <div className="space-y-2">
         <Link
           to="/dashboard/seller"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Seller Dashboard</span>
         </Link>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
           Open a Campus Store
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Create a verified physical storefront profile on LASUEDPLUG. Stores require 1–4 photos, opening hours, and an exact GPS pin.
         </p>
       </div>
@@ -231,18 +231,18 @@ export function CreateStore() {
       {submitError && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700"
+          className="flex items-start gap-2.5 p-4 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-sm text-red-700 dark:text-red-300"
         >
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <span>{submitError}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} noValidate className="space-y-6">
         <Card hoverable={false} className="space-y-5">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <StoreIcon className="w-4 h-4 text-primary-600" />
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <StoreIcon className="w-4 h-4 text-primary-600 dark:text-blue-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Store Details
             </h2>
           </div>
@@ -295,8 +295,8 @@ export function CreateStore() {
 
           {/* Opening Hours: Start & End Time Pickers */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
-              <Clock className="w-4 h-4 text-slate-500" />
+            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+              <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               <span>
                 Opening Hours <span className="text-red-500">*</span>
               </span>
@@ -305,7 +305,7 @@ export function CreateStore() {
               <div className="space-y-1">
                 <label
                   htmlFor="opening-time-start"
-                  className="block text-xs font-medium text-slate-600"
+                  className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                 >
                   Opening Time
                 </label>
@@ -318,13 +318,13 @@ export function CreateStore() {
                     setOpeningTimeStart(e.target.value);
                     clearFieldError('openingHours');
                   }}
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div className="space-y-1">
                 <label
                   htmlFor="opening-time-end"
-                  className="block text-xs font-medium text-slate-600"
+                  className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                 >
                   Closing Time
                 </label>
@@ -337,17 +337,17 @@ export function CreateStore() {
                     setOpeningTimeEnd(e.target.value);
                     clearFieldError('openingHours');
                   }}
-                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
             {formattedHoursPreview && !fieldErrors.openingHours && (
-              <p className="text-xs font-medium text-slate-600">
-                Displayed as: <span className="text-slate-900">{formattedHoursPreview}</span>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                Displayed as: <span className="text-slate-900 dark:text-white">{formattedHoursPreview}</span>
               </p>
             )}
             {fieldErrors.openingHours && (
-              <p className="text-xs font-medium text-red-600" role="alert">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                 {fieldErrors.openingHours}
               </p>
             )}
@@ -356,7 +356,7 @@ export function CreateStore() {
           <div className="w-full space-y-1.5">
             <label
               htmlFor="store-description"
-              className="block text-sm font-medium text-slate-700"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
             >
               Description <span className="text-red-500 ml-0.5">*</span>
             </label>
@@ -370,19 +370,19 @@ export function CreateStore() {
                 clearFieldError('description');
               }}
               placeholder="Tell students what your store offers and what makes your shop unique..."
-              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 ${
+              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 ${
                 fieldErrors.description
-                  ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                  : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                  ? 'border-red-400 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-900'
+                  : 'border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500'
               }`}
               required
             />
             {fieldErrors.description ? (
-              <p className="text-xs font-medium text-red-600" role="alert">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                 {fieldErrors.description}
               </p>
             ) : (
-              <p className="text-xs text-slate-500">Minimum 5 characters.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Minimum 5 characters.</p>
             )}
           </div>
 
@@ -401,9 +401,9 @@ export function CreateStore() {
         </Card>
 
         <Card hoverable={false} className="space-y-5">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <MapPin className="w-4 h-4 text-primary-600" />
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <MapPin className="w-4 h-4 text-primary-600 dark:text-blue-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Contact &amp; Physical Location
             </h2>
           </div>

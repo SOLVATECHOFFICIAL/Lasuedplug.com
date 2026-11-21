@@ -91,6 +91,21 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (saved === 'dark' || (!saved && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <style>
       #app-splash {
         position: fixed;
@@ -104,6 +119,14 @@
         color: #0f172a;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         z-index: 9999;
+      }
+      html.dark #app-splash {
+        background-color: #020617;
+        color: #f8fafc;
+      }
+      html.dark #app-splash .splash-spinner {
+        border-color: #1e293b;
+        border-top-color: #3b82f6;
       }
       #app-splash img {
         width: 72px;
@@ -132,7 +155,7 @@
       }
     </style>
   </head>
-  <body class="bg-slate-50 font-sans text-slate-900 antialiased">
+  <body class="bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 antialiased">
     <div id="root">
       <div id="app-splash" aria-label="Loading LASUEDPLUG">
         <img src="/lasued.png" alt="LASUEDPLUG logo" />

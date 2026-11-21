@@ -112,16 +112,16 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return (
       <div className="max-w-md w-full mx-auto px-4 py-12">
         <Card hoverable={false} className="space-y-5 text-center p-6">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div className="space-y-1.5">
-            <h1 className="text-xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
               Verify Admin Email
             </h1>
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               For maximum security, only a verified{' '}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {PRIMARY_ADMIN_EMAIL}
               </span>{' '}
               session can access the Admin Console.

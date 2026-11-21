@@ -1,21 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Ban,
   Building2,
+  Camera,
   CheckCircle2,
   Clock,
   ExternalLink,
-  Eye,
   Globe,
   GraduationCap,
   Loader2,
   Mail,
+  Pencil,
   Phone,
   RefreshCw,
+  Save,
   Search,
   ShieldAlert,
   Store,
+  Trash2,
   UserCheck,
   UserX,
   X,
@@ -23,17 +26,26 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
+  CAMPUS_OPTIONS,
+  GRADUATE_LEVEL,
+  LEVELS_BY_CAMPUS,
+  handleCampusCascade,
+  isValidCampus,
+} from '../../lib/academicData';
+import {
   AdminAccountTypeFilter,
   filterAdminUsers,
   getPrimaryUserRoleBadge,
 } from '../../lib/adminHelpers';
 import { getUserAvatarUrl, isMarketerProfile } from '../../lib/authHelpers';
+import { compressImageToBase64 } from '../../lib/imageUtils';
 import { getVerifiedBadgeLabel } from '../../lib/verificationHelpers';
 import {
+  AdminOverrideUserInput,
   banUserAccount,
   getAllUsers,
   updateUserAccountStatus,
-  updateUserAccountTypeAdmin,
+  updateUserProfileAdmin,
 } from '../../lib/adminService';
 import { getFastCache, setFastCache } from '../../lib/fastCache';
 import { AccountType, UserProfile } from '../../types';
@@ -66,6 +78,48 @@ export function AdminUsers() {
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [inspectUser, setInspectUser] = useState<UserProfile | null>(null);
   const [confirmBanUid, setConfirmBanUid] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [editForm, setEditForm] = useState<AdminOverrideUserInput>({
+    fullName: '',
+    phone: '',
+    accountType: 'student',
+    campus: 'LASUED',
+    department: '',
+    level: '100L',
+    businessName: '',
+    isVerified: false,
+    status: 'active',
+    profilePic: '',
+  });
+
+  const populateEditForm = useCallback((account: UserProfile) => {
+    const resolvedType: AccountType = isMarketerProfile(account)
+      ? 'business'
+      : 'student';
+    setEditForm({
+      fullName: account.fullName || '',
+      phone: account.phone || '',
+      accountType: resolvedType,
+      campus: account.campus?.trim() || 'LASUED',
+      department: account.department || '',
+      level: account.level?.trim() || '',
+      businessName: account.businessName || '',
+      isVerified: Boolean(account.isVerified),
+      status: account.status === 'suspended' ? 'suspended' : 'active',
+      profilePic: getUserAvatarUrl(account) || '',
+    });
+  }, []);
+
+  const openInspectModal = useCallback(
+    (account: UserProfile) => {
+      setConfirmBanUid(null);
+      setInspectUser(account);
+      populateEditForm(account);
+    },
+    [populateEditForm]
+  );
 
   useEffect(() => {
     const paramQuery = searchParams.get('q') || '';
@@ -177,8 +231,22 @@ export function AdminUsers() {
               ...(nextStatus === 'active' ? { isBanned: false } : {}),
             }
           : u;
-      setUsers((prev) => prev.map(applyUpdate));
-      setInspectUser((prev) => (prev ? applyUpdate(prev) : null));
+      setUsers((prev) => {
+        const next = prev.map(applyUpdate);
+        setFastCache('admin_users', next);
+        return next;
+      });
+      setInspectUser((prev) => {
+        if (!prev) return null;
+        const updated = applyUpdate(prev);
+        if (updated.uid === target.uid) {
+          setEditForm((form) => ({
+            ...form,
+            status: nextStatus,
+          }));
+        }
+        return updated;
+      });
       setConfirmBanUid(null);
       showToast(
         nextStatus === 'suspended'
@@ -208,8 +276,19 @@ export function AdminUsers() {
       await banUserAccount(target.uid);
       const applyBan = (u: UserProfile): UserProfile =>
         u.uid === target.uid ? { ...u, status: 'suspended', isBanned: true } : u;
-      setUsers((prev) => prev.map(applyBan));
-      setInspectUser((prev) => (prev ? applyBan(prev) : null));
+      setUsers((prev) => {
+        const next = prev.map(applyBan);
+        setFastCache('admin_users', next);
+        return next;
+      });
+      setInspectUser((prev) => {
+        if (!prev) return null;
+        const updated = applyBan(prev);
+        if (updated.uid === target.uid) {
+          setEditForm((form) => ({ ...form, status: 'suspended' }));
+        }
+        return updated;
+      });
       setConfirmBanUid(null);
       showToast(
         `${target.fullName || target.email} has been permanently banned.`,
@@ -225,54 +304,93 @@ export function AdminUsers() {
     }
   };
 
-  const handleSwitchAccountType = async (
-    target: UserProfile,
-    nextType: AccountType
-  ) => {
-    if (!target.uid || busyUid) return;
-    const currentlyMarketer = isMarketerProfile(target);
-    if (
-      (nextType === 'business' && currentlyMarketer) ||
-      (nextType === 'student' && !currentlyMarketer)
-    ) {
+  const handleAvatarFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    try {
+      const compressed = await compressImageToBase64(file);
+      setEditForm((prev) => ({ ...prev, profilePic: compressed }));
+      showToast('Profile photo compressed and ready to save.', 'info');
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Failed to process profile image.',
+        'error'
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleSaveOverride = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!inspectUser?.uid || busyUid) return;
+
+    if (!editForm.fullName.trim()) {
+      showToast('Full Name cannot be empty.', 'error');
       return;
     }
 
-    setBusyUid(target.uid);
+    if (
+      inspectUser.uid === currentUser?.uid &&
+      editForm.status === 'suspended'
+    ) {
+      showToast('You cannot suspend your own active admin account.', 'info');
+      return;
+    }
+
+    setBusyUid(inspectUser.uid);
     try {
-      await updateUserAccountTypeAdmin(target.uid, nextType);
-      const applyTypeUpdate = (u: UserProfile): UserProfile => {
-        if (u.uid !== target.uid) return u;
-        if (nextType === 'student') {
-          const nextRoles = { ...u.roles };
+      await updateUserProfileAdmin(inspectUser.uid, editForm);
+
+      const applyOverride = (u: UserProfile): UserProfile => {
+        if (u.uid !== inspectUser.uid) return u;
+        const nextRoles = { ...u.roles };
+        if (editForm.accountType === 'student') {
           delete nextRoles.landlord;
-          return {
-            ...u,
-            accountType: 'student',
-            roles: nextRoles,
-            businessName: undefined,
-            shopAddress: undefined,
-            isOnlineOnly: undefined,
-          };
         }
         return {
           ...u,
-          accountType: 'business',
+          fullName: editForm.fullName.trim(),
+          phone: editForm.phone.trim(),
+          accountType: editForm.accountType,
+          campus: editForm.campus.trim(),
+          department: editForm.department.trim(),
+          level: editForm.level.trim(),
+          businessName:
+            editForm.accountType === 'business'
+              ? editForm.businessName.trim()
+              : undefined,
+          shopAddress:
+            editForm.accountType === 'business' ? u.shopAddress : undefined,
+          isOnlineOnly:
+            editForm.accountType === 'business' ? u.isOnlineOnly : undefined,
+          isVerified: Boolean(editForm.isVerified),
+          status: editForm.status,
+          ...(editForm.status === 'active' ? { isBanned: false } : {}),
+          profilePic: editForm.profilePic.trim() || undefined,
+          avatarUrl: editForm.profilePic.trim() || undefined,
+          roles: nextRoles,
         };
       };
-      setUsers((prev) => prev.map(applyTypeUpdate));
-      setInspectUser((prev) => (prev ? applyTypeUpdate(prev) : null));
+
+      setUsers((prev) => {
+        const next = prev.map(applyOverride);
+        setFastCache('admin_users', next);
+        return next;
+      });
+      setInspectUser((prev) => (prev ? applyOverride(prev) : null));
       showToast(
-        `Switched ${target.fullName || target.email} to ${
-          nextType === 'business' ? 'Marketer' : 'Student'
-        }.`,
+        `Saved admin overrides for ${editForm.fullName.trim()}.`,
         'success'
       );
     } catch (err) {
       showToast(
         err instanceof Error
           ? err.message
-          : 'Failed to switch account type.',
+          : 'Failed to save user profile overrides.',
         'error'
       );
     } finally {
@@ -297,9 +415,9 @@ export function AdminUsers() {
       }
     >
       {loading ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-3 animate-pulse">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-3 animate-pulse">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-12 bg-slate-100 rounded-lg" />
+            <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded-lg" />
           ))}
         </div>
       ) : error ? (
@@ -315,7 +433,7 @@ export function AdminUsers() {
             <div
               role="tablist"
               aria-label="Filter users by account type"
-              className="inline-flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 self-start"
+              className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start"
             >
               {(
                 [
@@ -343,7 +461,7 @@ export function AdminUsers() {
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       active
                         ? 'bg-primary-600 text-white shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     <span>{tab.label}</span>
@@ -351,7 +469,7 @@ export function AdminUsers() {
                       className={`px-1.5 py-0.5 rounded-full text-[11px] tabular-nums ${
                         active
                           ? 'bg-white/20 text-white'
-                          : 'bg-slate-100 text-slate-600'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {tab.count}
@@ -370,14 +488,14 @@ export function AdminUsers() {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Search name, business, email, phone, campus..."
                 aria-label="Search users"
-                className="block w-full pl-10 pr-9 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full pl-10 pr-9 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => handleSearchChange('')}
                   aria-label="Clear user search"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -386,15 +504,15 @@ export function AdminUsers() {
           </div>
 
           {filteredUsers.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
               No matching users found.
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <th className="py-3.5 px-4">Name</th>
                       <th className="py-3.5 px-4">Email &amp; Phone</th>
                       <th className="py-3.5 px-4">Account &amp; Role</th>
@@ -402,7 +520,7 @@ export function AdminUsers() {
                       <th className="py-3.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                     {filteredUsers.map((account) => {
                       const isSuspended = account.status === 'suspended';
                       const isBanned = account.isBanned === true;
@@ -415,7 +533,10 @@ export function AdminUsers() {
                         : 'student';
 
                       return (
-                        <tr key={account.uid} className="hover:bg-slate-50/70">
+                        <tr
+                          key={account.uid}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50"
+                        >
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3 min-w-0">
                               <UserAvatar
@@ -426,14 +547,11 @@ export function AdminUsers() {
                                 size="sm"
                               />
                               <div className="min-w-0">
-                                <div className="font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                                <div className="font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setConfirmBanUid(null);
-                                      setInspectUser(account);
-                                    }}
-                                    className="truncate hover:text-primary-600 hover:underline text-left"
+                                    onClick={() => openInspectModal(account)}
+                                    className="truncate hover:text-primary-600 dark:hover:text-blue-400 hover:underline text-left"
                                   >
                                     {account.fullName ||
                                       account.businessName ||
@@ -448,7 +566,7 @@ export function AdminUsers() {
                                   )}
                                 </div>
                                 {isMarketer ? (
-                                  <div className="text-xs text-slate-500 truncate">
+                                  <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                     {[
                                       account.businessName,
                                       account.isOnlineOnly
@@ -461,7 +579,7 @@ export function AdminUsers() {
                                   </div>
                                 ) : (
                                   (account.campus || account.department || account.level) && (
-                                    <div className="text-xs text-slate-500 truncate">
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                       {[account.campus, account.department, account.level]
                                         .filter(Boolean)
                                         .join(' · ')}
@@ -471,10 +589,10 @@ export function AdminUsers() {
                               </div>
                             </div>
                           </td>
-                          <td className="py-3.5 px-4 text-slate-600">
+                          <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
                             <div className="truncate">{account.email}</div>
                             {account.phone && (
-                              <div className="text-xs text-slate-500 tabular-nums">
+                              <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                                 {account.phone}
                               </div>
                             )}
@@ -483,8 +601,8 @@ export function AdminUsers() {
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
                                 isMarketer
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
                               }`}
                             >
                               {roleBadge}
@@ -493,18 +611,18 @@ export function AdminUsers() {
                           <td className="py-3.5 px-4">
                             <div className="flex flex-wrap items-center gap-1.5">
                               {isSuspended ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
                                   <ShieldAlert className="w-3.5 h-3.5" />
                                   <span>Suspended</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>Active</span>
                                 </span>
                               )}
                               {isBanned && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-900 text-white">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-900 dark:bg-slate-700 text-white">
                                   <Ban className="w-3 h-3" />
                                   <span>Banned</span>
                                 </span>
@@ -516,14 +634,11 @@ export function AdminUsers() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setConfirmBanUid(null);
-                                  setInspectUser(account);
-                                }}
-                                aria-label={`Inspect ${account.fullName || account.email}`}
+                                onClick={() => openInspectModal(account)}
+                                aria-label={`Inspect and edit ${account.fullName || account.email}`}
                               >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>Inspect</span>
+                                <Pencil className="w-3.5 h-3.5" />
+                                <span>Inspect / Edit</span>
                               </Button>
 
                               <Button
@@ -560,17 +675,23 @@ export function AdminUsers() {
         </div>
       )}
 
-      {/* Inspect & Manage User Modal */}
+      {/* Inspect & Override User Modal (Admin God Mode) */}
       {inspectUser && (() => {
-        const isMarketer = isMarketerProfile(inspectUser);
+        const isMarketer = editForm.accountType === 'business';
         const isSuspended = inspectUser.status === 'suspended';
         const isBanned = inspectUser.isBanned === true;
         const isSelf = inspectUser.uid === currentUser?.uid;
         const isBusy = busyUid === inspectUser.uid;
-        const roleBadge = getPrimaryUserRoleBadge(inspectUser);
+        const roleBadge = getPrimaryUserRoleBadge({
+          ...inspectUser,
+          accountType: editForm.accountType,
+        });
         const hasGps =
           typeof inspectUser.latitude === 'number' &&
           typeof inspectUser.longitude === 'number';
+        const availableLevels = isValidCampus(editForm.campus)
+          ? [...LEVELS_BY_CAMPUS[editForm.campus], GRADUATE_LEVEL]
+          : [...LEVELS_BY_CAMPUS.LASU, GRADUATE_LEVEL];
 
         return (
           <div
@@ -586,15 +707,15 @@ export function AdminUsers() {
             }}
           >
             <div
-              className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+              className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
+              <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-3 min-w-0">
                   <UserAvatar
                     uid={inspectUser.uid}
-                    src={getUserAvatarUrl(inspectUser)}
-                    name={inspectUser.fullName}
+                    src={editForm.profilePic || getUserAvatarUrl(inspectUser)}
+                    name={editForm.fullName || inspectUser.fullName}
                     email={inspectUser.email}
                     size="md"
                   />
@@ -602,13 +723,14 @@ export function AdminUsers() {
                     <div className="flex items-center gap-1.5">
                       <h2
                         id="inspect-user-modal-title"
-                        className="text-base font-bold text-slate-900 truncate"
+                        className="text-base font-bold text-slate-900 dark:text-white truncate"
                       >
-                        {inspectUser.fullName ||
-                          inspectUser.businessName ||
+                        {editForm.fullName ||
+                          editForm.businessName ||
+                          inspectUser.fullName ||
                           'Unnamed Member'}
                       </h2>
-                      {inspectUser.isVerified && (
+                      {editForm.isVerified && (
                         <VerifiedBadge
                           size="xs"
                           accountType={isMarketer ? 'business' : 'student'}
@@ -618,7 +740,7 @@ export function AdminUsers() {
                         />
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 font-mono truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">
                       UID: {inspectUser.uid}
                     </p>
                   </div>
@@ -631,250 +753,515 @@ export function AdminUsers() {
                     setConfirmBanUid(null);
                   }}
                   aria-label="Close user inspector"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-5 space-y-5 overflow-y-auto">
-                {/* Summary Status Pills */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
-                      isMarketer
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                        : 'bg-slate-100 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    {roleBadge}
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                      inspectUser.emailVerified
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                    }`}
-                  >
-                    {inspectUser.emailVerified
-                      ? 'Email Verified'
-                      : 'Email Unverified'}
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                      inspectUser.isVerified
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}
-                  >
-                    {inspectUser.isVerified ? 'ID Verified' : 'ID Unverified'}
-                  </span>
-                </div>
-
-                {/* Contact & Rating */}
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 space-y-2 text-xs text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{inspectUser.email}</span>
+              <form
+                onSubmit={(e) => void handleSaveOverride(e)}
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                  {/* Summary Status Pills */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
+                        isMarketer
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {roleBadge}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                        inspectUser.emailVerified
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                      }`}
+                    >
+                      {inspectUser.emailVerified
+                        ? 'Email Verified'
+                        : 'Email Unverified'}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                        editForm.isVerified
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {editForm.isVerified ? 'ID Verified' : 'ID Unverified'}
+                    </span>
                   </div>
-                  {inspectUser.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="tabular-nums">{inspectUser.phone}</span>
+
+                  {/* Account Contact Summary */}
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-700 dark:text-slate-300">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{inspectUser.email}</span>
+                      </div>
+                      {inspectUser.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="tabular-nums">{inspectUser.phone}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div className="pt-1">
                     <StarRating
                       rating={inspectUser.trustScore ?? 0}
                       reviewCount={inspectUser.reviewCount ?? 0}
                       size="xs"
                     />
                   </div>
-                </div>
 
-                {/* Role-Specific Details: Marketer Shop vs Student Academic */}
-                {isMarketer ? (
-                  <div className="rounded-xl bg-indigo-50/50 border border-indigo-200 p-4 space-y-2 text-xs text-slate-700">
-                    <p className="font-bold text-indigo-950 flex items-center gap-1.5">
-                      <Store className="w-4 h-4 text-indigo-700" />
-                      <span>Marketer Storefront Details</span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Brand Name:</span>{' '}
-                      <span className="font-semibold text-slate-900">
-                        {inspectUser.businessName || 'Not provided yet'}
-                      </span>
-                    </p>
-                    <p className="flex items-center gap-1.5">
-                      {inspectUser.isOnlineOnly ? (
-                        <>
-                          <Globe className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Online Only · Available anytime</span>
-                        </>
-                      ) : (
-                        <>
-                          <Building2 className="w-3.5 h-3.5 text-indigo-700" />
+                  {/* Profile Picture Override */}
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar
+                          uid={inspectUser.uid}
+                          src={editForm.profilePic}
+                          name={editForm.fullName || inspectUser.fullName}
+                          email={inspectUser.email}
+                          size="lg"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Profile Picture Override
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Upload a new compressed Base64 photo bypassing user lock rules.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={avatarFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => void handleAvatarFileChange(e)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={uploadingAvatar || isBusy}
+                          onClick={() => avatarFileInputRef.current?.click()}
+                        >
+                          {uploadingAvatar ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Camera className="w-3.5 h-3.5" />
+                          )}
                           <span>
-                            Physical Shop:{' '}
-                            <strong className="text-slate-900">
-                              {inspectUser.shopAddress || 'Address not entered'}
-                            </strong>
+                            {uploadingAvatar ? 'Compressing...' : 'Upload Photo'}
                           </span>
-                        </>
-                      )}
-                    </p>
-                    {!inspectUser.isOnlineOnly && inspectUser.openingHours && (
-                      <p className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Hours: {inspectUser.openingHours}</span>
-                      </p>
-                    )}
-                    {!inspectUser.isOnlineOnly && hasGps && (
-                      <a
-                        href={`https://www.google.com/maps?q=${inspectUser.latitude},${inspectUser.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline pt-1"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>View Shop GPS Pin on Map</span>
-                      </a>
-                    )}
+                        </Button>
+                        {editForm.profilePic && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={uploadingAvatar || isBusy}
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                profilePic: '',
+                              }))
+                            }
+                            className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-1.5 text-xs text-slate-700">
-                    <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                      <GraduationCap className="w-4 h-4 text-primary-600" />
-                      <span>Student Academic Record</span>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Campus:</span>{' '}
-                      <strong className="text-slate-900">
-                        {inspectUser.campus || 'Not set'}
-                      </strong>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Department:</span>{' '}
-                      <strong className="text-slate-900">
-                        {inspectUser.department || 'Not set'}
-                      </strong>
-                    </p>
-                    <p>
-                      <span className="text-slate-500">Level:</span>{' '}
-                      <strong
-                        className={
-                          inspectUser.level === 'Graduate'
-                            ? 'text-emerald-700'
-                            : 'text-slate-900'
+
+                  {/* Admin God Mode Fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-fullname"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="admin-edit-fullname"
+                        type="text"
+                        required
+                        value={editForm.fullName}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            fullName: e.target.value,
+                          }))
                         }
-                      >
-                        {inspectUser.level || 'Not set'}
-                        {inspectUser.level === 'Graduate'
-                          ? ' (Final — Forever)'
-                          : ''}
-                      </strong>
-                    </p>
-                  </div>
-                )}
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
 
-                {/* Admin Account Type Switcher */}
-                <div className="rounded-xl border border-slate-200 p-4 space-y-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Admin Classification Override
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Fix misclassified accounts and sync existing listings automatically.
-                    </p>
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-phone"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Phone Number
+                      </label>
+                      <input
+                        id="admin-edit-phone"
+                        type="tel"
+                        value={editForm.phone}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            phone: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 08012345678"
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-account-type"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Account Type
+                      </label>
+                      <select
+                        id="admin-edit-account-type"
+                        value={editForm.accountType}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            accountType:
+                              e.target.value === 'business'
+                                ? 'business'
+                                : 'student',
+                          }))
+                        }
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="student">Student</option>
+                        <option value="business">Marketer</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-status"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Account Status
+                      </label>
+                      <select
+                        id="admin-edit-status"
+                        value={editForm.status}
+                        disabled={isSelf}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            status:
+                              e.target.value === 'suspended'
+                                ? 'suspended'
+                                : 'active',
+                          }))
+                        }
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                      >
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-campus"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Campus
+                      </label>
+                      <select
+                        id="admin-edit-campus"
+                        value={editForm.campus}
+                        onChange={(e) => {
+                          const cascaded = handleCampusCascade(
+                            e.target.value,
+                            editForm.level
+                          );
+                          setEditForm((prev) => ({
+                            ...prev,
+                            campus: e.target.value,
+                            level:
+                              prev.level === GRADUATE_LEVEL
+                                ? GRADUATE_LEVEL
+                                : cascaded.level || prev.level,
+                          }));
+                        }}
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {CAMPUS_OPTIONS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="admin-edit-level"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Level
+                      </label>
+                      <select
+                        id="admin-edit-level"
+                        value={editForm.level}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            level: e.target.value,
+                          }))
+                        }
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Not Set</option>
+                        {availableLevels.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label
+                        htmlFor="admin-edit-department"
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Department
+                      </label>
+                      <input
+                        id="admin-edit-department"
+                        type="text"
+                        value={editForm.department}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            department: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Computer Science"
+                        className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {isMarketer && (
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label
+                          htmlFor="admin-edit-business-name"
+                          className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                        >
+                          Business / Brand Name
+                        </label>
+                        <input
+                          id="admin-edit-business-name"
+                          type="text"
+                          value={editForm.businessName}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              businessName: e.target.value,
+                            }))
+                          }
+                          placeholder="e.g. Solva Tech Gadgets"
+                          className="block w-full px-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant={!isMarketer ? 'primary' : 'outline'}
-                      size="sm"
-                      disabled={isBusy || !isMarketer}
+
+                  {/* Verified Toggle Switch */}
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Verified Status (isVerified)
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Grants or revokes the verified badge across profile and all listings.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editForm.isVerified}
+                      aria-label="Toggle verified status"
                       onClick={() =>
-                        void handleSwitchAccountType(inspectUser, 'student')
+                        setEditForm((prev) => ({
+                          ...prev,
+                          isVerified: !prev.isVerified,
+                        }))
                       }
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        editForm.isVerified
+                          ? 'bg-emerald-600'
+                          : 'bg-slate-300 dark:bg-slate-600'
+                      }`}
                     >
-                      <GraduationCap className="w-3.5 h-3.5" />
-                      <span>Set as Student</span>
-                    </Button>
-                    <Button
-                      variant={isMarketer ? 'primary' : 'outline'}
-                      size="sm"
-                      disabled={isBusy || isMarketer}
-                      onClick={() =>
-                        void handleSwitchAccountType(inspectUser, 'business')
-                      }
-                    >
-                      <Store className="w-3.5 h-3.5" />
-                      <span>Set as Marketer</span>
-                    </Button>
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                          editForm.isVerified ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
+
+                  {/* Existing Shop / Academic Inspection Context */}
+                  {isMarketer ? (
+                    <div className="rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/70 p-4 space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                      <p className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                        <Store className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
+                        <span>Marketer Storefront Details</span>
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                        {inspectUser.isOnlineOnly ? (
+                          <>
+                            <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Online Only · Available anytime</span>
+                          </>
+                        ) : (
+                          <>
+                            <Building2 className="w-3.5 h-3.5 text-indigo-700 dark:text-indigo-400" />
+                            <span>
+                              Physical Shop:{' '}
+                              <strong className="text-slate-900 dark:text-white">
+                                {inspectUser.shopAddress || 'Address not entered'}
+                              </strong>
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      {!inspectUser.isOnlineOnly && inspectUser.openingHours && (
+                        <p className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Hours: {inspectUser.openingHours}</span>
+                        </p>
+                      )}
+                      {!inspectUser.isOnlineOnly && hasGps && (
+                        <a
+                          href={`https://www.google.com/maps?q=${inspectUser.latitude},${inspectUser.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline pt-1"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Shop GPS Pin on Map</span>
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3.5 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <GraduationCap className="w-4 h-4 text-primary-600 dark:text-blue-400 shrink-0" />
+                      <span>
+                        Student account changes save directly to{' '}
+                        <code className="font-mono text-slate-900 dark:text-white">
+                          users/{inspectUser.uid}
+                        </code>{' '}
+                        and propagate across listings automatically.
+                      </span>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Footer Moderation Controls */}
-              <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
-                {!isSelf && !isBanned ? (
-                  confirmBanUid === inspectUser.uid ? (
-                    <div className="flex items-center gap-2">
+                {/* Footer Save + Moderation Controls */}
+                <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2.5">
+                  {!isSelf && !isBanned ? (
+                    confirmBanUid === inspectUser.uid ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => void handleBanUser(inspectUser)}
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                          <span>Confirm Ban</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => setConfirmBanUid(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
-                        variant="danger"
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => void handleBanUser(inspectUser)}
-                      >
-                        <Ban className="w-3.5 h-3.5" />
-                        <span>Confirm Permanent Ban</span>
-                      </Button>
-                      <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={isBusy}
-                        onClick={() => setConfirmBanUid(null)}
+                        onClick={() => setConfirmBanUid(inspectUser.uid)}
+                        className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/50"
                       >
-                        Cancel
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Ban Permanently</span>
                       </Button>
-                    </div>
+                    )
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => setConfirmBanUid(inspectUser.uid)}
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                    >
-                      <Ban className="w-3.5 h-3.5" />
-                      <span>Ban Permanently</span>
-                    </Button>
-                  )
-                ) : (
-                  <span className="text-xs text-slate-500">
-                    {isSelf
-                      ? 'Active Admin Session'
-                      : 'Permanently Banned'}
-                  </span>
-                )}
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {isSelf ? 'Active Admin Session' : 'Permanently Banned'}
+                    </span>
+                  )}
 
-                <div className="flex items-center gap-2 ml-auto">
-                  <Button
-                    variant={isSuspended ? 'outline' : 'danger'}
-                    size="sm"
-                    disabled={isBusy || isSelf}
-                    onClick={() => void handleToggleStatus(inspectUser)}
-                  >
-                    {isBusy ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : isSuspended ? (
-                      <UserCheck className="w-3.5 h-3.5" />
-                    ) : (
-                      <UserX className="w-3.5 h-3.5" />
-                    )}
-                    <span>{isSuspended ? 'Unsuspend' : 'Suspend'}</span>
-                  </Button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Button
+                      type="button"
+                      variant={isSuspended ? 'outline' : 'danger'}
+                      size="sm"
+                      disabled={isBusy || isSelf}
+                      onClick={() => void handleToggleStatus(inspectUser)}
+                    >
+                      {isBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isSuspended ? (
+                        <UserCheck className="w-3.5 h-3.5" />
+                      ) : (
+                        <UserX className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isSuspended ? 'Unsuspend' : 'Suspend'}</span>
+                    </Button>
+
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      disabled={isBusy || uploadingAvatar}
+                    >
+                      {isBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isBusy ? 'Saving...' : 'Save Changes'}</span>
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
         );

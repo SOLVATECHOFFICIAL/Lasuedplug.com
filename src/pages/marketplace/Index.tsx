@@ -57,6 +57,11 @@ import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { ProductCard } from '../../components/marketplace/ProductCard';
+import { SeoHead } from '../../components/seo/SeoHead';
+
+function getBrowseCacheKey(category: string): string {
+  return category ? `mkt_browse_cat:${category}` : 'mkt_browse_default';
+}
 
 const SEARCH_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest to Oldest' },
@@ -140,8 +145,8 @@ export function MarketplaceIndex() {
   const [browseProducts, setBrowseProducts] = useState<Product[]>(() =>
     restoredView?.browseProducts?.length
       ? restoredView.browseProducts
-      : !initialQuery && !initialCategory
-        ? getFastCache<Product[]>('mkt_browse_default') || []
+      : !initialQuery
+        ? getFastCache<Product[]>(getBrowseCacheKey(initialCategory)) || []
         : []
   );
   const [lastVisibleDoc, setLastVisibleDoc] =
@@ -174,8 +179,8 @@ export function MarketplaceIndex() {
     ) {
       return false;
     }
-    return !initialQuery && !initialCategory
-      ? (getFastCache<Product[]>('mkt_browse_default') || []).length === 0
+    return !initialQuery
+      ? (getFastCache<Product[]>(getBrowseCacheKey(initialCategory)) || []).length === 0
       : true;
   });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -258,8 +263,10 @@ export function MarketplaceIndex() {
         );
       }
 
-      if (!debouncedSearch.trim() && !selectedCategory) {
-        const hydratedBrowse = getFastCacheEnvelope<Product[]>('mkt_browse_default');
+      if (!debouncedSearch.trim()) {
+        const hydratedBrowse = getFastCacheEnvelope<Product[]>(
+          getBrowseCacheKey(selectedCategory)
+        );
         if (hydratedBrowse && hydratedBrowse.data.length > 0) {
           setBrowseProducts((prev) =>
             prev.length > hydratedBrowse.data.length
@@ -361,8 +368,9 @@ export function MarketplaceIndex() {
     const reqId = ++requestIdRef.current;
     const trimmedQuery = debouncedSearch.trim();
     const isDefaultBrowse = !trimmedQuery && !selectedCategory;
-    const browseEnv = isDefaultBrowse
-      ? getFastCacheEnvelope<Product[]>('mkt_browse_default')
+    const browseCacheKey = getBrowseCacheKey(selectedCategory);
+    const browseEnv = !trimmedQuery
+      ? getFastCacheEnvelope<Product[]>(browseCacheKey)
       : null;
     const cachedBrowse = browseEnv?.data || [];
     const hasCachedBrowse = cachedBrowse.length > 0;
@@ -459,47 +467,45 @@ export function MarketplaceIndex() {
     setUsedRelatedFallback(false);
     setRawSearchProducts([]);
 
-    if (isDefaultBrowse) {
-      const strategy = resolveSyncStrategy({
-        hasCached: hasCachedBrowse,
-        lastSyncedAt: browseEnv?.syncedAt,
-        lastFullSyncAt: browseEnv?.fullSyncAt,
-      });
+    const strategy = resolveSyncStrategy({
+      hasCached: hasCachedBrowse,
+      lastSyncedAt: browseEnv?.syncedAt,
+      lastFullSyncAt: browseEnv?.fullSyncAt,
+    });
 
-      if (strategy === 'fresh-skip') {
+    if (strategy === 'fresh-skip') {
+      setLoading(false);
+      return;
+    }
+
+    if (isDefaultBrowse && strategy === 'delta-sync' && hasCachedBrowse) {
+      try {
+        const newestMs = getNewestCreatedAtMs(cachedBrowse);
+        const delta = await fetchMarketplaceProductsDelta(newestMs, {
+          adType: 'item',
+        });
+        if (reqId !== requestIdRef.current) return;
+
+        if (delta.length === 0) {
+          touchFastCache(browseCacheKey);
+        } else {
+          const merged = mergeDeltaEntities(
+            cachedBrowse,
+            delta,
+            (item) => item.id,
+            (item) => getTimestampMillis(item.createdAt),
+            60
+          );
+          setBrowseProducts(merged);
+          setFastCache(browseCacheKey, merged, {
+            localData: compactListingsForCache(merged, 24),
+            isFull: true,
+          });
+        }
         setLoading(false);
         return;
-      }
-
-      if (strategy === 'delta-sync' && hasCachedBrowse) {
-        try {
-          const newestMs = getNewestCreatedAtMs(cachedBrowse);
-          const delta = await fetchMarketplaceProductsDelta(newestMs, {
-            adType: 'item',
-          });
-          if (reqId !== requestIdRef.current) return;
-
-          if (delta.length === 0) {
-            touchFastCache('mkt_browse_default');
-          } else {
-            const merged = mergeDeltaEntities(
-              cachedBrowse,
-              delta,
-              (item) => item.id,
-              (item) => getTimestampMillis(item.createdAt),
-              60
-            );
-            setBrowseProducts(merged);
-            setFastCache('mkt_browse_default', merged, {
-              localData: compactListingsForCache(merged, 24),
-              isFull: true,
-            });
-          }
-          setLoading(false);
-          return;
-        } catch {
-          // Fall back to full fetch below if delta errors transiently
-        }
+      } catch {
+        // Fall back to full fetch below if delta errors transiently
       }
     }
 
@@ -516,12 +522,10 @@ export function MarketplaceIndex() {
           getListingAdType(item) === 'item'
       );
       setBrowseProducts(cleanProducts);
-      if (isDefaultBrowse) {
-        setFastCache('mkt_browse_default', cleanProducts, {
-          localData: compactListingsForCache(cleanProducts, 24),
-          isFull: true,
-        });
-      }
+      setFastCache(browseCacheKey, cleanProducts, {
+        localData: compactListingsForCache(cleanProducts, 24),
+        isFull: true,
+      });
       setLastVisibleDoc(result.lastVisibleDoc);
       setHasMore(result.hasMore);
     } catch (err) {
@@ -640,13 +644,17 @@ export function MarketplaceIndex() {
 
   return (
     <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-6">
+      <SeoHead
+        title="Campus Marketplace"
+        description="Browse verified items and campus deals from LASUED, LASU, and Epe sellers."
+      />
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1 min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
             Campus Marketplace
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Browse verified items and campus deals from LASUED, LASU, and Epe sellers.
           </p>
         </div>
@@ -669,12 +677,12 @@ export function MarketplaceIndex() {
               <TrendingUp className="w-5 h-5 text-accent-500 shrink-0" />
               <h2
                 id="trending-heading"
-                className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate"
+                className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight truncate"
               >
                 Trending on Campus
               </h2>
             </div>
-            <span className="text-xs font-medium text-slate-500 inline-flex items-center gap-1 shrink-0">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 inline-flex items-center gap-1 shrink-0">
               <span>Swipe</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </span>
@@ -699,16 +707,16 @@ export function MarketplaceIndex() {
       {/* Sticky Search Bar & Category Filters */}
       <section
         aria-label="Search marketplace"
-        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-1.5 bg-slate-50/95 backdrop-blur-sm"
+        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-1.5 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm"
       >
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2 sm:p-3.5 space-y-2">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-2 sm:p-3.5 space-y-2">
           <div className="flex flex-col md:flex-row md:items-end gap-2 sm:gap-3">
             {/* Search Input */}
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <label
                   htmlFor="marketplace-search"
-                  className="hidden sm:block text-xs font-medium text-slate-600"
+                  className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
                 >
                   Search Marketplace
                 </label>
@@ -716,7 +724,7 @@ export function MarketplaceIndex() {
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="hidden sm:inline-block text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-0.5 rounded hover:bg-blue-50 transition-all duration-200"
+                    className="hidden sm:inline-block text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 px-2 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-all duration-200"
                   >
                     Clear Filters
                   </button>
@@ -733,7 +741,7 @@ export function MarketplaceIndex() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search items, food, books, electronics..."
                     aria-label="Search marketplace products"
-                    className="w-full min-w-0 pl-9 pr-10 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full min-w-0 pl-9 pr-10 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
                   {(searchQuery || selectedCategory) && (
                     <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
@@ -741,7 +749,7 @@ export function MarketplaceIndex() {
                         type="button"
                         onClick={handleClearFilters}
                         aria-label="Clear search and filters"
-                        className="p-2 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all duration-200"
+                        className="p-2 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -755,7 +763,7 @@ export function MarketplaceIndex() {
             <div className="w-full md:w-56 space-y-1 shrink-0">
               <label
                 htmlFor="marketplace-category-filter"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Product Category
               </label>
@@ -764,7 +772,7 @@ export function MarketplaceIndex() {
                 aria-label="Filter by product category"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                className="block w-full px-3 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
               >
                 <option value="">All Categories</option>
                 {PRODUCT_CATEGORIES.map((cat) => (
@@ -780,7 +788,7 @@ export function MarketplaceIndex() {
               <div className="w-full md:w-44 space-y-1 shrink-0">
                 <label
                   htmlFor="marketplace-search-sort"
-                  className="hidden sm:block text-xs font-medium text-slate-600"
+                  className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
                 >
                   Sort Results
                 </label>
@@ -789,7 +797,7 @@ export function MarketplaceIndex() {
                   aria-label="Sort search results"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SearchSortValue)}
-                  className="block w-full px-3 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                  className="block w-full px-3 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
                 >
                   {SEARCH_SORT_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -805,9 +813,9 @@ export function MarketplaceIndex() {
           {isTypingSearch && aiSearching && (
             <div
               role="status"
-              className="flex items-center gap-2 text-sm font-medium text-slate-600 pt-1"
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 pt-1"
             >
-              <Loader2 className="w-4 h-4 animate-spin shrink-0 text-primary-600" />
+              <Loader2 className="w-4 h-4 animate-spin shrink-0 text-primary-600 dark:text-primary-400" />
               <span>Searching marketplace...</span>
             </div>
           )}
@@ -815,9 +823,9 @@ export function MarketplaceIndex() {
           {isSearchActive && !aiSearching && usedRelatedFallback && (
             <div
               role="status"
-              className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700"
+              className="flex items-start gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200"
             >
-              <Info className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-primary-500 dark:text-primary-400 shrink-0 mt-0.5" />
               <span>
                 Showing closest related campus listings
                 {debouncedSearch.trim() ? ` for "${debouncedSearch.trim()}"` : ''}.
@@ -863,7 +871,7 @@ export function MarketplaceIndex() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p
               data-testid="marketplace-count"
-              className="text-xs font-medium text-slate-500 tabular-nums"
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums"
             >
               Showing {products.length}{' '}
               {products.length === 1 ? 'listing' : 'listings'}
@@ -872,7 +880,7 @@ export function MarketplaceIndex() {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200"
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-all duration-200"
               >
                 Clear Filters
               </button>
@@ -900,7 +908,7 @@ export function MarketplaceIndex() {
             {loadingMore && (
               <div
                 role="status"
-                className="inline-flex items-center gap-2 text-sm text-slate-500 py-2"
+                className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 py-2"
               >
                 <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
                 <span>Loading more listings...</span>

@@ -11,6 +11,7 @@ import {
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -60,6 +61,10 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-10 sm:py-14">
+      <SeoHead
+        title="Reset Password"
+        description="Reset your LASUEDPLUG account password via email."
+      />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
           <img
@@ -69,10 +74,10 @@ export function ForgotPasswordPage() {
             decoding="async"
             className="h-12 w-auto mx-auto object-contain"
           />
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Reset your password
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Enter your email address and we will send you a password reset link.
           </p>
         </div>
@@ -80,9 +85,9 @@ export function ForgotPasswordPage() {
         {formError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-sm text-red-700 dark:text-red-300"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{formError}</span>
           </div>
         )}
@@ -90,9 +95,9 @@ export function ForgotPasswordPage() {
         {successMessage && (
           <div
             role="status"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 text-sm text-emerald-800 dark:text-emerald-200"
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <span>{successMessage}</span>
           </div>
         )}
@@ -125,11 +130,11 @@ export function ForgotPasswordPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
           Remembered your password?{' '}
           <Link
             to="/login"
-            className="font-semibold text-blue-600 hover:text-blue-700"
+            className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
           >
             Back to Login
           </Link>

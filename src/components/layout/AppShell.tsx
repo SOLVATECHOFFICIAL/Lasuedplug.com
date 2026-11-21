@@ -177,24 +177,24 @@ export function AppShell({ children }: AppShellProps) {
 
   if (showMaintenanceGate) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-900 px-4 py-12 font-sans antialiased">
-          <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-5">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 px-4 py-12 font-sans antialiased">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-8 text-center space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
               <Wrench className="w-7 h-7" aria-hidden="true" />
             </div>
             <div className="space-y-2">
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 We&apos;ll be right back
               </h1>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                 LASUEDPLUG is currently undergoing scheduled maintenance and updates to
                 keep the campus marketplace fast and secure. Please check back shortly.
               </p>
             </div>
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
               <Link
                 to="/login"
-                className="text-xs font-semibold text-slate-500 hover:text-primary-600 transition-colors"
+                className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
               >
                 Admin Sign In
               </Link>
@@ -210,7 +210,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div
       onClickCapture={handleCaptureScrollBeforeNavigation}
-      className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased overflow-x-clip"
+      className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased overflow-x-clip"
     >
       <Navbar />
         {maintenanceMode && isAdminSession && (
@@ -235,15 +235,15 @@ export function AppShell({ children }: AppShellProps) {
         {showIncompleteBanner && (
           <div
             role="alert"
-            className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-center text-xs sm:text-sm font-medium text-amber-900"
+            className="bg-amber-50 dark:bg-amber-950/60 border-b border-amber-200 dark:border-amber-800 px-4 py-2.5 text-center text-xs sm:text-sm font-medium text-amber-900 dark:text-amber-200"
           >
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
                 Complete your profile to start buying and selling.{' '}
                 <Link
                   to="/dashboard/profile"
-                  className="font-semibold underline underline-offset-2 text-amber-950 hover:text-blue-700 transition-all duration-200"
+                  className="font-semibold underline underline-offset-2 text-amber-950 dark:text-amber-100 hover:text-blue-700 dark:hover:text-blue-300 transition-all duration-200"
                 >
                   Go to Profile.
                 </Link>

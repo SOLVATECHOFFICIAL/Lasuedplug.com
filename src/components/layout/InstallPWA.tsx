@@ -28,7 +28,7 @@ export function InstallPWA() {
     <aside
       aria-label="Install LASUEDPLUG App"
       data-testid="install-pwa-banner"
-      className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 md:left-auto md:right-5 md:w-[360px] z-40 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-xl p-3.5 transition-all duration-200"
+      className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] md:bottom-5 left-3 right-3 md:left-auto md:right-5 md:w-[360px] z-40 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 shadow-xl p-3.5 transition-all duration-200"
     >
       <div className="flex items-start gap-3">
         <img
@@ -36,16 +36,16 @@ export function InstallPWA() {
           alt="LASUEDPLUG"
           loading="lazy"
           decoding="async"
-          className="w-11 h-11 rounded-xl border border-slate-100 object-contain bg-white shrink-0"
+          className="w-11 h-11 rounded-xl border border-slate-100 dark:border-slate-700 object-contain bg-white dark:bg-slate-800 shrink-0"
         />
 
         <div className="flex-1 min-w-0 space-y-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-900 truncate">
+              <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
                 Install LASUEDPLUG App
               </p>
-              <p className="text-xs text-slate-600 leading-snug">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug">
                 {isInstallable
                   ? 'Add to your home screen for faster campus shopping & offline access.'
                   : 'Install LASUEDPLUG on your iPhone or iPad for one-tap access.'}
@@ -56,7 +56,7 @@ export function InstallPWA() {
               type="button"
               onClick={dismissBanner}
               aria-label="Dismiss install banner"
-              className="p-1.5 -mt-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all duration-200 shrink-0"
+              className="p-1.5 -mt-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 shrink-0"
             >
               <X className="w-4 h-4" />
             </button>

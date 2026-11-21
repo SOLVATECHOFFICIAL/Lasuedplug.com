@@ -12,6 +12,7 @@ import {
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -65,6 +66,10 @@ export function LoginPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-10 sm:py-14">
+      <SeoHead
+        title="Log In"
+        description="Log in to LASUEDPLUG to manage your listings, messages, and campus profile."
+      />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
           <img
@@ -74,10 +79,10 @@ export function LoginPage() {
             decoding="async"
             className="h-12 w-auto mx-auto object-contain"
           />
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Welcome back
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Log in to manage your listings, messages, and profile.
           </p>
         </div>
@@ -85,9 +90,9 @@ export function LoginPage() {
         {formError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-sm text-red-700 dark:text-red-300"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{formError}</span>
           </div>
         )}
@@ -130,7 +135,7 @@ export function LoginPage() {
             <div className="flex justify-end">
               <Link
                 to="/forgot-password"
-                className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 Forgot Password?
               </Link>
@@ -149,11 +154,11 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
           New to {SITE_NAME}?{' '}
           <Link
             to="/signup"
-            className="font-semibold text-blue-600 hover:text-blue-700"
+            className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
           >
             Create an account
           </Link>

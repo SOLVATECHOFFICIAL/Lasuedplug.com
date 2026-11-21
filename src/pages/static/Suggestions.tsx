@@ -114,7 +114,7 @@ export function SuggestionsPage() {
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95 transition-all"
+          className="inline-flex items-center gap-1.5 py-2 pr-3 -ml-1 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{canGoBack ? 'Go Back' : 'Back to Home'}</span>
@@ -123,14 +123,14 @@ export function SuggestionsPage() {
 
       {/* Hero Header */}
       <header className="space-y-2.5 max-w-2xl">
-        <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary-600">
+        <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">
           <Lightbulb className="w-4 h-4" aria-hidden="true" />
           <span>Community Suggestions &amp; Updates</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Suggest What We Should Add Next
         </h1>
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
           Have an idea to make LASUEDPLUG better for students, marketers, or hostel hunters?
           Drop your suggestion below and join our WhatsApp updates group to get notified as
           soon as new features roll out.
@@ -141,10 +141,10 @@ export function SuggestionsPage() {
         {/* Suggestion Form */}
         <Card hoverable={false} className="lg:col-span-7 p-5 sm:p-7 space-y-5">
           <div className="space-y-1">
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
               Send a Feature Idea or Feedback
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Every idea is reviewed as we plan upcoming app and website updates.
             </p>
           </div>
@@ -153,18 +153,18 @@ export function SuggestionsPage() {
             <div
               role="status"
               data-testid="suggestion-success-banner"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3"
+              className="rounded-xl border border-emerald-200 dark:border-emerald-800/70 bg-emerald-50 dark:bg-emerald-950/40 p-4 space-y-3"
             >
               <div className="flex items-start gap-2.5">
                 <CheckCircle2
-                  className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5"
+                  className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5"
                   aria-hidden="true"
                 />
                 <div className="space-y-1">
-                  <p className="text-sm font-bold text-emerald-950">
+                  <p className="text-sm font-bold text-emerald-950 dark:text-emerald-200">
                     Suggestion received: &ldquo;{lastSubmitted.title}&rdquo;
                   </p>
-                  <p className="text-xs text-emerald-800 leading-relaxed">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300/90 leading-relaxed">
                     {lastSubmitted.deliveryChannel === 'firestore'
                       ? 'Your suggestion has been saved for the LASUEDPLUG team. Want faster updates when it goes live? Join the WhatsApp Updates Group.'
                       : 'Your suggestion is saved on this device. You can also send it directly on WhatsApp or join our Updates Group below.'}
@@ -185,7 +185,7 @@ export function SuggestionsPage() {
                   href={UPDATES_WHATSAPP_GROUP_LINK}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100/70 text-xs font-semibold transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/50 text-xs font-semibold transition-colors"
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>Join Updates Group</span>
@@ -224,11 +224,11 @@ export function SuggestionsPage() {
               <div className="flex items-center justify-between gap-2">
                 <label
                   htmlFor="suggestion-details"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-200"
                 >
                   What should we add or improve?
                 </label>
-                <span className="text-[11px] text-slate-400 tabular-nums">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
                   {details.length}/1500
                 </span>
               </div>
@@ -245,14 +245,14 @@ export function SuggestionsPage() {
                 placeholder="Tell us what problem it solves or how you want it to work on LASUEDPLUG..."
                 maxLength={1500}
                 aria-invalid={errors.details ? true : undefined}
-                className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 ${
+                className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 ${
                   errors.details
-                    ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                    : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                    ? 'border-red-400 dark:border-red-500 focus:border-red-500 focus:ring-red-200 dark:focus:ring-red-900/40'
+                    : 'border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500'
                 }`}
               />
               {errors.details && (
-                <p role="alert" className="text-xs font-medium text-red-600">
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                   {errors.details}
                 </p>
               )}
@@ -294,33 +294,33 @@ export function SuggestionsPage() {
         <div className="lg:col-span-5 space-y-5">
           <Card
             hoverable={false}
-            className="p-5 sm:p-6 bg-gradient-to-br from-emerald-50 via-white to-teal-50/70 border-emerald-200 space-y-4"
+            className="p-5 sm:p-6 bg-gradient-to-br from-emerald-50 via-white to-teal-50/70 dark:from-emerald-950/50 dark:via-slate-900 dark:to-teal-950/40 border-emerald-200 dark:border-emerald-800/70 space-y-4"
           >
             <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
               <MessageCircle className="w-5 h-5" aria-hidden="true" />
             </div>
 
             <div className="space-y-1.5">
-              <h2 className="text-lg font-extrabold text-slate-900">
+              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
                 Join the LASUEDPLUG Updates Group
               </h2>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                 Get instant announcements whenever new features launch, campus categories
                 expand, or community updates drop on LASUEDPLUG.
               </p>
             </div>
 
-            <ul className="space-y-2 text-xs sm:text-sm text-slate-700">
+            <ul className="space-y-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <span>First to know about new app &amp; website features</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <span>Vote and discuss what gets added next</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <span>Important campus safety &amp; seller notices</span>
               </li>
             </ul>
@@ -338,9 +338,9 @@ export function SuggestionsPage() {
             </a>
           </Card>
 
-          <Card hoverable={false} className="p-5 space-y-2 bg-slate-50 border-slate-200">
-            <h3 className="text-sm font-bold text-slate-900">What happens next?</h3>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+          <Card hoverable={false} className="p-5 space-y-2 bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">What happens next?</h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               We review student and marketer suggestions weekly and prioritize the most
               requested features for the next release.
             </p>
@@ -352,7 +352,7 @@ export function SuggestionsPage() {
       {submittedList.length > 0 && (
         <section aria-label="Your submitted suggestions" className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Your Submitted Suggestions ({submittedList.length})
             </h2>
           </div>
@@ -364,23 +364,23 @@ export function SuggestionsPage() {
                   <Badge variant="role">
                     {getSuggestionCategoryLabel(item.category)}
                   </Badge>
-                  <span className="text-[11px] font-medium text-slate-400">
+                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
                     {new Date(item.createdAtMs).toLocaleDateString()}
                   </span>
                 </div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                   {item.title}
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                   {item.details}
                 </p>
-                <div className="pt-1 flex items-center justify-between gap-2 border-t border-slate-100 text-xs text-slate-500">
+                <div className="pt-1 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
                   <span>By {item.authorName}</span>
                   <a
                     href={buildSuggestionWhatsAppUrl(item)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>Send via WhatsApp</span>

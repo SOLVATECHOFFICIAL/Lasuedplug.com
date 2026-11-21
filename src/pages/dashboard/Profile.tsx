@@ -67,6 +67,7 @@ import { Button } from '../../components/ui/Button';
 import { StarRating } from '../../components/ui/StarRating';
 import { UserAvatar } from '../../components/ui/UserAvatar';
 import { LocationPinField } from '../../components/forms/LocationPinField';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 interface FieldErrors {
   fullName?: string;
@@ -491,11 +492,15 @@ export function ProfilePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
+      <SeoHead
+        title="My Profile"
+        description="Manage your LASUEDPLUG profile details, academic or marketer information, and verification status."
+      />
       <div className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
           My Profile
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           {isBusinessAccount
             ? 'Manage your marketer brand details, operating hours, shop location, and identity verification.'
             : 'Manage your personal details and sealed campus academic record.'}
@@ -513,7 +518,7 @@ export function ProfilePage() {
                 name={displayName}
                 email={email}
                 size="lg"
-                className="ring-2 ring-slate-100"
+                className="ring-2 ring-slate-100 dark:ring-slate-800"
               />
               <button
                 type="button"
@@ -533,12 +538,12 @@ export function ProfilePage() {
                       ? 'Change profile picture'
                       : 'Upload profile picture'
                 }
-                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-700 hover:text-primary-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploadingPic ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-600" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-600 dark:text-primary-400" />
                 ) : picLock.isLocked ? (
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  <Lock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 ) : (
                   <Camera className="w-3.5 h-3.5" />
                 )}
@@ -556,17 +561,17 @@ export function ProfilePage() {
 
             <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900 truncate">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white truncate">
                   {displayName}
                 </h2>
                 {isVerified && (
                   <BadgeCheck
-                    className="w-5 h-5 text-emerald-600 shrink-0"
+                    className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0"
                     aria-label={verifiedBadgeLabel}
                   />
                 )}
               </div>
-              <p className="text-sm text-slate-500 flex items-center gap-1.5 truncate">
+              <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
                 <Mail className="w-4 h-4 shrink-0" />
                 <span className="truncate">{email}</span>
               </p>
@@ -602,12 +607,12 @@ export function ProfilePage() {
                 />
               </div>
               {!isVerified && verificationUiState === 'pending' && (
-                <p className="text-xs text-amber-700 pt-0.5">
+                <p className="text-xs text-amber-700 dark:text-amber-400 pt-0.5">
                   Your verification document is awaiting Support review.
                 </p>
               )}
               {!isVerified && verificationUiState === 'rejected' && (
-                <p className="text-xs text-red-600 pt-0.5">
+                <p className="text-xs text-red-600 dark:text-red-400 pt-0.5">
                   {isBusinessAccount
                     ? "Your previous submission was rejected. Upload a clearer NIN, Driver's License, Voter's Card, or Passport to reapply."
                     : 'Your previous submission was rejected. Upload a clearer Student ID or fee receipt to reapply.'}
@@ -644,7 +649,7 @@ export function ProfilePage() {
                 size="sm"
                 disabled={loadingVerification}
                 onClick={handleOpenVerifyModal}
-                className="border-emerald-200 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300"
+                className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 hover:border-emerald-300"
               >
                 <BadgeCheck className="w-4 h-4" />
                 <span>Apply for Verification</span>
@@ -657,12 +662,12 @@ export function ProfilePage() {
           <div
             role="status"
             data-testid="profile-pic-lock-notice"
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs sm:text-sm font-medium text-amber-900"
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 text-xs sm:text-sm font-medium text-amber-900 dark:text-amber-200"
           >
             <span>{picLock.lockMessage}</span>
           </div>
         ) : (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Available for both Students and Marketers: upload a clear profile photo (auto-compressed under 100KB). Once updated, you can change it only once a week (7-day lock).
           </p>
         )}
@@ -670,9 +675,9 @@ export function ProfilePage() {
         {picError && (
           <div
             role="alert"
-            className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700"
+            className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-xs font-medium text-red-700 dark:text-red-300"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{picError}</span>
           </div>
         )}
@@ -681,10 +686,10 @@ export function ProfilePage() {
       {/* Edit Profile Form */}
       <Card hoverable={false} className="space-y-6">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
             Edit Profile Details
           </h3>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Complete all fields below to unlock buying, selling, and messaging on
             LASUEDPLUG.
           </p>
@@ -693,9 +698,9 @@ export function ProfilePage() {
         {formError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-sm text-red-700 dark:text-red-300"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{formError}</span>
           </div>
         )}
@@ -703,9 +708,9 @@ export function ProfilePage() {
         {savedNotice && (
           <div
             role="status"
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 text-sm text-emerald-800 dark:text-emerald-200"
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <span>{savedNotice}</span>
           </div>
         )}
@@ -714,36 +719,36 @@ export function ProfilePage() {
           {/* Account Type (Locked Forever Once Chosen at Signup) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="block text-sm font-medium text-slate-700">
+              <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Account Type
               </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-600">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300">
                 <Lock className="w-3 h-3" />
                 <span>Locked Forever</span>
               </span>
             </div>
             <div
               data-testid="locked-account-type-banner"
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300"
             >
               <div className="flex items-start gap-2.5">
                 {isBusinessAccount ? (
-                  <Store className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <Store className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                 ) : (
-                  <GraduationCap className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+                  <GraduationCap className="w-4 h-4 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" />
                 )}
                 <div className="space-y-0.5">
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     Registered as {isBusinessAccount ? 'Marketer' : 'Student'}
                   </p>
-                  <p className="text-slate-600">{ACCOUNT_TYPE_LOCK_MESSAGE}</p>
+                  <p className="text-slate-600 dark:text-slate-400">{ACCOUNT_TYPE_LOCK_MESSAGE}</p>
                 </div>
               </div>
               <a
                 href={SUPPORT_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-primary-600 hover:underline whitespace-nowrap shrink-0 self-start sm:self-center"
+                className="font-semibold text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap shrink-0 self-start sm:self-center"
               >
                 Contact Support
               </a>
@@ -796,17 +801,17 @@ export function ProfilePage() {
           </div>
 
           {isBusinessAccount ? (
-            <div className="pt-4 border-t border-slate-200 space-y-5">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-primary-600" />
-                  <h4 className="text-base font-semibold text-slate-900">
+                  <Building2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <h4 className="text-base font-semibold text-slate-900 dark:text-white">
                     Marketer Details
                   </h4>
                 </div>
                 {isMarketerLocked && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
-                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200">
+                    <Lock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                     Sealed
                   </span>
                 )}
@@ -816,10 +821,10 @@ export function ProfilePage() {
                 <div
                   role="note"
                   data-testid="marketer-lock-notice"
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
                   <div className="flex items-start gap-2.5">
-                    <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                    <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
                     <span>{MARKETER_LOCK_MESSAGE}</span>
                   </div>
                   <a
@@ -833,7 +838,7 @@ export function ProfilePage() {
                   </a>
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Verify your brand name, shop mode, hours, and physical address carefully — marketer profile details lock forever once saved.
                 </p>
               )}
@@ -859,7 +864,7 @@ export function ProfilePage() {
               />
 
               <div className="space-y-2">
-                <span className="block text-sm font-medium text-slate-700">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Do you have a physical shop? <span className="text-red-500">*</span>
                 </span>
                 <div
@@ -881,8 +886,8 @@ export function ProfilePage() {
                     }}
                     className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                       hasPhysicalShop
-                        ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-500 text-primary-700 dark:text-primary-300 ring-1 ring-primary-500'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
                     <Store className="w-4 h-4 shrink-0" />
@@ -902,8 +907,8 @@ export function ProfilePage() {
                     }}
                     className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                       !hasPhysicalShop
-                        ? 'bg-primary-50 border-primary-500 text-primary-700 ring-1 ring-primary-500'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-primary-50 dark:bg-primary-950/40 border-primary-500 text-primary-700 dark:text-primary-300 ring-1 ring-primary-500'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
                     <Globe className="w-4 h-4 shrink-0" />
@@ -915,8 +920,8 @@ export function ProfilePage() {
                   <div className="pt-3 space-y-5">
                     {/* Opening & Closing Time Pickers (Physical Shop Only) */}
                     <div className="space-y-2">
-                      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                        <Clock className="w-4 h-4 text-slate-500" />
+                      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                        <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                         <span>
                           Opening &amp; Closing Hours <span className="text-red-500">*</span>
                         </span>
@@ -925,7 +930,7 @@ export function ProfilePage() {
                         <div className="space-y-1">
                           <label
                             htmlFor="profile-opening-time-start"
-                            className="block text-xs font-medium text-slate-600"
+                            className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                           >
                             Opening Time
                           </label>
@@ -940,13 +945,13 @@ export function ProfilePage() {
                               setOpeningTimeStart(e.target.value);
                               clearFieldError('openingHours');
                             }}
-                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div className="space-y-1">
                           <label
                             htmlFor="profile-opening-time-end"
-                            className="block text-xs font-medium text-slate-600"
+                            className="block text-xs font-medium text-slate-600 dark:text-slate-400"
                           >
                             Closing Time
                           </label>
@@ -961,18 +966,18 @@ export function ProfilePage() {
                               setOpeningTimeEnd(e.target.value);
                               clearFieldError('openingHours');
                             }}
-                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+                            className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
                       {formattedHoursPreview && !fieldErrors.openingHours && (
-                        <p className="text-xs font-medium text-slate-600">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                           Displayed as:{' '}
-                          <span className="text-slate-900">{formattedHoursPreview}</span>
+                          <span className="text-slate-900 dark:text-white">{formattedHoursPreview}</span>
                         </p>
                       )}
                       {fieldErrors.openingHours && (
-                        <p className="text-xs font-medium text-red-600" role="alert">
+                        <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                           {fieldErrors.openingHours}
                         </p>
                       )}
@@ -1017,24 +1022,24 @@ export function ProfilePage() {
                     />
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2.5">
                     Online Only: Buyers can contact you anytime. Opening/closing hours, physical shop address, and GPS pin are not required.
                   </p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="pt-4 border-t border-slate-200 space-y-4">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <GraduationCap className="w-5 h-5 text-primary-600" />
-                  <h4 className="text-base font-semibold text-slate-900">
+                  <GraduationCap className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <h4 className="text-base font-semibold text-slate-900 dark:text-white">
                     Academic Details
                   </h4>
                 </div>
                 {anyAcademicLocked && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
-                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200">
+                    <Lock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                     Sealed
                   </span>
                 )}
@@ -1043,10 +1048,10 @@ export function ProfilePage() {
               {anyAcademicLocked ? (
                 <div
                   role="note"
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm font-medium text-slate-700"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
                   <div className="flex items-start gap-2.5">
-                    <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                    <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
                     <span>{ACADEMIC_LOCK_MESSAGE}</span>
                   </div>
                   <a
@@ -1060,7 +1065,7 @@ export function ProfilePage() {
                   </a>
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Verify your campus, department, and level carefully — academic
                   fields lock permanently once saved.
                 </p>
@@ -1123,7 +1128,7 @@ export function ProfilePage() {
 
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {allEditableFieldsLocked ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 All permanent fields are sealed. Only your Phone Number and Profile Picture can be updated once every 7 days.
               </p>
             ) : (
@@ -1149,26 +1154,26 @@ export function ProfilePage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="verify-student-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
           onClick={() => !submittingVerify && setVerifyModalOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5 max-h-[92vh] overflow-y-auto"
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                   <BadgeCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h2
                     id="verify-student-modal-title"
-                    className="text-lg font-bold text-slate-900"
+                    className="text-lg font-bold text-slate-900 dark:text-white"
                   >
                     Apply for {isBusinessAccount ? 'Marketer' : 'Student'} Verification
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Earn the {verifiedBadgeLabel} green badge on your profile and listings.
                   </p>
                 </div>
@@ -1178,7 +1183,7 @@ export function ProfilePage() {
                 disabled={submittingVerify}
                 onClick={() => setVerifyModalOpen(false)}
                 aria-label="Close verification modal"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1204,24 +1209,24 @@ export function ProfilePage() {
                 required
               />
 
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs text-slate-600 space-y-1">
-                <p className="font-semibold text-slate-800">
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">
                   Upload 1 clear photo of your {verifyDocType || 'selected ID'}:
                 </p>
                 <p>
                   {isBusinessAccount
                     ? 'Marketers must upload a valid NIN Slip/Card, Driver’s License, Voter’s Card, or International Passport matching '
                     : 'Students must upload a Student ID Card or current School Fee Receipt matching '}
-                  <span className="font-semibold text-slate-800">{displayName}</span>.
+                  <span className="font-semibold text-slate-800 dark:text-white">{displayName}</span>.
                 </p>
               </div>
 
               {verifyError && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700"
+                  className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/70 text-xs font-medium text-red-700 dark:text-red-300"
                 >
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                   <span>{verifyError}</span>
                 </div>
               )}
@@ -1236,7 +1241,7 @@ export function ProfilePage() {
 
               {verifyImageBase64 ? (
                 <div className="space-y-2">
-                  <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                  <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
                     <img
                       src={verifyImageBase64}
                       alt={`Uploaded ${verifyDocType || 'verification document'} preview`}
@@ -1258,7 +1263,7 @@ export function ProfilePage() {
                     </button>
                   </div>
                   {verifyImageName && (
-                    <p className="text-xs text-slate-500 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                       Selected &amp; compressed: {verifyImageName}
                     </p>
                   )}
@@ -1268,11 +1273,11 @@ export function ProfilePage() {
                   type="button"
                   disabled={compressingDoc || submittingVerify}
                   onClick={() => verifyFileInputRef.current?.click()}
-                  className="w-full py-10 px-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/40 flex flex-col items-center justify-center gap-2 text-slate-600 hover:text-emerald-700 transition-colors"
+                  className="w-full py-10 px-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 flex flex-col items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                 >
                   {compressingDoc ? (
                     <>
-                      <Loader2 className="w-7 h-7 animate-spin text-emerald-600" />
+                      <Loader2 className="w-7 h-7 animate-spin text-emerald-600 dark:text-emerald-400" />
                       <span className="text-sm font-medium">
                         Compressing document...
                       </span>
@@ -1285,7 +1290,7 @@ export function ProfilePage() {
                           ? `Upload ${verifyDocType || "NIN / Driver's License"}`
                           : `Upload ${verifyDocType || 'Student ID or Fee Receipt'}`}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
                         JPG or PNG, automatically compressed for fast review
                       </span>
                     </>

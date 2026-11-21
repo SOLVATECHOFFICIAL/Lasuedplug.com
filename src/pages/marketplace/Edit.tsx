@@ -58,33 +58,95 @@ export function MarketplaceEdit() {
   const { user, profile } = useAuth();
   const { showToast } = useToast();
 
-  const [listing, setListing] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialCached = id ? getFastCache<Product>(`product:${id}`) : null;
+  const [listing, setListing] = useState<Product | null>(initialCached);
+  const [loading, setLoading] = useState(() => Boolean(id) && !initialCached);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [subcategory, setSubcategory] = useState('');
-  const [images, setImages] = useState<string[]>([]);
-  const [priceType, setPriceType] = useState<PriceType>('fixed');
-  const [priceAmount, setPriceAmount] = useState('');
-  const [quantity, setQuantity] = useState('1');
-
-  const [itemLocationType, setItemLocationType] = useState<'physical' | 'online'>(
-    'physical'
+  const [title, setTitle] = useState(() => initialCached?.title || '');
+  const [description, setDescription] = useState(() => initialCached?.description || '');
+  const [categoryId, setCategoryId] = useState(() => initialCached?.categoryId || '');
+  const [subcategory, setSubcategory] = useState(() => initialCached?.subcategory || '');
+  const [images, setImages] = useState<string[]>(() =>
+    Array.isArray(initialCached?.images) ? initialCached.images : []
   );
-  const [hasPhysicalShop, setHasPhysicalShop] = useState(true);
-  const [nonShopServiceMode, setNonShopServiceMode] =
-    useState<ServiceLocation>('online');
+  const [priceType, setPriceType] = useState<PriceType>(() => {
+    if (!initialCached) return 'fixed';
+    const adType = getListingAdType(initialCached);
+    return initialCached.priceType || (adType === 'service' ? 'contact' : 'fixed');
+  });
+  const [priceAmount, setPriceAmount] = useState(() =>
+    typeof initialCached?.price === 'number' && Number.isFinite(initialCached.price)
+      ? String(initialCached.price)
+      : ''
+  );
+  const [quantity, setQuantity] = useState(() =>
+    typeof initialCached?.quantity === 'number' && Number.isFinite(initialCached.quantity)
+      ? String(Math.max(0, initialCached.quantity))
+      : '1'
+  );
 
-  const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [openingTimeStart, setOpeningTimeStart] = useState('08:00');
-  const [openingTimeEnd, setOpeningTimeEnd] = useState('18:00');
-  const [locationName, setLocationName] = useState('');
-  const [latitude, setLatitude] = useState<number | undefined>(undefined);
-  const [longitude, setLongitude] = useState<number | undefined>(undefined);
-  const [hasDelivery, setHasDelivery] = useState(false);
+  const [itemLocationType, setItemLocationType] = useState<'physical' | 'online'>(() => {
+    if (!initialCached) return 'physical';
+    const recordAdType = getListingAdType(initialCached);
+    return initialCached.locationType === 'online' ||
+      (recordAdType === 'service' &&
+        initialCached.serviceLocation &&
+        initialCached.serviceLocation !== 'shop')
+      ? 'online'
+      : 'physical';
+  });
+  const [hasPhysicalShop, setHasPhysicalShop] = useState(() =>
+    initialCached && getListingAdType(initialCached) === 'service'
+      ? (initialCached.serviceLocation || 'shop') === 'shop'
+      : true
+  );
+  const [nonShopServiceMode, setNonShopServiceMode] = useState<ServiceLocation>(() =>
+    initialCached?.serviceLocation && initialCached.serviceLocation !== 'shop'
+      ? initialCached.serviceLocation
+      : 'online'
+  );
+
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    () => initialCached?.whatsappNumber || ''
+  );
+  const [openingTimeStart, setOpeningTimeStart] = useState(() => {
+    if (!initialCached) return '08:00';
+    return (
+      initialCached.openingTimeStart ||
+      parseOpeningHoursRange(initialCached.openingHours).start ||
+      '08:00'
+    );
+  });
+  const [openingTimeEnd, setOpeningTimeEnd] = useState(() => {
+    if (!initialCached) return '18:00';
+    return (
+      initialCached.openingTimeEnd ||
+      parseOpeningHoursRange(initialCached.openingHours).end ||
+      '18:00'
+    );
+  });
+  const [locationName, setLocationName] = useState(() => {
+    if (!initialCached) return '';
+    const existingLocName =
+      initialCached.locationName ||
+      initialCached.landmark ||
+      initialCached.location ||
+      '';
+    return existingLocName === 'Online / Delivery' ||
+      existingLocName === 'We come to you'
+      ? ''
+      : existingLocName;
+  });
+  const [latitude, setLatitude] = useState<number | undefined>(() =>
+    typeof initialCached?.latitude === 'number' ? initialCached.latitude : undefined
+  );
+  const [longitude, setLongitude] = useState<number | undefined>(() =>
+    typeof initialCached?.longitude === 'number' ? initialCached.longitude : undefined
+  );
+  const [hasDelivery, setHasDelivery] = useState(() =>
+    Boolean(initialCached?.hasDelivery)
+  );
 
   const [fieldErrors, setFieldErrors] =
     useState<MarketplaceCreateValidationErrors>({});
@@ -92,6 +154,67 @@ export function MarketplaceEdit() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const submittingRef = useRef(false);
+  const populatedFromRecordRef = useRef(Boolean(initialCached));
+
+  const applyRecordToForm = useCallback((record: Product) => {
+    const recordAdType = getListingAdType(record);
+    setTitle(record.title || '');
+    setDescription(record.description || '');
+    setCategoryId(record.categoryId || '');
+    setSubcategory(record.subcategory || '');
+    setImages(Array.isArray(record.images) ? record.images : []);
+    setPriceType(
+      record.priceType || (recordAdType === 'service' ? 'contact' : 'fixed')
+    );
+    setPriceAmount(
+      typeof record.price === 'number' && Number.isFinite(record.price)
+        ? String(record.price)
+        : ''
+    );
+    setQuantity(
+      typeof record.quantity === 'number' && Number.isFinite(record.quantity)
+        ? String(Math.max(0, record.quantity))
+        : '1'
+    );
+
+    const inferredLocationType: 'physical' | 'online' =
+      record.locationType === 'online' ||
+      (recordAdType === 'service' &&
+        record.serviceLocation &&
+        record.serviceLocation !== 'shop')
+        ? 'online'
+        : 'physical';
+    setItemLocationType(inferredLocationType);
+
+    if (recordAdType === 'service') {
+      const isShop = (record.serviceLocation || 'shop') === 'shop';
+      setHasPhysicalShop(isShop);
+      if (!isShop && record.serviceLocation) {
+        setNonShopServiceMode(record.serviceLocation);
+      }
+      const parsedTimes = parseOpeningHoursRange(record.openingHours);
+      setOpeningTimeStart(record.openingTimeStart || parsedTimes.start || '08:00');
+      setOpeningTimeEnd(record.openingTimeEnd || parsedTimes.end || '18:00');
+    }
+
+    setWhatsappNumber(record.whatsappNumber || '');
+    const existingLocName =
+      record.locationName || record.landmark || record.location || '';
+    setLocationName(
+      inferredLocationType === 'online' &&
+        (existingLocName === 'Online / Delivery' ||
+          existingLocName === 'We come to you')
+        ? ''
+        : existingLocName
+    );
+    setLatitude(
+      typeof record.latitude === 'number' ? record.latitude : undefined
+    );
+    setLongitude(
+      typeof record.longitude === 'number' ? record.longitude : undefined
+    );
+    setHasDelivery(Boolean(record.hasDelivery));
+  }, []);
 
   const loadListing = useCallback(async () => {
     if (!id) {
@@ -101,89 +224,36 @@ export function MarketplaceEdit() {
     }
 
     const cached = getFastCache<Product>(`product:${id}`);
-    if (!cached) {
+    if (cached) {
+      setListing(cached);
+      if (!populatedFromRecordRef.current) {
+        applyRecordToForm(cached);
+        populatedFromRecordRef.current = true;
+      }
+      setLoading(false);
+    } else {
       setLoading(true);
     }
     setLoadError(null);
     try {
       const record = await getProductById(id);
       setListing(record);
-      if (record && id) {
-        invalidateFastCache(`product:${id}`);
-        invalidateFastCachePrefix('home_');
-        invalidateFastCachePrefix('mkt_');
-      }
-      if (record) {
-        const recordAdType = getListingAdType(record);
-        setTitle(record.title || '');
-        setDescription(record.description || '');
-        setCategoryId(record.categoryId || '');
-        setSubcategory(record.subcategory || '');
-        setImages(Array.isArray(record.images) ? record.images : []);
-        setPriceType(record.priceType || (recordAdType === 'service' ? 'contact' : 'fixed'));
-        setPriceAmount(
-          typeof record.price === 'number' && Number.isFinite(record.price)
-            ? String(record.price)
-            : ''
-        );
-        setQuantity(
-          typeof record.quantity === 'number' && Number.isFinite(record.quantity)
-            ? String(Math.max(0, record.quantity))
-            : '1'
-        );
-
-        const inferredLocationType: 'physical' | 'online' =
-          record.locationType === 'online' ||
-          (recordAdType === 'service' &&
-            record.serviceLocation &&
-            record.serviceLocation !== 'shop')
-            ? 'online'
-            : 'physical';
-        setItemLocationType(inferredLocationType);
-
-        if (recordAdType === 'service') {
-          const isShop = (record.serviceLocation || 'shop') === 'shop';
-          setHasPhysicalShop(isShop);
-          if (!isShop && record.serviceLocation) {
-            setNonShopServiceMode(record.serviceLocation);
-          }
-          const parsedTimes = parseOpeningHoursRange(record.openingHours);
-          setOpeningTimeStart(
-            record.openingTimeStart || parsedTimes.start || '08:00'
-          );
-          setOpeningTimeEnd(
-            record.openingTimeEnd || parsedTimes.end || '18:00'
-          );
-        }
-
-        setWhatsappNumber(record.whatsappNumber || '');
-        const existingLocName =
-          record.locationName || record.landmark || record.location || '';
-        setLocationName(
-          inferredLocationType === 'online' &&
-            (existingLocName === 'Online / Delivery' ||
-              existingLocName === 'We come to you')
-            ? ''
-            : existingLocName
-        );
-        setLatitude(
-          typeof record.latitude === 'number' ? record.latitude : undefined
-        );
-        setLongitude(
-          typeof record.longitude === 'number' ? record.longitude : undefined
-        );
-        setHasDelivery(Boolean(record.hasDelivery));
+      if (record && !populatedFromRecordRef.current) {
+        applyRecordToForm(record);
+        populatedFromRecordRef.current = true;
       }
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Unable to load listing for editing.';
-      setLoadError(msg);
+      if (!cached) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Unable to load listing for editing.';
+        setLoadError(msg);
+      }
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, applyRecordToForm]);
 
   useEffect(() => {
     void loadListing();
@@ -352,6 +422,10 @@ export function MarketplaceEdit() {
         },
       });
 
+      invalidateFastCache(`product:${listing.id}`);
+      invalidateFastCachePrefix('home_');
+      invalidateFastCachePrefix('mkt_');
+      invalidateFastCachePrefix('seller_dash:');
       showToast(
         'Listing updated! It is now hidden pending Admin re-approval.',
         'success'
@@ -390,12 +464,12 @@ export function MarketplaceEdit() {
     return (
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12">
         <Card hoverable={false} className="border-dashed text-center py-10 space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center">
             <PackageOpen className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-slate-900">Listing not found</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Listing not found</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               This listing may have been deleted or does not exist.
             </p>
           </div>
@@ -412,13 +486,13 @@ export function MarketplaceEdit() {
   if (user?.uid && listing.sellerId !== user.uid) {
     return (
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12">
-        <Card hoverable={false} className="border-red-200 text-center py-10 space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+        <Card hoverable={false} className="border-red-200 dark:border-red-800 text-center py-10 space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-slate-900">Access Denied</h1>
-            <p className="text-sm text-slate-600">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Access Denied</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               You can only edit listings created by your account.
             </p>
           </div>
@@ -439,7 +513,7 @@ export function MarketplaceEdit() {
       <div>
         <Link
           to="/dashboard/seller"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Seller Dashboard</span>
@@ -447,10 +521,10 @@ export function MarketplaceEdit() {
       </div>
 
       <div className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Edit Listing
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           Update details for &ldquo;{listing.title}&rdquo;.
         </p>
       </div>
@@ -458,9 +532,9 @@ export function MarketplaceEdit() {
       {/* Bold Red Security Warning Banner */}
       <div
         role="alert"
-        className="p-4 rounded-xl bg-red-50 border-2 border-red-300 flex items-start gap-3 text-red-800 shadow-sm"
+        className="p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border-2 border-red-300 dark:border-red-800 flex items-start gap-3 text-red-800 dark:text-red-200 shadow-sm"
       >
-        <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+        <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
         <p className="text-sm font-bold leading-relaxed">
           ⚠️ WARNING: Editing this listing will hide it from the public marketplace
           until an Admin re-approves it. Please ensure all details are correct before
@@ -473,7 +547,7 @@ export function MarketplaceEdit() {
           {formError && (
             <div
               role="alert"
-              className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-sm font-medium text-red-700"
+              className="p-3.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-sm font-medium text-red-700 dark:text-red-300"
             >
               {formError}
             </div>
@@ -494,7 +568,7 @@ export function MarketplaceEdit() {
           <div className="space-y-1.5">
             <label
               htmlFor="edit-description"
-              className="block text-sm font-medium text-slate-700"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-200"
             >
               Description <span className="text-red-500 ml-0.5">*</span>
             </label>
@@ -507,14 +581,14 @@ export function MarketplaceEdit() {
                 setDescription(e.target.value);
                 clearFieldError('description');
               }}
-              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border rounded-lg shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+              className={`block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border rounded-lg shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 ${
                 fieldErrors.description
                   ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                  : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                  : 'border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-blue-500'
               }`}
             />
             {fieldErrors.description && (
-              <p className="text-xs font-medium text-red-600" role="alert">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                 {fieldErrors.description}
               </p>
             )}
@@ -599,7 +673,7 @@ export function MarketplaceEdit() {
 
           {adType === 'service' && (
             <div className="space-y-3 pt-1">
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Do you operate from a physical shop?{' '}
                 <span className="text-red-500">*</span>
               </p>
@@ -613,8 +687,8 @@ export function MarketplaceEdit() {
                   }}
                   className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-colors ${
                     hasPhysicalShop
-                      ? 'bg-blue-50 border-blue-600 text-blue-800 ring-1 ring-blue-500'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-600 dark:border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                   }`}
                 >
                   <MapPin className="w-4 h-4 shrink-0" />
@@ -631,8 +705,8 @@ export function MarketplaceEdit() {
                   }}
                   className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-colors ${
                     !hasPhysicalShop
-                      ? 'bg-blue-50 border-blue-600 text-blue-800 ring-1 ring-blue-500'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-600 dark:border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                   }`}
                 >
                   <Globe className="w-4 h-4 shrink-0" />
@@ -649,8 +723,8 @@ export function MarketplaceEdit() {
                       onClick={() => setNonShopServiceMode(opt.value)}
                       className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
                         nonShopServiceMode === opt.value
-                          ? 'bg-primary-50 border-primary-400 text-primary-700'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          ? 'bg-primary-50 dark:bg-primary-900/40 border-primary-400 dark:border-primary-500 text-primary-700 dark:text-primary-300'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70'
                       }`}
                     >
                       {opt.label}
@@ -687,7 +761,7 @@ export function MarketplaceEdit() {
 
           {adType === 'item' && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 Pickup / Fulfillment Location
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -700,8 +774,8 @@ export function MarketplaceEdit() {
                   }}
                   className={`p-3 rounded-xl border text-xs font-semibold transition-colors ${
                     itemLocationType === 'physical'
-                      ? 'bg-blue-50 border-blue-600 text-blue-800'
-                      : 'bg-white border-slate-200 text-slate-700'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-600 dark:border-blue-500 text-blue-800 dark:text-blue-200'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                   }`}
                 >
                   Physical Location
@@ -717,8 +791,8 @@ export function MarketplaceEdit() {
                   }}
                   className={`p-3 rounded-xl border text-xs font-semibold transition-colors ${
                     itemLocationType === 'online'
-                      ? 'bg-blue-50 border-blue-600 text-blue-800'
-                      : 'bg-white border-slate-200 text-slate-700'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-600 dark:border-blue-500 text-blue-800 dark:text-blue-200'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                   }`}
                 >
                   Online / Delivery Only
@@ -731,8 +805,8 @@ export function MarketplaceEdit() {
             <div className="space-y-4">
               {adType === 'service' && (
                 <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                    <Clock className="w-4 h-4 text-slate-500" />
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                     <span>
                       Shop Opening &amp; Closing Hours{' '}
                       <span className="text-red-500">*</span>
@@ -742,7 +816,7 @@ export function MarketplaceEdit() {
                     <div className="space-y-1">
                       <label
                         htmlFor="edit-service-opening-time-start"
-                        className="block text-xs font-medium text-slate-600"
+                        className="block text-xs font-medium text-slate-600 dark:text-slate-300"
                       >
                         Opening Time
                       </label>
@@ -755,13 +829,13 @@ export function MarketplaceEdit() {
                           setOpeningTimeStart(e.target.value);
                           clearFieldError('openingHours');
                         }}
-                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                     <div className="space-y-1">
                       <label
                         htmlFor="edit-service-opening-time-end"
-                        className="block text-xs font-medium text-slate-600"
+                        className="block text-xs font-medium text-slate-600 dark:text-slate-300"
                       >
                         Closing Time
                       </label>
@@ -774,22 +848,22 @@ export function MarketplaceEdit() {
                           setOpeningTimeEnd(e.target.value);
                           clearFieldError('openingHours');
                         }}
-                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full px-3.5 py-2.5 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                   </div>
                   {openingTimeStart &&
                     openingTimeEnd &&
                     !fieldErrors.openingHours && (
-                      <p className="text-xs font-medium text-slate-600">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                         Displayed as:{' '}
-                        <span className="text-slate-900">
+                        <span className="text-slate-900 dark:text-white">
                           {formatOpeningHoursRange(openingTimeStart, openingTimeEnd)}
                         </span>
                       </p>
                     )}
                   {fieldErrors.openingHours && (
-                    <p className="text-xs font-medium text-red-600" role="alert">
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400" role="alert">
                       {fieldErrors.openingHours}
                     </p>
                   )}
@@ -828,23 +902,23 @@ export function MarketplaceEdit() {
               />
 
               {adType === 'item' && (
-                <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+                <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hasDelivery}
                     onChange={(e) => setHasDelivery(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-blue-500"
                   />
-                  <Truck className="w-4 h-4 text-slate-600 shrink-0" />
-                  <span className="text-sm font-medium text-slate-800">
+                  <Truck className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
                     I also offer delivery
                   </span>
                 </label>
               )}
             </div>
           ) : (
-            <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-3.5 text-xs text-emerald-900 flex items-center gap-2">
-              <Truck className="w-4 h-4 text-emerald-700 shrink-0" />
+            <div className="rounded-xl bg-emerald-50/70 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+              <Truck className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
               <span>
                 Online / Delivery mode active — physical address and GPS pin are not required.
               </span>

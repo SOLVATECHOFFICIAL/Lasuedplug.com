@@ -45,6 +45,7 @@ import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
 import { AccommodationCard } from '../../components/marketplace/AccommodationCard';
 import { AccommodationSubNav } from '../../components/accommodation/AccommodationSubNav';
+import { SeoHead } from '../../components/seo/SeoHead';
 
 interface AccommodationViewState {
   selectedType: string;
@@ -210,6 +211,11 @@ export function AccommodationIndex() {
 
   return (
     <div className="max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12 space-y-5 sm:space-y-6">
+      <SeoHead
+        title="Off-Campus Accommodation"
+        ogTitle="Off-Campus Accommodation | LASUEDPLUG"
+        description="Verified student rooms, self-contains, and shared lodges around LASUED & Epe."
+      />
       <AccommodationSubNav
         actionSlot={
           <Link to="/accommodation/create" className="w-full sm:w-auto">
@@ -223,10 +229,10 @@ export function AccommodationIndex() {
 
       {/* Page Heading */}
       <div className="space-y-1 min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Off-Campus Accommodation
         </h1>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           Verified student rooms, self-contains, and shared lodges around LASUED &amp; Epe.
         </p>
       </div>
@@ -234,19 +240,19 @@ export function AccommodationIndex() {
       {/* Sticky Filters Toolbar */}
       <section
         aria-label="Filter accommodation"
-        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-2 bg-slate-50/95 backdrop-blur-sm"
+        className="sticky top-14 md:top-16 z-30 -mx-3.5 sm:mx-0 px-3.5 sm:px-0 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm"
       >
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
           <div className="hidden sm:flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <SlidersHorizontal className="w-4 h-4 text-primary-600" />
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              <SlidersHorizontal className="w-4 h-4 text-primary-600 dark:text-blue-400" />
               <span>Filter Accommodation</span>
             </div>
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-all duration-200"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-all duration-200"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Reset Filters</span>
@@ -258,7 +264,7 @@ export function AccommodationIndex() {
             <div className="space-y-1 min-w-0">
               <label
                 htmlFor="filter-type"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Property Type
               </label>
@@ -267,7 +273,7 @@ export function AccommodationIndex() {
                 aria-label="Property Type"
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
-                className="block w-full min-w-0 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                className="block w-full min-w-0 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
               >
                 <option value="all">All Types</option>
                 {ACCOMMODATION_TYPE_OPTIONS.map((opt) => (
@@ -281,7 +287,7 @@ export function AccommodationIndex() {
             <div className="space-y-1 min-w-0">
               <label
                 htmlFor="filter-price"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Annual Rent Range
               </label>
@@ -292,7 +298,7 @@ export function AccommodationIndex() {
                 onChange={(e) =>
                   setSelectedPriceRange(e.target.value as AccommodationPriceRange)
                 }
-                className="block w-full min-w-0 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                className="block w-full min-w-0 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
               >
                 {ACCOMMODATION_PRICE_RANGES.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -305,13 +311,13 @@ export function AccommodationIndex() {
             <div className="col-span-2 sm:col-span-1 space-y-1 min-w-0">
               <label
                 htmlFor="filter-location"
-                className="hidden sm:block text-xs font-medium text-slate-600"
+                className="hidden sm:block text-xs font-medium text-slate-600 dark:text-slate-300"
               >
                 Location or Keyword
               </label>
               <div className="relative flex items-center gap-2 min-w-0">
                 <div className="relative flex-1 min-w-0">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     id="filter-location"
                     type="search"
@@ -319,7 +325,7 @@ export function AccommodationIndex() {
                     onChange={(e) => setLocationQuery(e.target.value)}
                     placeholder="Search location (Gate, Igbogbo, Epe)..."
                     aria-label="Location or Keyword"
-                    className="block w-full min-w-0 pl-9 pr-3 py-2 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="block w-full min-w-0 pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
                 </div>
                 {hasActiveFilters && (
@@ -327,7 +333,7 @@ export function AccommodationIndex() {
                     type="button"
                     onClick={handleResetFilters}
                     aria-label="Reset filters"
-                    className="sm:hidden px-2.5 py-2 rounded-lg text-xs font-semibold text-blue-600 bg-blue-50 shrink-0"
+                    className="sm:hidden px-2.5 py-2 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 shrink-0"
                   >
                     Reset
                   </button>
