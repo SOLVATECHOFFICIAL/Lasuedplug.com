@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://lasuedplug.com/sitemap.xml
+Sitemap: https://lasuedplug-com.vercel.app/sitemap.xml
