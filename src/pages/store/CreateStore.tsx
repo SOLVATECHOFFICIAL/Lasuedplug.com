@@ -14,7 +14,11 @@ import {
   ALL_MARKETPLACE_CATEGORIES,
   getStoreSubcategoriesForCategory,
 } from '../../lib/categories';
-import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
+import {
+  getUserAvatarUrl,
+  resolveAccountType,
+  shouldAutoApproveListing,
+} from '../../lib/authHelpers';
 import {
   formatOpeningHoursRange,
   StoreCreateValidationErrors,
@@ -164,6 +168,7 @@ export function CreateStore() {
         );
       }
 
+      const isAutoApproved = shouldAutoApproveListing(profile);
       const ownerAvatar = getUserAvatarUrl(profile);
       await createStore({
         ownerId: user.uid,
@@ -181,6 +186,7 @@ export function CreateStore() {
         locationName: locationName.trim(),
         latitude: latitude as number,
         longitude: longitude as number,
+        isApproved: isAutoApproved,
         ownerSnapshot: {
           fullName: profile?.fullName || user.displayName || 'LASUEDPLUG Seller',
           isVerified: Boolean(profile?.isVerified),
@@ -193,7 +199,9 @@ export function CreateStore() {
       });
 
       showToast(
-        'Store submitted for admin approval! You can track it in your Seller Dashboard.',
+        isAutoApproved
+          ? 'Campus Store published and live immediately!'
+          : 'Store submitted for admin approval! You can track it in your Seller Dashboard.',
         'success'
       );
       navigate('/dashboard/seller');

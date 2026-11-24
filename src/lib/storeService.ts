@@ -316,23 +316,26 @@ export async function getApprovedProductsByStoreId(
 }
 
 /**
- * Creates a new Store document in Firestore with isApproved: false so an Admin must approve
- * before it becomes publicly visible. Includes idempotent already-exists recovery.
+ * Creates a new Store document in Firestore. Verified users auto-approve (isApproved: true),
+ * while unverified users default to isApproved: false for Admin review.
  */
 export async function createStore(
-  storeData: Omit<Store, 'id' | 'createdAt' | 'isApproved' | 'isActive'>
+  storeData: Omit<Store, 'id' | 'createdAt' | 'isApproved' | 'isActive'> & {
+    isApproved?: boolean;
+  }
 ): Promise<Store> {
   if (!db) {
     throw new Error('Firebase is not configured. Check .env.local.');
   }
 
+  const isApproved = storeData.isApproved === true;
   const storesCol = collection(db, 'stores');
   const docRef = doc(storesCol);
   const payload = {
     ...storeData,
     trustScore: 0,
     reviewCount: 0,
-    isApproved: false,
+    isApproved,
     isActive: true,
     createdAt: serverTimestamp(),
   };
@@ -340,12 +343,15 @@ export async function createStore(
   try {
     await setDoc(docRef, payload);
     invalidateFastCachePrefix('seller_dash:');
+    if (isApproved) {
+      invalidatePublicFeedCaches({ storeId: docRef.id });
+    }
     return {
       id: docRef.id,
       ...storeData,
       trustScore: 0,
       reviewCount: 0,
-      isApproved: false,
+      isApproved,
       isActive: true,
       createdAt: new Date(),
     };
@@ -360,12 +366,15 @@ export async function createStore(
         const snap = await getDoc(docRef);
         if (snap.exists() && snap.data()?.ownerId === storeData.ownerId) {
           invalidateFastCachePrefix('seller_dash:');
+          if (isApproved) {
+            invalidatePublicFeedCaches({ storeId: docRef.id });
+          }
           return {
             id: docRef.id,
             ...storeData,
             trustScore: 0,
             reviewCount: 0,
-            isApproved: false,
+            isApproved,
             isActive: true,
             createdAt: new Date(),
           };
@@ -376,12 +385,15 @@ export async function createStore(
       const freshRef = doc(storesCol);
       await setDoc(freshRef, payload);
       invalidateFastCachePrefix('seller_dash:');
+      if (isApproved) {
+        invalidatePublicFeedCaches({ storeId: freshRef.id });
+      }
       return {
         id: freshRef.id,
         ...storeData,
         trustScore: 0,
         reviewCount: 0,
-        isApproved: false,
+        isApproved,
         isActive: true,
         createdAt: new Date(),
       };

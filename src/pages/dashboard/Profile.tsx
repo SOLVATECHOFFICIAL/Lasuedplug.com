@@ -495,6 +495,7 @@ export function ProfilePage() {
       <SeoHead
         title="My Profile"
         description="Manage your LASUEDPLUG profile details, academic or marketer information, and verification status."
+        noIndex
       />
       <div className="space-y-1">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">

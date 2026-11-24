@@ -498,3 +498,110 @@ export function getProfilePicLockStatus(
     lockMessage: `🔒 Profile picture locked. You can change it again on ${formattedDate}.`,
   };
 }
+
+export interface ProfileCompletionStatus {
+  percentage: number;
+  completedCount: number;
+  totalCount: number;
+  missingFields: string[];
+  isComplete: boolean;
+}
+
+export function calculateProfileCompletion(
+  profile?: Partial<UserProfile> | null
+): ProfileCompletionStatus {
+  if (!profile) {
+    return {
+      percentage: 0,
+      completedCount: 0,
+      totalCount: 5,
+      missingFields: ['Profile Photo', 'Phone', 'Campus', 'Department', 'Level'],
+      isComplete: false,
+    };
+  }
+
+  const hasProfilePic = Boolean(getUserAvatarUrl(profile));
+  const hasPhone = Boolean(profile.phone && profile.phone.trim());
+
+  const checks: Array<{ label: string; filled: boolean }> = isMarketerProfile(
+    profile
+  )
+    ? [
+        { label: 'Profile Photo', filled: hasProfilePic },
+        { label: 'Phone', filled: hasPhone },
+        {
+          label: 'Business Name',
+          filled: Boolean(profile.businessName && profile.businessName.trim()),
+        },
+        ...(profile.isOnlineOnly === true
+          ? []
+          : [
+              {
+                label: 'Shop Address',
+                filled: Boolean(
+                  profile.shopAddress && profile.shopAddress.trim()
+                ),
+              },
+              {
+                label: 'Opening Hours',
+                filled: Boolean(
+                  (profile.openingHours && profile.openingHours.trim()) ||
+                    (profile.openingTimeStart &&
+                      profile.openingTimeStart.trim() &&
+                      profile.openingTimeEnd &&
+                      profile.openingTimeEnd.trim())
+                ),
+              },
+            ]),
+      ]
+    : [
+        { label: 'Profile Photo', filled: hasProfilePic },
+        { label: 'Phone', filled: hasPhone },
+        {
+          label: 'Campus',
+          filled: Boolean(profile.campus && profile.campus.trim()),
+        },
+        {
+          label: 'Department',
+          filled: Boolean(profile.department && profile.department.trim()),
+        },
+        {
+          label: 'Level',
+          filled: Boolean(profile.level && profile.level.trim()),
+        },
+      ];
+
+  const totalCount = checks.length;
+  const completedCount = checks.filter((item) => item.filled).length;
+  const missingFields = checks
+    .filter((item) => !item.filled)
+    .map((item) => item.label);
+  const percentage =
+    totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
+
+  return {
+    percentage,
+    completedCount,
+    totalCount,
+    missingFields,
+    isComplete: percentage >= 100,
+  };
+}
+
+export function shouldAutoApproveListing(
+  profile?: Partial<Pick<UserProfile, 'isVerified'>> | null
+): boolean {
+  return profile?.isVerified === true;
+}
+
+export function resolvePostLoginRedirect(
+  fromPathname: string | undefined,
+  preferredDashboardPath: '/dashboard/buyer' | '/dashboard/seller'
+): string {
+  const clean = (fromPathname || '').trim();
+  if (!clean || clean === '/' || clean === '/login') {
+    return preferredDashboardPath;
+  }
+  return clean;
+}
+

@@ -15,7 +15,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { formatEnquiryDate } from '../../lib/buyerHelpers';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  setFastCache,
+} from '../../lib/fastCache';
 import {
   FavoriteWithListing,
   getUserEnquiries,
@@ -29,6 +33,7 @@ import {
 } from '../../lib/marketplaceHelpers';
 import { Enquiry } from '../../types';
 import { DashboardModeSwitcher } from '../../components/dashboard/DashboardModeSwitcher';
+import { DashboardOnboardingBanners } from '../../components/dashboard/DashboardOnboardingBanners';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { CardSkeletonGrid } from '../../components/feedback/Loading';
 import { EmptyState } from '../../components/feedback/EmptyState';
@@ -247,6 +252,22 @@ export function BuyerDashboard() {
   }, []);
 
   useEffect(() => {
+    if (!user?.uid) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCache<CachedBuyerDash>(`buyer_dash:${user.uid}`);
+      if (hydrated) {
+        setSavedItems(hydrated.savedItems);
+        setEnquiries(hydrated.enquiries);
+        setLoading(false);
+      }
+    };
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
     void loadBuyerData();
   }, [loadBuyerData]);
 
@@ -256,10 +277,15 @@ export function BuyerDashboard() {
     if (removingIds[listingId]) return;
 
     const previous = savedItems;
-    setRemovingIds((prev) => ({ ...prev, [listingId]: true }));
-    setSavedItems((prev) =>
-      prev.filter((entry) => entry.favorite.listingId !== listingId)
+    const nextSaved = previous.filter(
+      (entry) => entry.favorite.listingId !== listingId
     );
+    setRemovingIds((prev) => ({ ...prev, [listingId]: true }));
+    setSavedItems(nextSaved);
+    setFastCache(`buyer_dash:${user.uid}`, {
+      savedItems: nextSaved,
+      enquiries,
+    });
 
     try {
       await toggleFavorite(
@@ -271,6 +297,10 @@ export function BuyerDashboard() {
       showToast('Removed from saved items.', 'info');
     } catch (err) {
       setSavedItems(previous);
+      setFastCache(`buyer_dash:${user.uid}`, {
+        savedItems: previous,
+        enquiries,
+      });
       const message =
         err instanceof Error && err.message
           ? err.message
@@ -290,8 +320,10 @@ export function BuyerDashboard() {
       <SeoHead
         title="Buyer Dashboard"
         description="View your saved marketplace items and track sellers you have contacted on LASUEDPLUG."
+        noIndex
       />
       <DashboardModeSwitcher activeMode="buyer" />
+      <DashboardOnboardingBanners profile={profile} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">

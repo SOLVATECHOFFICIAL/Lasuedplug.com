@@ -194,6 +194,7 @@ export function NotificationsIndex() {
       <SeoHead
         title="Notifications"
         description="Stay updated on listing approvals, buyer WhatsApp enquiries, and account alerts on LASUEDPLUG."
+        noIndex
       />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="space-y-1">

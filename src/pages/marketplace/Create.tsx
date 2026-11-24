@@ -17,8 +17,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
+import {
+  getUserAvatarUrl,
+  resolveAccountType,
+  shouldAutoApproveListing,
+} from '../../lib/authHelpers';
 import { invalidateFastCachePrefix } from '../../lib/fastCache';
+import { invalidatePublicFeedCaches } from '../../lib/syncCache';
 import { db } from '../../lib/firebase';
 import {
   getCategoriesForAdType,
@@ -394,6 +399,8 @@ export function MarketplaceCreate() {
         );
       }
 
+      const isAutoApproved = shouldAutoApproveListing(profile);
+
       const payload: Record<string, unknown> = {
         sellerId: user.uid,
         adType,
@@ -413,7 +420,7 @@ export function MarketplaceCreate() {
         viewCount: 0,
         contactCount: 0,
         status: 'active',
-        isApproved: false,
+        isApproved: isAutoApproved,
         isActive: true,
         needsAiReview: false,
         createdAt: serverTimestamp(),
@@ -508,10 +515,15 @@ export function MarketplaceCreate() {
       }
 
       invalidateFastCachePrefix('seller_dash:');
-      showToast(
-        'Listing submitted! It will be visible once approved by an admin.',
-        'success'
-      );
+      if (isAutoApproved) {
+        invalidatePublicFeedCaches();
+        showToast('Listing published and live immediately!', 'success');
+      } else {
+        showToast(
+          'Listing submitted! It will be visible once approved by an admin.',
+          'success'
+        );
+      }
       navigate('/dashboard/seller');
     } catch (err) {
       console.error('Create listing submission error:', err);
@@ -621,7 +633,10 @@ export function MarketplaceCreate() {
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">
           List an item for sale or offer a campus service to LASUED, LASU, and Epe
-          students. New listings are reviewed quickly before going live.
+          students.{' '}
+          {shouldAutoApproveListing(profile)
+            ? 'Verified account: your listing will go live immediately.'
+            : 'New listings are reviewed quickly before going live.'}
         </p>
       </div>
 

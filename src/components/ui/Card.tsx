@@ -16,13 +16,16 @@ export const Card = memo(function Card({
   const hasCustomBorder = /(?:^|\s)border-(?!collapse|separate|spacing)/.test(
     className
   );
+  const hasCustomRounded = /(?:^|\s)rounded-/.test(className);
 
   return (
     <div
-      className={`${hasCustomBg ? '' : 'bg-white dark:bg-slate-900'} rounded-xl border ${
-        hasCustomBorder ? '' : 'border-slate-200 dark:border-slate-700'
+      className={`${hasCustomBg ? '' : 'bg-white dark:bg-slate-900'} ${
+        hasCustomRounded ? '' : 'rounded-2xl'
+      } border ${
+        hasCustomBorder ? '' : 'border-slate-200/90 dark:border-slate-700'
       } shadow-sm transition-all duration-200 ${
-        hoverable ? 'hover:shadow-lg md:hover:-translate-y-1 active:scale-95' : ''
+        hoverable ? 'hover:shadow-md md:hover:-translate-y-0.5 active:scale-[0.99]' : ''
       } ${padded ? 'p-5 sm:p-6' : ''} ${className}`.trim()}
       {...rest}
     >

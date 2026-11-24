@@ -9,6 +9,7 @@ export function NotFound() {
       <SeoHead
         title="Page Not Found"
         description="This page could not be found on LASUEDPLUG."
+        noIndex
       />
       <div className="w-20 h-20 rounded-3xl bg-primary-50 dark:bg-primary-900/40 border border-primary-100 dark:border-primary-800 text-primary-600 dark:text-primary-400 flex items-center justify-center shadow-sm mb-6">
         <MapPinOff className="w-10 h-10" aria-hidden="true" />

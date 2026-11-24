@@ -73,8 +73,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
-  // Never intercept Vite dev/HMR internals or Firestore/Auth/API requests
+  // Never intercept Vite dev/HMR internals, SEO manifests, or Firestore/Auth/API requests
   if (
+    url.pathname === '/sitemap.xml' ||
+    url.pathname === '/robots.txt' ||
+    url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/@vite/') ||
     url.pathname.startsWith('/@react-refresh') ||
     url.pathname.startsWith('/src/') ||

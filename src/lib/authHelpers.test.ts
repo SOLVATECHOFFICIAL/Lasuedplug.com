@@ -4,6 +4,7 @@ import {
   areMarketerProfileFieldsLocked,
   BANNED_ACCOUNT_MESSAGE,
   buildNewUserProfile,
+  calculateProfileCompletion,
   canSwitchAccountTypeOnProfile,
   checkProfileCompleteness,
   formatFirebaseAuthError,
@@ -22,6 +23,8 @@ import {
   PHONE_UPDATE_COOLDOWN_DAYS,
   PROFILE_PIC_COOLDOWN_DAYS,
   resolveAccountType,
+  resolvePostLoginRedirect,
+  shouldAutoApproveListing,
   SUSPENDED_ACCOUNT_MESSAGE,
   validateEmailField,
   validateLoginForm,
@@ -464,5 +467,77 @@ test('isMarketerProfile, resolveAccountType, and canSwitchAccountTypeOnProfile d
     false
   );
 });
+
+test('calculateProfileCompletion computes accurate student and marketer progress percentages', () => {
+  assert.deepEqual(calculateProfileCompletion(null), {
+    percentage: 0,
+    completedCount: 0,
+    totalCount: 5,
+    missingFields: ['Profile Photo', 'Phone', 'Campus', 'Department', 'Level'],
+    isComplete: false,
+  });
+
+  // 3 of 5 student fields -> 60%
+  const studentSixty = calculateProfileCompletion({
+    accountType: 'student',
+    phone: '08012345678',
+    campus: 'LASUED',
+    department: 'Computer Science',
+  });
+  assert.equal(studentSixty.percentage, 60);
+  assert.equal(studentSixty.completedCount, 3);
+  assert.equal(studentSixty.totalCount, 5);
+  assert.deepEqual(studentSixty.missingFields, ['Profile Photo', 'Level']);
+  assert.equal(studentSixty.isComplete, false);
+
+  // All 5 student fields -> 100%
+  const studentFull = calculateProfileCompletion({
+    accountType: 'student',
+    profilePic: 'data:image/jpeg;base64,ABC',
+    phone: '08012345678',
+    campus: 'LASUED',
+    department: 'Computer Science',
+    level: '200L',
+  });
+  assert.equal(studentFull.percentage, 100);
+  assert.equal(studentFull.isComplete, true);
+  assert.deepEqual(studentFull.missingFields, []);
+
+  // Online-only marketer -> 3 fields
+  const onlineMarketer = calculateProfileCompletion({
+    accountType: 'business',
+    isOnlineOnly: true,
+    phone: '08012345678',
+    businessName: 'Campus Tech',
+  });
+  assert.equal(onlineMarketer.percentage, 67);
+  assert.equal(onlineMarketer.totalCount, 3);
+  assert.deepEqual(onlineMarketer.missingFields, ['Profile Photo']);
+  assert.equal(onlineMarketer.isComplete, false);
+});
+
+test('shouldAutoApproveListing and resolvePostLoginRedirect follow verified and dashboard rules', () => {
+  assert.equal(shouldAutoApproveListing(null), false);
+  assert.equal(shouldAutoApproveListing({ isVerified: false }), false);
+  assert.equal(shouldAutoApproveListing({ isVerified: true }), true);
+
+  assert.equal(
+    resolvePostLoginRedirect(undefined, '/dashboard/buyer'),
+    '/dashboard/buyer'
+  );
+  assert.equal(
+    resolvePostLoginRedirect('/', '/dashboard/seller'),
+    '/dashboard/seller'
+  );
+  assert.equal(
+    resolvePostLoginRedirect('/login', '/dashboard/buyer'),
+    '/dashboard/buyer'
+  );
+  assert.equal(
+    resolvePostLoginRedirect('/marketplace/create', '/dashboard/buyer'),
+    '/marketplace/create'
+  );
+});
+
 
 

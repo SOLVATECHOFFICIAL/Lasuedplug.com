@@ -32,7 +32,11 @@ import {
   fetchApprovedRoommateRequests,
   fetchApprovedRoommateRequestsDelta,
 } from '../../lib/accommodationService';
-import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
+import {
+  getUserAvatarUrl,
+  resolveAccountType,
+  shouldAutoApproveListing,
+} from '../../lib/authHelpers';
 import { compactListingsForCache } from '../../lib/firestoreQueryCache';
 import { getTimestampMillis } from '../../lib/homeHelpers';
 import { warmImages } from '../../lib/imageCache';
@@ -538,6 +542,7 @@ export function Roommates() {
         );
       }
 
+      const isAutoApproved = shouldAutoApproveListing(profile);
       const profileAvatar = getUserAvatarUrl(profile);
       await createRoommateRequest({
         userId: user.uid,
@@ -552,6 +557,7 @@ export function Roommates() {
         preferences: preferences.trim(),
         images,
         whatsappNumber: formattedPhone,
+        isApproved: isAutoApproved,
         userSnapshot: {
           fullName:
             profile?.fullName || user.displayName || 'LASUEDPLUG Student',
@@ -564,7 +570,12 @@ export function Roommates() {
         },
       });
 
-      showToast('Roommate request submitted for admin approval!', 'success');
+      if (isAutoApproved) {
+        showToast('Roommate request published and live!', 'success');
+        void loadRequests(true);
+      } else {
+        showToast('Roommate request submitted for admin approval!', 'success');
+      }
       resetCreateForm();
       setCreateOpen(false);
     } catch (err) {

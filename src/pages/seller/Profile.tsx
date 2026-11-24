@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Flag,
   Globe,
-  GraduationCap,
   MapPin,
   MessageCircle,
   PackageOpen,
@@ -469,21 +468,6 @@ export function SellerProfile() {
                       <span className="inline-flex items-center gap-1.5">
                         <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span>{seller.campus.trim()}</span>
-                      </span>
-                    )}
-                    {(seller.department?.trim() || seller.level?.trim()) && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <GraduationCap className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
-                        <span>
-                          {[
-                            seller.department?.trim(),
-                            seller.level?.trim() === 'Graduate'
-                              ? 'Graduate'
-                              : seller.level?.trim(),
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
                       </span>
                     )}
                   </>

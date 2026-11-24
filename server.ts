@@ -103,6 +103,28 @@ function mountStaticDist(app: express.Express) {
   const indexPath = path.join(distDir, 'index.html');
 
   if (fs.existsSync(distDir)) {
+    app.get('/sitemap.xml', (_req, res, next) => {
+      const sitemapPath = path.join(distDir, 'sitemap.xml');
+      if (fs.existsSync(sitemapPath)) {
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        res.sendFile(sitemapPath);
+        return;
+      }
+      next();
+    });
+
+    app.get('/robots.txt', (_req, res, next) => {
+      const robotsPath = path.join(distDir, 'robots.txt');
+      if (fs.existsSync(robotsPath)) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        res.sendFile(robotsPath);
+        return;
+      }
+      next();
+    });
+
     app.use(express.static(distDir));
   }
 

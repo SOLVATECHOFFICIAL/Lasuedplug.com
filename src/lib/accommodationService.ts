@@ -23,6 +23,7 @@ import {
 import { getTimestampMillis } from './homeHelpers';
 import { warmImages } from './imageCache';
 import {
+  invalidatePublicFeedCaches,
   primeAccommodationIntoCache,
   shouldSkipDetailNetworkFetch,
 } from './syncCache';
@@ -48,6 +49,7 @@ export interface CreateAccommodationInput {
   amenities: string[];
   images: string[];
   whatsappNumber: string;
+  isApproved?: boolean;
   ownerSnapshot: {
     fullName: string;
     isVerified: boolean;
@@ -69,6 +71,7 @@ export interface CreateRoommateRequestInput {
   preferences: string;
   images: string[];
   whatsappNumber: string;
+  isApproved?: boolean;
   userSnapshot: {
     fullName: string;
     isVerified: boolean;
@@ -259,6 +262,8 @@ export async function createAccommodation(
   const colRef = collection(db, 'accommodations');
   const newDocRef = doc(colRef);
 
+  const isApproved = input.isApproved === true;
+
   const payload: Record<string, unknown> = {
     ownerId: input.ownerId,
     type: input.type,
@@ -273,7 +278,7 @@ export async function createAccommodation(
     images: input.images,
     whatsappNumber: input.whatsappNumber.trim(),
     ownerSnapshot: input.ownerSnapshot,
-    isApproved: false,
+    isApproved,
     isActive: true,
     createdAt: serverTimestamp(),
   };
@@ -285,6 +290,9 @@ export async function createAccommodation(
   try {
     await setDoc(newDocRef, payload);
     invalidateFastCachePrefix('seller_dash:');
+    if (isApproved) {
+      invalidatePublicFeedCaches({ accommodationId: newDocRef.id });
+    }
     return newDocRef.id;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
@@ -295,11 +303,17 @@ export async function createAccommodation(
         existingSnap.data()?.ownerId === input.ownerId
       ) {
         invalidateFastCachePrefix('seller_dash:');
+        if (isApproved) {
+          invalidatePublicFeedCaches({ accommodationId: newDocRef.id });
+        }
         return newDocRef.id;
       }
       const fallbackRef = doc(colRef);
       await setDoc(fallbackRef, payload);
       invalidateFastCachePrefix('seller_dash:');
+      if (isApproved) {
+        invalidatePublicFeedCaches({ accommodationId: fallbackRef.id });
+      }
       return fallbackRef.id;
     }
     throw err;
@@ -432,6 +446,8 @@ export async function createRoommateRequest(
   const colRef = collection(db, 'roommate_requests');
   const newDocRef = doc(colRef);
 
+  const isApproved = input.isApproved === true;
+
   const payload: Record<string, unknown> = {
     userId: input.userId,
     type: input.type,
@@ -446,7 +462,7 @@ export async function createRoommateRequest(
     images: Array.isArray(input.images) ? input.images : [],
     whatsappNumber: input.whatsappNumber.trim(),
     userSnapshot: input.userSnapshot,
-    isApproved: false,
+    isApproved,
     isActive: true,
     createdAt: serverTimestamp(),
   };
@@ -454,6 +470,9 @@ export async function createRoommateRequest(
   try {
     await setDoc(newDocRef, payload);
     invalidateFastCachePrefix('seller_dash:');
+    if (isApproved) {
+      invalidatePublicFeedCaches();
+    }
     return newDocRef.id;
   } catch (err) {
     const firestoreErr = err as FirestoreError;
@@ -464,11 +483,17 @@ export async function createRoommateRequest(
         existingSnap.data()?.userId === input.userId
       ) {
         invalidateFastCachePrefix('seller_dash:');
+        if (isApproved) {
+          invalidatePublicFeedCaches();
+        }
         return newDocRef.id;
       }
       const fallbackRef = doc(colRef);
       await setDoc(fallbackRef, payload);
       invalidateFastCachePrefix('seller_dash:');
+      if (isApproved) {
+        invalidatePublicFeedCaches();
+      }
       return fallbackRef.id;
     }
     throw err;

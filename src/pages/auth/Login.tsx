@@ -7,8 +7,10 @@ import { LOGO_URL, SITE_NAME } from '../../lib/constants';
 import {
   formatFirebaseAuthError,
   LoginFormErrors,
+  resolvePostLoginRedirect,
   validateLoginForm,
 } from '../../lib/authHelpers';
+import { getPreferredDashboardPath } from '../../lib/dashboardMode';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -27,8 +29,7 @@ export function LoginPage() {
   const location = useLocation();
 
   const fromPath =
-    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ||
-    '/';
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,7 +57,10 @@ export function LoginPage() {
         return;
       }
       showToast('Signed in successfully.', 'success');
-      navigate(fromPath === '/login' ? '/' : fromPath, { replace: true });
+      navigate(
+        resolvePostLoginRedirect(fromPath, getPreferredDashboardPath()),
+        { replace: true }
+      );
     } catch (err) {
       setFormError(formatFirebaseAuthError(err));
     } finally {
@@ -69,6 +73,7 @@ export function LoginPage() {
       <SeoHead
         title="Log In"
         description="Log in to LASUEDPLUG to manage your listings, messages, and campus profile."
+        noIndex
       />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">

@@ -16,10 +16,12 @@ import {
   CheckCircle2,
   Clock,
   Flame,
+  Laptop,
   Lightbulb,
   Loader2,
   MessageCircle,
   RefreshCw,
+  Scissors,
   Search,
   SearchX,
   ShieldCheck,
@@ -82,7 +84,7 @@ const CATEGORIES = [
   {
     title: 'Marketplace',
     description:
-      'Textbooks, electronics, dorm essentials, and everyday items from students near you.',
+      'Textbooks, electronics, and dorm items from students nearby.',
     path: '/marketplace',
     icon: ShoppingBag,
     iconBg: 'bg-primary-50 dark:bg-primary-900/40 text-primary-500 dark:text-primary-300',
@@ -90,7 +92,7 @@ const CATEGORIES = [
   {
     title: 'Services',
     description:
-      'Campus stores, tutoring, repairs, printing, tailoring, catering, and student skills.',
+      'Campus stores, tutoring, repairs, printing, and student skills.',
     path: '/services',
     icon: Wrench,
     iconBg: 'bg-orange-50 dark:bg-orange-950/50 text-accent-500 dark:text-orange-400',
@@ -98,7 +100,7 @@ const CATEGORIES = [
   {
     title: 'Accommodation',
     description:
-      'Browse verified off-campus lodges, self-contained rooms, and hostels around Epe.',
+      'Verified off-campus lodges, self-cons, and hostels around Epe.',
     path: '/accommodation',
     icon: Building2,
     iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400',
@@ -106,7 +108,7 @@ const CATEGORIES = [
   {
     title: 'Roommates',
     description:
-      'Connect with compatible LASUED and LASU students looking to share accommodation.',
+      'Connect with LASUED and LASU students to share accommodation.',
     path: '/roommates',
     icon: Users,
     iconBg: 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400',
@@ -147,6 +149,36 @@ const TYPE_FILTERS: Array<{ id: MixedFeedType | 'all'; label: string }> = [
   { id: 'service', label: 'Services' },
   { id: 'accommodation', label: 'Rooms' },
 ];
+
+const HERO_GLASS_CARDS = [
+  {
+    title: 'Find a Roommate',
+    subtitle: 'Split rent safely around Epe',
+    to: '/roommates',
+    icon: Users,
+    iconTint:
+      'bg-blue-100/90 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300',
+    offsetClass: 'md:-translate-y-1',
+  },
+  {
+    title: 'Buy a Laptop',
+    subtitle: 'Verified student tech deals',
+    to: '/marketplace?q=laptop',
+    icon: Laptop,
+    iconTint:
+      'bg-orange-100/90 text-orange-700 dark:bg-orange-950/80 dark:text-orange-300',
+    offsetClass: 'md:translate-y-1.5',
+  },
+  {
+    title: 'Hire a Barber',
+    subtitle: 'Trusted campus skills & pros',
+    to: '/services?q=barber',
+    icon: Scissors,
+    iconTint:
+      'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300',
+    offsetClass: 'md:-translate-y-0.5',
+  },
+] as const;
 
 interface HomeViewState {
   sortMode: HomeSortMode;
@@ -663,71 +695,124 @@ export function Home() {
         </div>
       )}
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-b from-primary-50/80 via-white to-slate-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border-b border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center space-y-5">
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-            Discover Your Campus Marketplace
-          </h1>
-          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            {SITE_TAGLINE} — built for LASUED students, LASU students, and the Epe
-            community.
-          </p>
+      {/* Hero Section — Warm & Welcoming Consumer Experience */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-amber-50/45 to-orange-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 border-b border-orange-100/80 dark:border-slate-800">
+        {/* Soft Ambient Warm Blobs */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 -right-20 w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-orange-200/40 dark:bg-orange-500/10 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-24 -left-20 w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-blue-200/40 dark:bg-blue-500/10 blur-3xl"
+        />
 
-          <form
-            onSubmit={handleSearchSubmit}
-            role="search"
-            aria-label="Search campus marketplace, services, stores, and accommodation"
-            className="max-w-2xl mx-auto pt-1"
-          >
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
-              <div className="flex items-center gap-2.5 flex-1 px-2.5">
-                <Search className="w-5 h-5 text-slate-400 shrink-0" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setSearchQuery(next);
-                    if (!next.trim() && activeSearch) {
-                      handleClearHomeSearch();
-                    }
-                  }}
-                  placeholder="Search products, services, stores, or lodges..."
-                  aria-label="Search products, services, stores, or accommodation"
-                  className="w-full py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 bg-transparent focus:outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={handleClearHomeSearch}
-                    aria-label="Clear search"
-                    className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-16 space-y-8">
+          <div className="max-w-3xl mx-auto text-center space-y-5">
+            <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
+              Discover Your Campus Marketplace
+            </h1>
+            <p className="text-base sm:text-lg text-slate-700 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
+              {SITE_TAGLINE} — built for LASUED students, LASU students, and the
+              Epe community.
+            </p>
+
+            <form
+              onSubmit={handleSearchSubmit}
+              role="search"
+              aria-label="Search campus marketplace, services, stores, and accommodation"
+              className="max-w-2xl mx-auto pt-1"
+            >
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 rounded-2xl border border-slate-200/90 dark:border-slate-700 shadow-sm hover:shadow-md focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
+                <div className="flex items-center gap-2.5 flex-1 px-2.5">
+                  <Search className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSearchQuery(next);
+                      if (!next.trim() && activeSearch) {
+                        handleClearHomeSearch();
+                      }
+                    }}
+                    placeholder="Search items, services, or hostels..."
+                    aria-label="Search products, services, stores, or accommodation"
+                    className="w-full py-2 text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 bg-transparent focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearHomeSearch}
+                      aria-label="Clear search"
+                      className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  className="sm:px-6 rounded-xl"
+                >
+                  Search
+                </Button>
               </div>
-              <Button type="submit" variant="primary" size="md" className="sm:px-6">
-                Search
-              </Button>
-            </div>
-          </form>
+            </form>
 
-          {activeSearch && (
-            <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-600 dark:text-slate-300">
-              <span>
-                Showing matching results for &ldquo;{activeSearch}&rdquo;.
-              </span>
-              <button
-                type="button"
-                onClick={handleClearHomeSearch}
-                className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-              >
-                Clear Search
-              </button>
-            </div>
-          )}
+            {activeSearch && (
+              <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-700 dark:text-slate-300">
+                <span>
+                  Showing matching results for &ldquo;{activeSearch}&rdquo;.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearHomeSearch}
+                  className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  Clear Search
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3 Floating Glassmorphism Lifestyle Cards */}
+          <div
+            aria-label="Popular campus shortcuts"
+            className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5 max-w-4xl mx-auto pt-1"
+          >
+            {HERO_GLASS_CARDS.map((card) => {
+              const CardIcon = card.icon;
+              return (
+                <Link
+                  key={card.title}
+                  to={card.to}
+                  data-testid="hero-glass-card"
+                  className={`group flex items-center gap-3.5 p-4 rounded-2xl bg-white/75 dark:bg-slate-800/70 backdrop-blur-md border border-white/90 dark:border-slate-700/80 shadow-sm hover:shadow-md md:hover:-translate-y-1 transition-all duration-200 ${card.offsetClass}`}
+                >
+                  <div
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${card.iconTint}`}
+                  >
+                    <CardIcon className="w-5 h-5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors truncate">
+                      {card.title}
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
+                      {card.subtitle}
+                    </p>
+                  </div>
+                  <ArrowRight
+                    className="w-4 h-4 text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0"
+                    aria-hidden="true"
+                  />
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </section>
 
@@ -820,7 +905,7 @@ export function Home() {
         </div>
 
         {/* Sort Tabs, Type Filter & Verified Checkbox Toolbar */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 shadow-sm space-y-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow duration-200 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Sort Tabs */}
             <div
@@ -1014,7 +1099,7 @@ export function Home() {
             {TRUST_BULLETS.map((bullet) => (
               <li
                 key={bullet.title}
-                className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-2"
+                className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-2"
               >
                 <div className="flex items-center gap-2 font-semibold text-white">
                   <CheckCircle2 className="w-5 h-5 text-accent-500 shrink-0" />
@@ -1031,7 +1116,7 @@ export function Home() {
         {/* Community Suggestions & Updates Group Callout */}
         <div
           aria-label="Suggestions and updates"
-          className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+          className="mt-6 rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col lg:flex-row lg:items-center justify-between gap-5"
         >
           <div className="flex items-start gap-4 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center shrink-0">

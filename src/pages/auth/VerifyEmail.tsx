@@ -170,6 +170,7 @@ export function VerifyEmailPage() {
       <SeoHead
         title="Verify Email"
         description="Verify your email address to activate your LASUEDPLUG account."
+        noIndex
       />
       <Card hoverable={false} className="p-5 sm:p-7 space-y-4">
         <div className="text-center space-y-2">

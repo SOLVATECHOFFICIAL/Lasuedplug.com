@@ -38,7 +38,11 @@ import {
 } from '../../lib/sellerHelpers';
 import { saveDashboardMode } from '../../lib/dashboardMode';
 import { getUserAvatarUrl } from '../../lib/authHelpers';
-import { getFastCache, setFastCache } from '../../lib/fastCache';
+import {
+  CACHE_HYDRATED_EVENT,
+  getFastCache,
+  setFastCache,
+} from '../../lib/fastCache';
 import {
   deleteUnifiedSellerListing,
   getAllSellerDashboardItems,
@@ -47,6 +51,7 @@ import {
 } from '../../lib/sellerService';
 import { Product } from '../../types';
 import { DashboardModeSwitcher } from '../../components/dashboard/DashboardModeSwitcher';
+import { DashboardOnboardingBanners } from '../../components/dashboard/DashboardOnboardingBanners';
 import { ProductImage } from '../../components/marketplace/ProductImage';
 import { EmptyState } from '../../components/feedback/EmptyState';
 import { ErrorState } from '../../components/feedback/ErrorState';
@@ -208,10 +213,27 @@ export function SellerDashboard() {
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!authLoading && user && isProfileComplete) {
+    if (!user?.uid) return;
+    const handleHydrated = () => {
+      const hydrated = getFastCache<UnifiedSellerListing[]>(
+        `seller_dash:${user.uid}`
+      );
+      if (hydrated) {
+        setListings(hydrated);
+        setLoading(false);
+      }
+    };
+    window.addEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    return () => {
+      window.removeEventListener(CACHE_HYDRATED_EVENT, handleHydrated);
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (user?.uid && (isProfileComplete || !authLoading)) {
       void loadListings();
     }
-  }, [authLoading, user, isProfileComplete, loadListings]);
+  }, [authLoading, user?.uid, isProfileComplete, loadListings]);
 
   useEffect(() => {
     if (!deleteTarget) return;
@@ -283,8 +305,8 @@ export function SellerDashboard() {
 
     try {
       const committed = await markSellerListingSoldOne(product);
-      setListings((prev) =>
-        prev.map((row) =>
+      setListings((prev) => {
+        const next = prev.map((row) =>
           row.collectionName === item.collectionName && row.id === id
             ? {
                 ...row,
@@ -294,8 +316,10 @@ export function SellerDashboard() {
                 productRef: { ...product, ...committed },
               }
             : row
-        )
-      );
+        );
+        if (user?.uid) setFastCache(`seller_dash:${user.uid}`, next);
+        return next;
+      });
       if (committed.quantity === 0) {
         showToast('Marked as sold out. Stock is now 0.', 'success');
       } else {
@@ -360,8 +384,8 @@ export function SellerDashboard() {
 
     try {
       const committed = await toggleSellerListingActive(product, nextActive);
-      setListings((prev) =>
-        prev.map((row) =>
+      setListings((prev) => {
+        const next = prev.map((row) =>
           row.collectionName === item.collectionName && row.id === id
             ? {
                 ...row,
@@ -370,8 +394,10 @@ export function SellerDashboard() {
                 productRef: { ...product, ...committed },
               }
             : row
-        )
-      );
+        );
+        if (user?.uid) setFastCache(`seller_dash:${user.uid}`, next);
+        return next;
+      });
       showToast(
         committed.isActive
           ? 'Listing is now active on the marketplace.'
@@ -403,11 +429,13 @@ export function SellerDashboard() {
     setDeleting(true);
     try {
       await deleteUnifiedSellerListing(id, collectionName);
-      setListings((prev) =>
-        prev.filter(
+      setListings((prev) => {
+        const next = prev.filter(
           (row) => !(row.id === id && row.collectionName === collectionName)
-        )
-      );
+        );
+        if (user?.uid) setFastCache(`seller_dash:${user.uid}`, next);
+        return next;
+      });
       setDeleteTarget(null);
       showToast('Deleted successfully.', 'success');
     } catch (err) {
@@ -430,8 +458,10 @@ export function SellerDashboard() {
       <SeoHead
         title="Seller Dashboard"
         description="Manage all your Items, Services, Accommodations, Roommate posts, and Campus Stores on LASUEDPLUG."
+        noIndex
       />
       <DashboardModeSwitcher activeMode="seller" />
+      <DashboardOnboardingBanners profile={profile} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">

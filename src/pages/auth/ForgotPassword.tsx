@@ -64,6 +64,7 @@ export function ForgotPasswordPage() {
       <SeoHead
         title="Reset Password"
         description="Reset your LASUEDPLUG account password via email."
+        noIndex
       />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">

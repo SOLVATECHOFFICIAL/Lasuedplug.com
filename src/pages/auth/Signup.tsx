@@ -104,6 +104,7 @@ export function SignupPage() {
       <SeoHead
         title="Create Account"
         description="Join LASUED, LASU, and Epe students buying, selling, and discovering campus services on LASUEDPLUG."
+        noIndex
       />
       <Card hoverable={false} className="p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">

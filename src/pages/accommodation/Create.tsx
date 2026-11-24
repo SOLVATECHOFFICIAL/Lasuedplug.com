@@ -16,7 +16,11 @@ import {
   validateAccommodationCreateInput,
 } from '../../lib/listingValidation';
 import { formatNigerianWhatsAppDigits } from '../../lib/marketplaceHelpers';
-import { getUserAvatarUrl, resolveAccountType } from '../../lib/authHelpers';
+import {
+  getUserAvatarUrl,
+  resolveAccountType,
+  shouldAutoApproveListing,
+} from '../../lib/authHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AccommodationType } from '../../types';
@@ -114,6 +118,8 @@ export function AccommodationCreate() {
       const totalImagesChars = images.reduce((sum, img) => sum + img.length, 0);
       const ownerAvatar = getUserAvatarUrl(profile);
 
+      const isAutoApproved = shouldAutoApproveListing(profile);
+
       await createAccommodation({
         ownerId: user.uid,
         type,
@@ -128,6 +134,7 @@ export function AccommodationCreate() {
         amenities: mergedAmenities,
         images,
         whatsappNumber: formattedPhone,
+        isApproved: isAutoApproved,
         ownerSnapshot: {
           fullName:
             profile?.fullName || user.displayName || 'LASUEDPLUG Host',
@@ -140,7 +147,12 @@ export function AccommodationCreate() {
         },
       });
 
-      showToast('Accommodation submitted for admin approval!', 'success');
+      showToast(
+        isAutoApproved
+          ? 'Accommodation published and live immediately!'
+          : 'Accommodation submitted for admin approval!',
+        'success'
+      );
       navigate('/accommodation');
     } catch (err) {
       const msg =
